@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: FairBid
+
+  # JPA
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# Server configuration
+server:
+  port: 8080
+
+# Logging configuration
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
