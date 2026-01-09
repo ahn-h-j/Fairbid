@@ -1,10 +1,10 @@
 sequenceDiagram
-autonumber
-actor Buyer as 구매자 (Client)
-participant Ctrl as AuctionController
-participant Svc as AuctionService
-participant Repo as AuctionRepository
-participant RDB as RDB (Database)
+    autonumber
+    actor Buyer as 구매자 (Client)
+    participant Ctrl as AuctionController
+    participant Svc as AuctionService
+    participant Repo as AuctionRepository
+    participant RDB as RDB (Database)
 
     Buyer->>Ctrl: GET /api/v1/auctions/{id}
     Ctrl->>Svc: getAuctionDetail(id)
