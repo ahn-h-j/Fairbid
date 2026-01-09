@@ -54,24 +54,26 @@
 ## 3. 패키지 구조
 
 ```
-src/main/java/com/auction/
-├── controller/          # Inbound Adapter (HTTP)
-├── usecase/             # Application Layer (유스케이스 인터페이스)
-├── service/             # Application Layer (유스케이스 구현)
-├── port/
-│   ├── in/              # Inbound Port (Driving)
-│   └── out/             # Outbound Port (Driven)
-├── adapter/
-│   ├── in/
-│   │   └── websocket/   # Inbound Adapter (WebSocket)
-│   └── out/
-│       ├── persistence/ # Outbound Adapter (DB)
-│       ├── redis/       # Outbound Adapter (Redis)
-│       └── messaging/   # Outbound Adapter (알림)
-├── domain/              # Domain Model (순수 비즈니스 로직)
-├── entity/              # JPA Entity
-├── mapper/              # Entity ↔ Domain 변환
-└── orchestrator/        # 여러 UseCase 조합
+src/main/java/com/cos/fairbid/
+├── application/           # Application Layer
+│   ├── port/
+│   │   ├── in/            # Inbound Port (UseCase 인터페이스)
+│   │   └── out/           # Outbound Port (Repository 인터페이스)
+│   └── service/           # UseCase 구현체
+│
+├── domain/                # Domain Layer
+│   ├── model/             # Domain Model (순수 비즈니스 로직, POJO)
+│   └── exception/         # 도메인 예외
+│
+├── inbound/               # Inbound Adapter
+│   ├── controller/        # REST Controller
+│   └── dto/               # Request/Response DTO
+│
+└── outbound/              # Outbound Adapter
+    └── persistence/       # JPA Repository 구현
+        ├── entity/        # JPA Entity
+        ├── repository/    # Spring Data JPA Repository
+        └── mapper/        # Entity ↔ Domain 변환
 ```
 
 ---

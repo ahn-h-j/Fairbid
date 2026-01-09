@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # Agent Guidelines (AI 행동 강령)
 
 > 이 문서는 AI가 프로젝트에 참여할 때 가장 먼저 읽어야 할 행동 강령이다.
@@ -79,7 +85,31 @@
 
 ---
 
-## 4. Workflow
+## 4. Build & Run Commands
+
+```bash
+# Build
+./gradlew build
+
+# Run application
+./gradlew bootRun
+
+# Run all tests
+./gradlew test
+
+# Run a single test class
+./gradlew test --tests "com.cos.fairbid.cucumber.CucumberTestRunner"
+
+# Clean build
+./gradlew clean build
+
+# Docker (requires .env file with DB credentials)
+docker-compose up -d
+```
+
+---
+
+## 5. Workflow
 
 ### 브랜치 전략
 - 새로운 기능 개발은 `feat/{feature-name}` 브랜치에서 시작
