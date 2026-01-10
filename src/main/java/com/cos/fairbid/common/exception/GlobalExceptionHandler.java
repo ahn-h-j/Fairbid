@@ -2,6 +2,7 @@ package com.cos.fairbid.common.exception;
 
 import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.AuctionDuration;
+import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -103,6 +104,18 @@ public class GlobalExceptionHandler {
         log.warn("InvalidAuctionException: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * 경매를 찾을 수 없을 때 예외 처리
+     * HTTP 404 Not Found
+     */
+    @ExceptionHandler(AuctionNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuctionNotFoundException(AuctionNotFoundException e) {
+        log.warn("AuctionNotFoundException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
     }
 

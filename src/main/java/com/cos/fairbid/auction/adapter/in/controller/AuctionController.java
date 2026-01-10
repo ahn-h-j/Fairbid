@@ -3,6 +3,7 @@ package com.cos.fairbid.auction.adapter.in.controller;
 import com.cos.fairbid.auction.adapter.in.dto.AuctionResponse;
 import com.cos.fairbid.auction.adapter.in.dto.CreateAuctionRequest;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
+import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuctionController {
 
     private final CreateAuctionUseCase createAuctionUseCase;
+    private final GetAuctionDetailUseCase getAuctionDetailUseCase;
 
     /**
      * 경매 등록 API
@@ -40,5 +42,21 @@ public class AuctionController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    /**
+     * 경매 상세 조회 API
+     *
+     * @param auctionId 조회할 경매 ID
+     * @return 경매 상세 정보
+     */
+    @GetMapping("/{auctionId}")
+    public ResponseEntity<ApiResponse<AuctionResponse>> getAuctionDetail(
+            @PathVariable Long auctionId
+    ) {
+        Auction auction = getAuctionDetailUseCase.getAuctionDetail(auctionId);
+        AuctionResponse response = AuctionResponse.from(auction);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
