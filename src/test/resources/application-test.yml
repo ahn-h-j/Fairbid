@@ -2,7 +2,7 @@ spring:
   application:
     name: FairBid
   datasource:
-    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    # driver-class-name 제거 (TestContainers 자동 감지 활용)
     url: jdbc:tc:mysql:8.0:///testdb
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
