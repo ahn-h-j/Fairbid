@@ -1,6 +1,9 @@
 package com.cos.fairbid.auction.domain;
 
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
+import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
+import com.cos.fairbid.bid.domain.exception.BidTooLowException;
+import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -166,5 +169,113 @@ public class Auction {
      */
     public boolean isEditable() {
         return totalBidCount == 0;
+    }
+
+    // =====================================================
+    // 입찰 관련 비즈니스 로직 메서드
+    // =====================================================
+
+    /**
+     * 경매 종료 여부를 확인한다
+     *
+     * @return 종료되었으면 true, 아니면 false
+     */
+    public boolean isEnded() {
+        return status == AuctionStatus.ENDED || status == AuctionStatus.CANCELLED;
+    }
+
+    /**
+     * 입찰 자격을 검증한다
+     * 1. 경매 종료 여부 확인
+     * 2. 본인 경매 입찰 불가 확인
+     *
+     * @param bidderId 입찰자 ID
+     * @throws AuctionEndedException      경매가 종료된 경우
+     * @throws SelfBidNotAllowedException 본인 경매에 입찰 시도 시
+     */
+    public void validateBidEligibility(Long bidderId) {
+        // 경매 종료 여부 확인
+        if (isEnded()) {
+            throw AuctionEndedException.forBid(this.id);
+        }
+
+        // 본인 경매 입찰 불가 확인
+        if (this.sellerId.equals(bidderId)) {
+            throw SelfBidNotAllowedException.forAuction(this.id, this.sellerId);
+        }
+    }
+
+    /**
+     * 연장 구간(종료 5분 전) 여부를 확인한다
+     *
+     * @return 연장 구간이면 true, 아니면 false
+     */
+    public boolean isInExtensionPeriod() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime extensionThreshold = scheduledEndTime.minusMinutes(5);
+        return now.isAfter(extensionThreshold) && now.isBefore(scheduledEndTime);
+    }
+
+    /**
+     * 경매 시간을 5분 연장한다
+     * 연장 횟수도 함께 증가시킨다
+     */
+    public void extend() {
+        this.scheduledEndTime = LocalDateTime.now().plusMinutes(5);
+        this.extensionCount++;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 연장 횟수에 따른 할증된 입찰 단위를 계산한다
+     * 연장 3회마다 기본 입찰 단위에 50%씩 추가
+     *
+     * @return 할증된 입찰 단위
+     */
+    public Long getAdjustedBidIncrement() {
+        // 연장 3회마다 50% 할증
+        int surchargeMultiplier = extensionCount / 3;
+        double surchargeRate = 1.0 + (surchargeMultiplier * 0.5);
+        return (long) (bidIncrement * surchargeRate);
+    }
+
+    /**
+     * 최소 입찰 가능 금액을 반환한다
+     * 현재가 + 할증된 입찰단위
+     *
+     * @return 최소 입찰 가능 금액
+     */
+    public Long getMinBidAmount() {
+        return currentPrice + getAdjustedBidIncrement();
+    }
+
+    /**
+     * 입찰을 처리한다
+     * 1. 입찰 금액 검증
+     * 2. 현재가 갱신
+     * 3. 총 입찰수 증가
+     * 4. 입찰 단위 재계산
+     *
+     * @param amount 입찰 금액
+     * @throws BidTooLowException 입찰 금액이 최소 금액보다 낮은 경우
+     */
+    public void placeBid(Long amount) {
+        Long minBidAmount = getMinBidAmount();
+
+        // 입찰 금액이 최소 금액보다 낮으면 예외
+        if (amount < minBidAmount) {
+            throw BidTooLowException.belowMinimum(amount, minBidAmount);
+        }
+
+        // 현재가 갱신
+        this.currentPrice = amount;
+
+        // 총 입찰수 증가
+        this.totalBidCount++;
+
+        // 입찰 단위 재계산 (가격 구간이 변경될 수 있으므로)
+        this.bidIncrement = calculateBidIncrement(this.currentPrice);
+
+        this.updatedAt = LocalDateTime.now();
     }
 }
