@@ -8,6 +8,7 @@ import com.cos.fairbid.bid.application.port.out.BidRepository;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.bid.domain.BidType;
 import com.cos.fairbid.bid.domain.event.BidPlacedEvent;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -96,7 +97,11 @@ public class BidService implements PlaceBidUseCase {
             // 원터치 입찰: 현재가 + 할증된 입찰단위
             return auction.getMinBidAmount();
         }
-        // 금액 직접 지정
+
+        // 금액 직접 지정: amount 필수 검증
+        if (command.amount() == null) {
+            throw InvalidBidException.amountRequiredForDirectBid();
+        }
         return command.amount();
     }
 

@@ -236,7 +236,7 @@ public class Auction {
         // 연장 3회마다 50% 할증
         int surchargeMultiplier = extensionCount / 3;
         double surchargeRate = 1.0 + (surchargeMultiplier * 0.5);
-        return (long) (bidIncrement * surchargeRate);
+        return Math.round(bidIncrement * surchargeRate);
     }
 
     /**

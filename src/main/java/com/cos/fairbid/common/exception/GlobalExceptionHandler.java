@@ -8,6 +8,7 @@ import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
 import com.cos.fairbid.bid.domain.BidType;
 import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
 import com.cos.fairbid.bid.domain.exception.BidTooLowException;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -152,6 +153,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BidTooLowException.class)
     public ResponseEntity<ApiResponse<Void>> handleBidTooLowException(BidTooLowException e) {
         log.warn("BidTooLowException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * 입찰 요청이 유효하지 않은 경우 예외 처리
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(InvalidBidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidBidException(InvalidBidException e) {
+        log.warn("InvalidBidException: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));

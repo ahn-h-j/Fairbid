@@ -1,13 +1,18 @@
 package com.cos.fairbid.cucumber.steps;
 
+import com.cos.fairbid.auction.adapter.in.dto.CreateAuctionRequest;
+import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.bid.adapter.in.dto.PlaceBidRequest;
 import com.cos.fairbid.bid.domain.BidType;
 import com.cos.fairbid.cucumber.adapter.TestAdapter;
 import com.cos.fairbid.cucumber.adapter.TestContext;
+import io.cucumber.java.ko.그리고;
 import io.cucumber.java.ko.만약;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 입찰 기능 Step Definitions
@@ -63,5 +68,24 @@ public class BidSteps {
         String url = "/api/v1/auctions/" + nonExistentId + "/bids";
         ResponseEntity<Map> response = testAdapter.post(url, request, Map.class);
         testContext.setLastResponse(response);
+    }
+
+    @그리고("입찰 금액이 시작가 + 입찰단위와 같다")
+    @SuppressWarnings("unchecked")
+    public void 입찰_금액이_시작가_플러스_입찰단위와_같다() {
+        // Then: 원터치 입찰 금액 = 시작가 + 입찰단위 (동적 계산)
+        CreateAuctionRequest auctionRequest = testContext.getLastRequestBody();
+        Long startPrice = auctionRequest.startPrice();
+        Long bidIncrement = Auction.calculateBidIncrement(startPrice);
+        Long expectedAmount = startPrice + bidIncrement;
+
+        ResponseEntity<Map> response = testContext.getLastResponse();
+        Map<String, Object> body = response.getBody();
+        assertThat(body).isNotNull();
+
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Long actualAmount = ((Number) data.get("amount")).longValue();
+
+        assertThat(actualAmount).isEqualTo(expectedAmount);
     }
 }
