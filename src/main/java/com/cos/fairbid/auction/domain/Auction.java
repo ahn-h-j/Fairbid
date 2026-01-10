@@ -123,4 +123,48 @@ public class Auction {
     public static AuctionBuilder reconstitute() {
         return Auction.builder();
     }
+
+    // =====================================================
+    // 비즈니스 로직 메서드
+    // =====================================================
+
+    /**
+     * 즉시 구매 버튼 활성화 여부를 반환한다
+     *
+     * 활성화 조건:
+     * 1. 즉시구매가가 설정되어 있어야 함
+     * 2. 현재가가 즉시구매가의 90% 미만이어야 함
+     *
+     * @return 즉시 구매 가능하면 true, 아니면 false
+     */
+    public boolean isInstantBuyEnabled() {
+        // 즉시구매가가 설정되지 않았으면 비활성화
+        if (instantBuyPrice == null) {
+            return false;
+        }
+
+        // 현재가가 즉시구매가의 90% 이상이면 비활성화
+        long threshold = (long) (instantBuyPrice * 0.9);
+        return currentPrice < threshold;
+    }
+
+    /**
+     * 다음 입찰 가능 최소 금액을 반환한다
+     * 현재 최고가 + 입찰 단위
+     *
+     * @return 다음 입찰 가능 최소 금액
+     */
+    public Long getNextMinBidPrice() {
+        return currentPrice + bidIncrement;
+    }
+
+    /**
+     * 경매 수정 가능 여부를 반환한다
+     * 첫 입찰이 발생하기 전에만 수정 가능
+     *
+     * @return 수정 가능하면 true, 아니면 false
+     */
+    public boolean isEditable() {
+        return totalBidCount == 0;
+    }
 }
