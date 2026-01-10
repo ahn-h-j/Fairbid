@@ -51,7 +51,7 @@ public class CommonSteps {
         assertThat(response.getStatusCode().value()).isEqualTo(expectedStatusCode);
     }
 
-    @그러면("응답 본문의 {string} 값은 {string}이다")
+    @그러면("^응답 본문의 \"([^\"]*)\" 값은 \"([^\"]*)\"이다$")
     public void 응답_본문의_값은_이다(String key, String expectedValue) {
         // Then: 응답 본문 필드 검증 (String)
         ResponseEntity<Map> response = testContext.getLastResponse();
@@ -62,20 +62,38 @@ public class CommonSteps {
         assertThat(actualValue).asString().isEqualTo(expectedValue);
     }
 
-    @그러면("응답 본문의 {string} 값은 {long}이다")
+    @그러면("^응답 본문의 \"([^\"]*)\" 값은 ([0-9]+)이다$")
     public void 응답_본문의_값은_숫자이다(String key, long expectedValue) {
         // Then: 응답 본문 필드 검증 (Number)
         ResponseEntity<Map> response = testContext.getLastResponse();
         Map<String, Object> body = response.getBody();
         assertThat(body).isNotNull();
-        
+
         Object actualValue = findValue(body, key);
-        
+
         if (actualValue instanceof Number) {
              assertThat(((Number) actualValue).longValue()).isEqualTo(expectedValue);
         } else {
              // Fallback
              assertThat(actualValue).isEqualTo(expectedValue);
+        }
+    }
+
+    @그러면("^응답 본문의 \"([^\"]*)\" 값은 (?:불리언 )?(true|false)이다$")
+    public void 응답_본문의_값은_불리언이다(String key, String expectedValue) {
+        // Then: 응답 본문 필드 검증 (Boolean)
+        ResponseEntity<Map> response = testContext.getLastResponse();
+        Map<String, Object> body = response.getBody();
+        assertThat(body).isNotNull();
+
+        Object actualValue = findValue(body, key);
+
+        if ("true".equalsIgnoreCase(expectedValue) || "false".equalsIgnoreCase(expectedValue)) {
+            boolean expected = Boolean.parseBoolean(expectedValue);
+            assertThat(actualValue).isEqualTo(expected);
+        } else {
+            // String 비교로 fallback
+            assertThat(actualValue).asString().isEqualTo(expectedValue);
         }
     }
 
