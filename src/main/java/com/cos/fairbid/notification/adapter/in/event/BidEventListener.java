@@ -40,7 +40,17 @@ public class BidEventListener {
                 event.getOccurredAt()
         );
 
-        // 구독자들에게 브로드캐스트
-        auctionBroadcastPort.broadcastBidUpdate(message);
+        // 구독자들에게 브로드캐스트 (실패해도 다른 리스너/트랜잭션에 영향이 없도록 보호)
+        try {
+            auctionBroadcastPort.broadcastBidUpdate(message);
+        } catch (Exception e) {
+            log.error(
+                    "Failed to broadcast BidUpdateMessage for auctionId={}, currentPrice={}, extended={}",
+                    event.getAuctionId(),
+                    event.getCurrentPrice(),
+                    event.isExtended(),
+                    e
+            );
+        }
     }
 }
