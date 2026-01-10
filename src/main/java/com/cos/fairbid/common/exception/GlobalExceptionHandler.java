@@ -1,9 +1,15 @@
 package com.cos.fairbid.common.exception;
 
-import com.cos.fairbid.auction.domain.Category;
+
 import com.cos.fairbid.auction.domain.AuctionDuration;
+import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
+import com.cos.fairbid.bid.domain.BidType;
+import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
+import com.cos.fairbid.bid.domain.exception.BidTooLowException;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
+import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -86,6 +92,11 @@ public class GlobalExceptionHandler {
                         .map(Enum::name)
                         .collect(Collectors.joining(", "));
                 message = "유효하지 않은 경매 기간입니다. 허용 값: " + validValues;
+            } else if (causeMessage.contains("BidType")) {
+                String validValues = Arrays.stream(BidType.values())
+                        .map(Enum::name)
+                        .collect(Collectors.joining(", "));
+                message = "유효하지 않은 입찰 유형입니다. 허용 값: " + validValues;
             }
         }
 
@@ -116,6 +127,58 @@ public class GlobalExceptionHandler {
         log.warn("AuctionNotFoundException: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    // =====================================================
+    // 입찰 관련 예외 처리
+    // =====================================================
+
+    /**
+     * 경매가 종료된 경우 예외 처리
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(AuctionEndedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuctionEndedException(AuctionEndedException e) {
+        log.warn("AuctionEndedException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * 입찰가가 최소 입찰 금액보다 낮은 경우 예외 처리
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(BidTooLowException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBidTooLowException(BidTooLowException e) {
+        log.warn("BidTooLowException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * 입찰 요청이 유효하지 않은 경우 예외 처리
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(InvalidBidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidBidException(InvalidBidException e) {
+        log.warn("InvalidBidException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * 본인 경매에 입찰 시도 시 예외 처리
+     * HTTP 403 Forbidden
+     */
+    @ExceptionHandler(SelfBidNotAllowedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSelfBidNotAllowedException(SelfBidNotAllowedException e) {
+        log.warn("SelfBidNotAllowedException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
     }
 

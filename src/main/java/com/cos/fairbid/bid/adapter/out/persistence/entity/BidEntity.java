@@ -1,0 +1,60 @@
+package com.cos.fairbid.bid.adapter.out.persistence.entity;
+
+import com.cos.fairbid.bid.domain.BidType;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDateTime;
+
+/**
+ * 입찰 JPA 엔티티
+ * DB 테이블 매핑 전용 (비즈니스 로직 금지)
+ */
+@Entity
+@Table(name = "bid")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EntityListeners(AuditingEntityListener.class)
+public class BidEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "auction_id", nullable = false)
+    private Long auctionId;
+
+    @Column(name = "bidder_id", nullable = false)
+    private Long bidderId;
+
+    @Column(nullable = false)
+    private Long amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "bid_type", nullable = false)
+    private BidType bidType;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Builder
+    private BidEntity(
+            Long id,
+            Long auctionId,
+            Long bidderId,
+            Long amount,
+            BidType bidType
+    ) {
+        this.id = id;
+        this.auctionId = auctionId;
+        this.bidderId = bidderId;
+        this.amount = amount;
+        this.bidType = bidType;
+    }
+}

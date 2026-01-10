@@ -1,48 +1,62 @@
 sequenceDiagram
 autonumber
 actor Buyer as 구매자 (Client)
-participant Ctrl as AuctionController
-participant Svc as AuctionService
-participant Repo as AuctionRepository
+participant Ctrl as BidController
+participant Svc as BidService
+participant AuctionRepo as AuctionRepository
+participant BidRepo as BidRepository
+participant Auction as Auction (Domain)
 participant RDB as RDB (Database)
-participant Noti as NotificationService (WS)
+participant EventPub as EventPublisher
 
-    Buyer->>Ctrl: POST /api/v1/auctions/{id}/bid (입찰 요청)
-    Ctrl->>Svc: processBid(buyerId, auctionId, bidAmount)
+    Buyer->>Ctrl: POST /api/v1/auctions/{id}/bids (입찰 요청)
+    Ctrl->>Svc: placeBid(command)
 
     rect rgb(235, 245, 255)
         Note over Svc, RDB: [트랜잭션 시작 & 동시성 제어]
-        Svc->>Repo: findByIdWithLock(auctionId)
-        Repo->>RDB: SELECT * FROM auctions WHERE id = ? FOR UPDATE
-        RDB-->>Svc: Auction Entity 반환 (Lock 획득)
+        Svc->>AuctionRepo: findByIdWithLock(auctionId)
+        AuctionRepo->>RDB: SELECT * FROM auctions WHERE id = ? FOR UPDATE
+        RDB-->>AuctionRepo: Auction Entity 반환 (Lock 획득)
+        AuctionRepo-->>Svc: Auction Domain 반환
     end
 
     rect rgb(255, 240, 240)
-        Note over Svc: [비즈니스 로직 검증 및 가공]
-        Svc->>Svc: 1. 경매 종료 여부 확인
-        Svc->>Svc: 2. 연장 구간 여부 체크 (종료 5분 전 여부)
-        
+        Note over Svc, Auction: [Auction 도메인 - 입찰 검증]
+        Svc->>Auction: validateBidEligibility(bidderId)
+        Note right of Auction: 1. 경매 종료 여부 확인<br/>2. 본인 경매 입찰 불가 확인
+
+        Svc->>Auction: isInExtensionPeriod()
+        Note right of Auction: 종료 5분 전 여부 체크
+
         alt 연장 구간인 경우 (Extension Case)
-            Svc->>Svc: 종료 시간 5분 추가 & 연장 횟수 갱신
-            Svc->>Svc: 입찰가 검증 (연장 3회당 50% 할증 단위 적용)
-        else 정상 구간인 경우 (Normal Case)
-            Svc->>Svc: 입찰가 검증 (현재가 + 기본 입찰 단위)
+            Svc->>Auction: extend()
+            Note right of Auction: 종료시간 5분 추가<br/>연장 횟수 갱신
         end
+
+        Svc->>Auction: getMinBidAmount()
+        Note right of Auction: 현재가 + 할증된 입찰단위<br/>(연장 3회당 50% 할증)
+
+        Svc->>Auction: placeBid(amount)
+        Note right of Auction: 현재가 갱신<br/>총 입찰수 증가<br/>입찰단위 재계산
     end
 
     rect rgb(240, 255, 240)
         Note over Svc, RDB: [데이터베이스 업데이트 - 원자적 처리]
-        Svc->>RDB: 1. Auction 테이블 업데이트 (현재가, 입찰수, 종료시간 등)
-        Svc->>RDB: 2. Bid 테이블 Insert (입찰 이력 기록)
+        Svc->>AuctionRepo: save(auction)
+        AuctionRepo->>RDB: UPDATE auctions SET ...
+
+        Svc->>BidRepo: save(bid)
+        BidRepo->>RDB: INSERT INTO bids ...
     end
-    
+
     Note over RDB: 트랜잭션 커밋 (Lock 해제)
     RDB-->>Svc: Success
 
-    par 실시간 알림 (Async)
-        Svc->>Noti: 입찰 현황 정보 전달
-        Noti-->>Buyer: 웹소켓 브로드캐스트 (현재가 갱신 알림)
+    rect rgb(255, 250, 230)
+        Note over Svc, EventPub: [이벤트 발행 - 확장 포인트]
+        Svc->>EventPub: publish(BidPlacedEvent)
+        Note right of EventPub: 추후 NotificationService에서<br/>이벤트 구독하여 알림 처리
     end
 
-    Svc-->>Ctrl: BidResponseDto
-    Ctrl-->>Buyer: 200 OK (입찰 성공)
+    Svc-->>Ctrl: Bid Domain
+    Ctrl-->>Buyer: 200 OK (BidResponse)
