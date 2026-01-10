@@ -81,6 +81,7 @@ public class AuctionEntity {
 
     @Builder
     private AuctionEntity(
+            Long id,
             Long sellerId,
             String title,
             String description,
@@ -96,6 +97,7 @@ public class AuctionEntity {
             AuctionStatus status,
             Long winnerId
     ) {
+        this.id = id;
         this.sellerId = sellerId;
         this.title = title;
         this.description = description;

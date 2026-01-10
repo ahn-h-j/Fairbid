@@ -17,6 +17,7 @@ public class AuctionMapper {
      */
     public AuctionEntity toEntity(Auction auction) {
         return AuctionEntity.builder()
+                .id(auction.getId())
                 .sellerId(auction.getSellerId())
                 .title(auction.getTitle())
                 .description(auction.getDescription())

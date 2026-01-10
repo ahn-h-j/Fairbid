@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 경매 생성 요청 DTO
@@ -20,6 +21,7 @@ public record CreateAuctionRequest(
 
         String description,
 
+        @NotNull(message = "카테고리 설정은 필수입니다")
         Category category,
 
         @NotNull(message = "시작가는 필수입니다")
@@ -42,14 +44,14 @@ public record CreateAuctionRequest(
      */
     public CreateAuctionCommand toCommand(Long sellerId) {
         return CreateAuctionCommand.builder()
-                .sellerId(sellerId)
+                .sellerId(Objects.requireNonNull(sellerId, "sellerId must not be null"))
                 .title(title)
                 .description(description)
                 .category(category)
                 .startPrice(startPrice)
                 .instantBuyPrice(instantBuyPrice)
                 .duration(duration)
-                .imageUrls(imageUrls != null ? imageUrls : List.of())
+                .imageUrls(imageUrls != null ? List.copyOf(imageUrls) : List.of())
                 .build();
     }
 }
