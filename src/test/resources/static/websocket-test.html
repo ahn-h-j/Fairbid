@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Test - FairBid</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2/lib/stomp.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .message { background: #e9ecef; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .message pre { margin: 0; white-space: pre-wrap; }
+        input, button { padding: 8px 12px; margin: 5px; }
+        input { width: 200px; }
+        button { cursor: pointer; }
+        #messages { max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FairBid WebSocket Test</h1>
+
+        <div>
+            <label>경매 ID: </label>
+            <input type="number" id="auctionId" value="1" />
+            <button onclick="subscribe()">구독</button>
+            <button onclick="disconnect()">연결 해제</button>
+        </div>
+
+        <div id="status" class="status disconnected">연결 안됨</div>
+
+        <h3>수신 메시지</h3>
+        <div id="messages"></div>
+
+        <button onclick="clearMessages()">메시지 초기화</button>
+    </div>
+
+    <script>
+        let stompClient = null;
+        let currentSubscription = null;
+
+        function connect(callback) {
+            const socket = new SockJS('http://localhost:8080/ws');
+            stompClient = Stomp.over(socket);
+
+            // 디버그 로그 비활성화 (필요시 주석 해제)
+            // stompClient.debug = null;
+
+            stompClient.connect({}, function(frame) {
+                console.log('Connected: ' + frame);
+                updateStatus(true);
+                if (callback) callback();
+            }, function(error) {
+                console.log('Connection error: ' + error);
+                updateStatus(false);
+            });
+        }
+
+        function subscribe() {
+            const auctionId = document.getElementById('auctionId').value;
+
+            if (!auctionId) {
+                alert('경매 ID를 입력하세요');
+                return;
+            }
+
+            // 이미 연결되어 있으면 바로 구독
+            if (stompClient && stompClient.connected) {
+                doSubscribe(auctionId);
+            } else {
+                // 연결 후 구독
+                connect(function() {
+                    doSubscribe(auctionId);
+                });
+            }
+        }
+
+        function doSubscribe(auctionId) {
+            // 기존 구독 해제
+            if (currentSubscription) {
+                currentSubscription.unsubscribe();
+            }
+
+            const topic = '/topic/auctions/' + auctionId;
+            currentSubscription = stompClient.subscribe(topic, function(message) {
+                showMessage(message.body);
+            });
+
+            addLog('구독 시작: ' + topic);
+        }
+
+        function disconnect() {
+            if (stompClient) {
+                stompClient.disconnect();
+                stompClient = null;
+                currentSubscription = null;
+            }
+            updateStatus(false);
+            addLog('연결 해제됨');
+        }
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '연결됨';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '연결 안됨';
+            }
+        }
+
+        function showMessage(body) {
+            const messagesEl = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message';
+
+            const time = new Date().toLocaleTimeString();
+            let parsed;
+            try {
+                parsed = JSON.stringify(JSON.parse(body), null, 2);
+            } catch (e) {
+                parsed = body;
+            }
+
+            messageEl.innerHTML = '<strong>[' + time + ']</strong><pre>' + parsed + '</pre>';
+            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
+        }
+
+        function addLog(text) {
+            const messagesEl = document.getElementById('messages');
+            const logEl = document.createElement('div');
+            logEl.className = 'message';
+            logEl.style.background = '#fff3cd';
+            logEl.innerHTML = '<em>' + new Date().toLocaleTimeString() + ' - ' + text + '</em>';
+            messagesEl.insertBefore(logEl, messagesEl.firstChild);
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
