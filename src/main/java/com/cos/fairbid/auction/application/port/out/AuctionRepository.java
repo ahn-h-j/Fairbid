@@ -25,4 +25,13 @@ public interface AuctionRepository {
      * @return 경매 도메인 객체 (Optional)
      */
     Optional<Auction> findById(Long id);
+
+    /**
+     * ID로 경매를 조회하며 비관적 락(FOR UPDATE)을 획득한다
+     * 동시성 제어가 필요한 입찰 처리 시 사용
+     *
+     * @param id 경매 ID
+     * @return 경매 도메인 객체 (Optional)
+     */
+    Optional<Auction> findByIdWithLock(Long id);
 }
