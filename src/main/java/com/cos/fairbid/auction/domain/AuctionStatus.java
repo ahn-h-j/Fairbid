@@ -1,0 +1,22 @@
+package com.cos.fairbid.auction.domain;
+
+/**
+ * 경매 상태를 나타내는 열거형
+ */
+public enum AuctionStatus {
+
+    /** 입찰 대기 중 (등록 직후, 아직 시작 전) */
+    PENDING,
+
+    /** 입찰 진행 중 */
+    BIDDING,
+
+    /** 즉시 구매 발생 후 최종 입찰 기간 (1시간) */
+    INSTANT_BUY_PENDING,
+
+    /** 경매 종료 (낙찰자 결정) */
+    ENDED,
+
+    /** 경매 취소됨 */
+    CANCELLED
+}

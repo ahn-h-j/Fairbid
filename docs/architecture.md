@@ -65,15 +65,16 @@ src/main/java/com/cos/fairbid/
 │   ├── model/             # Domain Model (순수 비즈니스 로직, POJO)
 │   └── exception/         # 도메인 예외
 │
-├── inbound/               # Inbound Adapter
-│   ├── controller/        # REST Controller
-│   └── dto/               # Request/Response DTO
-│
-└── outbound/              # Outbound Adapter
-    └── persistence/       # JPA Repository 구현
-        ├── entity/        # JPA Entity
-        ├── repository/    # Spring Data JPA Repository
-        └── mapper/        # Entity ↔ Domain 변환
+└── adapter/               # Adapter Layer
+    ├── in/                # Inbound Adapter
+    │   ├── controller/    # REST Controller
+    │   └── dto/           # Request/Response DTO
+    │
+    └── out/               # Outbound Adapter
+        └── persistence/   # JPA Repository 구현
+            ├── entity/    # JPA Entity
+            ├── repository/# Spring Data JPA Repository
+            └── mapper/    # Entity ↔ Domain 변환
 ```
 
 ---
