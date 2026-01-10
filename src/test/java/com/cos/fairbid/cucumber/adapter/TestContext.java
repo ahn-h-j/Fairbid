@@ -12,6 +12,7 @@ public class TestContext {
 
     private ResponseEntity<?> lastResponse;
     private Object lastRequestBody;
+    private Long lastCreatedAuctionId;
 
     public void setLastResponse(ResponseEntity<?> response) {
         this.lastResponse = response;
@@ -31,8 +32,17 @@ public class TestContext {
         return (T) lastRequestBody;
     }
 
+    public void setLastCreatedAuctionId(Long auctionId) {
+        this.lastCreatedAuctionId = auctionId;
+    }
+
+    public Long getLastCreatedAuctionId() {
+        return lastCreatedAuctionId;
+    }
+
     public void reset() {
         this.lastResponse = null;
         this.lastRequestBody = null;
+        this.lastCreatedAuctionId = null;
     }
 }
