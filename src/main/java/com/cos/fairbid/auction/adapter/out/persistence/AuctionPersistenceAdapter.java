@@ -33,4 +33,10 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
         return jpaAuctionRepository.findById(id)
                 .map(auctionMapper::toDomain);
     }
+
+    @Override
+    public Optional<Auction> findByIdWithLock(Long id) {
+        return jpaAuctionRepository.findByIdWithLock(id)
+                .map(auctionMapper::toDomain);
+    }
 }
