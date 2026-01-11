@@ -1,0 +1,156 @@
+package com.cos.fairbid.winning.domain;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.time.LocalDateTime;
+
+/**
+ * 낙찰 도메인 모델
+ * 1, 2순위 낙찰 후보 정보를 관리한다
+ */
+@Getter
+@Builder
+public class Winning {
+
+    private Long id;
+    private Long auctionId;
+    private Integer rank;           // 1 or 2
+    private Long bidderId;
+    private Long bidAmount;
+    private WinningStatus status;
+    private LocalDateTime paymentDeadline;
+    private LocalDateTime createdAt;
+
+    /** 결제 대기 시간 (3시간) */
+    private static final int PAYMENT_DEADLINE_HOURS = 3;
+
+    /** 2순위 승계 결제 대기 시간 (1시간) */
+    private static final int SECOND_RANK_DEADLINE_HOURS = 1;
+
+    /** 2순위 자동 승계 기준 비율 (90%) */
+    private static final double AUTO_TRANSFER_THRESHOLD = 0.9;
+
+    /**
+     * 1순위 낙찰자 생성
+     *
+     * @param auctionId 경매 ID
+     * @param bidderId  입찰자 ID
+     * @param bidAmount 입찰 금액
+     * @return 1순위 Winning 객체
+     */
+    public static Winning createFirstRank(Long auctionId, Long bidderId, Long bidAmount) {
+        LocalDateTime now = LocalDateTime.now();
+        return Winning.builder()
+                .auctionId(auctionId)
+                .rank(1)
+                .bidderId(bidderId)
+                .bidAmount(bidAmount)
+                .status(WinningStatus.PENDING_PAYMENT)
+                .paymentDeadline(now.plusHours(PAYMENT_DEADLINE_HOURS))
+                .createdAt(now)
+                .build();
+    }
+
+    /**
+     * 2순위 낙찰 후보 생성
+     * 초기 상태는 PENDING_PAYMENT지만 실제 결제 권한은 1순위 노쇼 시 부여됨
+     *
+     * @param auctionId 경매 ID
+     * @param bidderId  입찰자 ID
+     * @param bidAmount 입찰 금액
+     * @return 2순위 Winning 객체
+     */
+    public static Winning createSecondRank(Long auctionId, Long bidderId, Long bidAmount) {
+        LocalDateTime now = LocalDateTime.now();
+        return Winning.builder()
+                .auctionId(auctionId)
+                .rank(2)
+                .bidderId(bidderId)
+                .bidAmount(bidAmount)
+                .status(WinningStatus.PENDING_PAYMENT)
+                .paymentDeadline(null)  // 승계 시 설정
+                .createdAt(now)
+                .build();
+    }
+
+    /**
+     * 영속성 계층에서 조회한 데이터로 도메인 객체 복원
+     */
+    public static WinningBuilder reconstitute() {
+        return Winning.builder();
+    }
+
+    // =====================================================
+    // 비즈니스 로직 메서드
+    // =====================================================
+
+    /**
+     * 2순위가 자동 승계 대상인지 확인한다
+     * 2순위 입찰가 >= 1순위 입찰가 * 90%
+     *
+     * @param firstRankAmount 1순위 입찰 금액
+     * @return 자동 승계 대상이면 true
+     */
+    public boolean isEligibleForAutoTransfer(Long firstRankAmount) {
+        if (this.rank != 2) {
+            return false;
+        }
+        long threshold = (long) (firstRankAmount * AUTO_TRANSFER_THRESHOLD);
+        return this.bidAmount >= threshold;
+    }
+
+    /**
+     * 노쇼 처리한다
+     * 상태를 NO_SHOW로 변경
+     */
+    public void markAsNoShow() {
+        this.status = WinningStatus.NO_SHOW;
+    }
+
+    /**
+     * 결제 완료 처리한다
+     */
+    public void markAsPaid() {
+        this.status = WinningStatus.PAID;
+    }
+
+    /**
+     * 유찰 처리한다
+     */
+    public void markAsFailed() {
+        this.status = WinningStatus.FAILED;
+    }
+
+    /**
+     * 2순위 승계 처리한다
+     * 1시간 결제 대기 시간 부여
+     */
+    public void transferToSecondRank() {
+        if (this.rank != 2) {
+            throw new IllegalStateException("2순위만 승계 가능합니다.");
+        }
+        this.paymentDeadline = LocalDateTime.now().plusHours(SECOND_RANK_DEADLINE_HOURS);
+    }
+
+    /**
+     * 결제 기한이 만료되었는지 확인한다
+     *
+     * @return 만료되었으면 true
+     */
+    public boolean isPaymentExpired() {
+        if (paymentDeadline == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(paymentDeadline);
+    }
+
+    /**
+     * 결제 대기 중인지 확인한다
+     *
+     * @return 결제 대기 중이면 true
+     */
+    public boolean isPendingPayment() {
+        return this.status == WinningStatus.PENDING_PAYMENT;
+    }
+}
