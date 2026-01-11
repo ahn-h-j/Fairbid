@@ -13,8 +13,10 @@ import com.cos.fairbid.winning.domain.Winning;
 import io.cucumber.java.ko.그러면;
 import io.cucumber.java.ko.그리고;
 import io.cucumber.java.ko.만약;
+import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +40,9 @@ public class WinningSteps {
 
     @Autowired
     private WinningRepository winningRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     public WinningSteps(TestAdapter testAdapter, TestContext testContext) {
         this.testAdapter = testAdapter;
@@ -70,36 +75,19 @@ public class WinningSteps {
     }
 
     @만약("경매 종료 처리를 실행한다")
+    @Transactional
     public void 경매_종료_처리를_실행한다() {
         // When: 경매 종료 시간을 과거로 변경하고 종료 처리 실행
         Long auctionId = testContext.getLastCreatedAuctionId();
 
-        // 경매 종료 시간을 과거로 변경 (테스트용)
-        AuctionEntity auctionEntity = jpaAuctionRepository.findById(auctionId)
-                .orElseThrow(() -> new RuntimeException("경매를 찾을 수 없습니다."));
-
-        // 종료 시간을 1초 전으로 변경 (saveAndFlush로 즉시 커밋)
-        jpaAuctionRepository.saveAndFlush(
-                AuctionEntity.builder()
-                        .id(auctionEntity.getId())
-                        .sellerId(auctionEntity.getSellerId())
-                        .title(auctionEntity.getTitle())
-                        .description(auctionEntity.getDescription())
-                        .category(auctionEntity.getCategory())
-                        .startPrice(auctionEntity.getStartPrice())
-                        .currentPrice(auctionEntity.getCurrentPrice())
-                        .instantBuyPrice(auctionEntity.getInstantBuyPrice())
-                        .bidIncrement(auctionEntity.getBidIncrement())
-                        .scheduledEndTime(LocalDateTime.now().minusSeconds(1))
-                        .actualEndTime(null)
-                        .extensionCount(auctionEntity.getExtensionCount())
-                        .totalBidCount(auctionEntity.getTotalBidCount())
-                        .status(auctionEntity.getStatus())
-                        .winnerId(null)
-                        .createdAt(auctionEntity.getCreatedAt())
-                        .updatedAt(auctionEntity.getUpdatedAt())
-                        .build()
-        );
+        // 종료 시간을 1초 전으로 변경 (JPQL로 직접 업데이트)
+        entityManager.createQuery(
+                        "UPDATE AuctionEntity a SET a.scheduledEndTime = :endTime WHERE a.id = :id")
+                .setParameter("endTime", LocalDateTime.now().minusSeconds(1))
+                .setParameter("id", auctionId)
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
 
         // 경매 종료 처리 실행
         closeAuctionUseCase.closeExpiredAuctions();
