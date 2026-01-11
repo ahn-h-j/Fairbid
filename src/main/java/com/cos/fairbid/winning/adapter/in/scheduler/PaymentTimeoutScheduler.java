@@ -19,9 +19,9 @@ public class PaymentTimeoutScheduler {
 
     /**
      * 1분마다 실행되어 결제 기한 만료 건을 처리한다
-     * fixedRate = 60000ms (1분)
+     * fixedDelay = 60000ms (1분) - 이전 작업 완료 후 1분 대기
      */
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedDelay = 60000)
     public void checkPaymentTimeouts() {
         try {
             processNoShowUseCase.processExpiredPayments();
