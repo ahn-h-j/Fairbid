@@ -2,14 +2,16 @@ package com.cos.fairbid.winning.application.service;
 
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.out.BidRepository;
 import com.cos.fairbid.bid.domain.Bid;
-import com.cos.fairbid.notification.application.port.out.AuctionBroadcastPort;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
+import com.cos.fairbid.winning.application.event.AuctionClosedEvent;
 import com.cos.fairbid.winning.application.port.out.WinningRepository;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,8 +33,8 @@ public class AuctionClosingHelper {
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
     private final WinningRepository winningRepository;
-    private final AuctionBroadcastPort auctionBroadcastPort;
     private final PushNotificationPort pushNotificationPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 단일 경매 종료 처리
@@ -44,7 +46,7 @@ public class AuctionClosingHelper {
     public void processAuctionClosing(Long auctionId) {
         // 새 트랜잭션에서 경매 다시 조회
         Auction auction = auctionRepository.findById(auctionId)
-                .orElseThrow(() -> new RuntimeException("경매를 찾을 수 없습니다: " + auctionId));
+                .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
         // 1. 상위 2개 입찰 조회
         List<Bid> topBids = bidRepository.findTop2ByAuctionId(auctionId);
@@ -65,8 +67,8 @@ public class AuctionClosingHelper {
             saveSecondRankCandidate(auction, secondBid);
         }
 
-        // 5. WebSocket 종료 브로드캐스트
-        broadcastAuctionClosed(auction);
+        // 5. 경매 종료 이벤트 발행 (트랜잭션 커밋 후 브로드캐스트)
+        publishAuctionClosedEvent(auction);
 
         log.info("경매 종료 완료 - auctionId: {}, winnerId: {}", auctionId, firstBid.getBidderId());
     }
@@ -79,8 +81,8 @@ public class AuctionClosingHelper {
         auction.fail();
         auctionRepository.save(auction);
 
-        // WebSocket 종료 브로드캐스트
-        broadcastAuctionClosed(auction);
+        // 경매 종료 이벤트 발행 (트랜잭션 커밋 후 브로드캐스트)
+        publishAuctionClosedEvent(auction);
 
         // 판매자에게 유찰 알림
         pushNotificationPort.sendFailedAuctionNotification(
@@ -132,13 +134,10 @@ public class AuctionClosingHelper {
     }
 
     /**
-     * 경매 종료 WebSocket 브로드캐스트
+     * 경매 종료 이벤트 발행
+     * 트랜잭션 커밋 후 AuctionClosedEventListener에서 브로드캐스트 실행
      */
-    private void broadcastAuctionClosed(Auction auction) {
-        try {
-            auctionBroadcastPort.broadcastAuctionClosed(auction.getId());
-        } catch (Exception e) {
-            log.error("경매 종료 브로드캐스트 실패 - auctionId: {}", auction.getId(), e);
-        }
+    private void publishAuctionClosedEvent(Auction auction) {
+        eventPublisher.publishEvent(new AuctionClosedEvent(auction.getId()));
     }
 }
