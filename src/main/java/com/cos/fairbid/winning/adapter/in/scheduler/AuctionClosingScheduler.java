@@ -19,9 +19,9 @@ public class AuctionClosingScheduler {
 
     /**
      * 매초 실행되어 종료 대상 경매를 처리한다
-     * fixedRate = 1000ms (1초)
+     * fixedDelay = 1000ms (1초) - 이전 작업 완료 후 1초 대기
      */
-    @Scheduled(fixedRate = 1000)
+    @Scheduled(fixedDelay = 1000)
     public void pollClosingAuctions() {
         try {
             closeAuctionUseCase.closeExpiredAuctions();

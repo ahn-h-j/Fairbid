@@ -40,14 +40,16 @@ public class FirebaseConfig {
         try {
             if (FirebaseApp.getApps().isEmpty()) {
                 ClassPathResource resource = new ClassPathResource(firebaseConfigPath);
-                InputStream serviceAccount = resource.getInputStream();
 
-                FirebaseOptions options = FirebaseOptions.builder()
-                        .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                        .build();
+                // try-with-resources로 InputStream 자동 닫기
+                try (InputStream serviceAccount = resource.getInputStream()) {
+                    FirebaseOptions options = FirebaseOptions.builder()
+                            .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                            .build();
 
-                FirebaseApp.initializeApp(options);
-                log.info("Firebase initialized successfully");
+                    FirebaseApp.initializeApp(options);
+                    log.info("Firebase initialized successfully");
+                }
             }
         } catch (IOException e) {
             log.warn("Firebase initialization failed. FCM will not work. Error: {}", e.getMessage());

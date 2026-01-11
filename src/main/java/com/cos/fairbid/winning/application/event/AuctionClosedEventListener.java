@@ -1,0 +1,36 @@
+package com.cos.fairbid.winning.application.event;
+
+import com.cos.fairbid.notification.application.port.out.AuctionBroadcastPort;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+/**
+ * 경매 종료 이벤트 리스너
+ * 트랜잭션 커밋 후 WebSocket 브로드캐스트 실행
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class AuctionClosedEventListener {
+
+    private final AuctionBroadcastPort auctionBroadcastPort;
+
+    /**
+     * 경매 종료 이벤트 처리
+     * 트랜잭션 커밋 후(AFTER_COMMIT) 실행되어 롤백 시 브로드캐스트되지 않음
+     *
+     * @param event 경매 종료 이벤트
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleAuctionClosed(AuctionClosedEvent event) {
+        try {
+            auctionBroadcastPort.broadcastAuctionClosed(event.auctionId());
+            log.debug("경매 종료 브로드캐스트 완료 - auctionId: {}", event.auctionId());
+        } catch (Exception e) {
+            log.error("경매 종료 브로드캐스트 실패 - auctionId: {}", event.auctionId(), e);
+        }
+    }
+}

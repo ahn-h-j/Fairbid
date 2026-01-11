@@ -81,3 +81,20 @@ runs-on: ubuntu-latest
         if: always() # 테스트가 실패해도 리포트는 생성되어야 하므로 반드시 추가
         with:
           files: "**/build/test-results/test/TEST-*.xml"
+
+---
+
+## 3. AI 협업 섹션 (AI Collaboration)
+
+AI와 페어 프로그래밍으로 구현한 경우 아래 섹션을 추가한다.
+
+### 협업 방식 (Collaboration Method)
+- AI와 어떻게 협업했는지 작업 방식을 기술한다.
+- 참고한 문서, 컨벤션 분석 여부, 커밋 전략 등을 포함한다.
+
+### 주요 대화 (Key Conversations)
+- AI에게 요청한 주요 질문이나 검토 사항을 인용 형식으로 기술한다.
+- 카테고리(구현 계획, 확장성 검토, 테스트 방법 등)별로 구분하여 작성한다.
+
+### AI 기여 사항 (AI Contributions)
+- AI가 실제로 기여한 기술적 사항을 나열한다.
