@@ -181,7 +181,9 @@ public class Auction {
      * @return 종료되었으면 true, 아니면 false
      */
     public boolean isEnded() {
-        return status == AuctionStatus.ENDED || status == AuctionStatus.CANCELLED;
+        return status == AuctionStatus.ENDED
+                || status == AuctionStatus.FAILED
+                || status == AuctionStatus.CANCELLED;
     }
 
     /**
@@ -277,5 +279,59 @@ public class Auction {
         this.bidIncrement = calculateBidIncrement(this.currentPrice);
 
         this.updatedAt = LocalDateTime.now();
+    }
+
+    // =====================================================
+    // 낙찰 관련 비즈니스 로직 메서드
+    // =====================================================
+
+    /**
+     * 경매를 종료하고 낙찰자를 지정한다
+     *
+     * @param winnerId 낙찰자 ID
+     */
+    public void close(Long winnerId) {
+        this.status = AuctionStatus.ENDED;
+        this.winnerId = winnerId;
+        this.actualEndTime = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 경매를 유찰 처리한다
+     * 입찰자가 없거나 2순위 승계 조건 미충족 시 사용
+     */
+    public void fail() {
+        this.status = AuctionStatus.FAILED;
+        this.actualEndTime = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 낙찰자를 변경한다 (2순위 승계 시 사용)
+     *
+     * @param newWinnerId 새로운 낙찰자 ID
+     */
+    public void transferWinner(Long newWinnerId) {
+        this.winnerId = newWinnerId;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 종료 시간이 도래했는지 확인한다
+     *
+     * @return 종료 시간이 지났으면 true
+     */
+    public boolean isTimeToClose() {
+        return LocalDateTime.now().isAfter(scheduledEndTime);
+    }
+
+    /**
+     * 입찰이 있는지 확인한다
+     *
+     * @return 입찰이 있으면 true
+     */
+    public boolean hasBids() {
+        return totalBidCount > 0;
     }
 }
