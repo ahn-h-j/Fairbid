@@ -38,8 +38,18 @@ public class Winning {
      * @param bidderId  입찰자 ID
      * @param bidAmount 입찰 금액
      * @return 1순위 Winning 객체
+     * @throws IllegalArgumentException 필수 파라미터가 null인 경우
      */
     public static Winning createFirstRank(Long auctionId, Long bidderId, Long bidAmount) {
+        if (auctionId == null) {
+            throw new IllegalArgumentException("경매 ID는 null일 수 없습니다.");
+        }
+        if (bidderId == null) {
+            throw new IllegalArgumentException("입찰자 ID는 null일 수 없습니다.");
+        }
+        if (bidAmount == null) {
+            throw new IllegalArgumentException("입찰 금액은 null일 수 없습니다.");
+        }
         LocalDateTime now = LocalDateTime.now();
         return Winning.builder()
                 .auctionId(auctionId)
@@ -60,8 +70,18 @@ public class Winning {
      * @param bidderId  입찰자 ID
      * @param bidAmount 입찰 금액
      * @return 2순위 Winning 객체
+     * @throws IllegalArgumentException 필수 파라미터가 null인 경우
      */
     public static Winning createSecondRank(Long auctionId, Long bidderId, Long bidAmount) {
+        if (auctionId == null) {
+            throw new IllegalArgumentException("경매 ID는 null일 수 없습니다.");
+        }
+        if (bidderId == null) {
+            throw new IllegalArgumentException("입찰자 ID는 null일 수 없습니다.");
+        }
+        if (bidAmount == null) {
+            throw new IllegalArgumentException("입찰 금액은 null일 수 없습니다.");
+        }
         LocalDateTime now = LocalDateTime.now();
         return Winning.builder()
                 .auctionId(auctionId)
@@ -125,10 +145,15 @@ public class Winning {
     /**
      * 2순위 승계 처리한다
      * 1시간 결제 대기 시간 부여
+     *
+     * @throws IllegalStateException 2순위가 아니거나 PENDING_PAYMENT 상태가 아닌 경우
      */
     public void transferToSecondRank() {
         if (this.rank != 2) {
             throw new IllegalStateException("2순위만 승계 가능합니다.");
+        }
+        if (this.status != WinningStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("PENDING_PAYMENT 상태에서만 승계 가능합니다. 현재 상태: " + this.status);
         }
         this.paymentDeadline = LocalDateTime.now().plusHours(SECOND_RANK_DEADLINE_HOURS);
     }
