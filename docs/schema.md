@@ -97,6 +97,21 @@
 
 ---
 
+### WINNING (낙찰)
+
+| 컬럼 | 설명 | 비고 |
+|------|------|------|
+| 낙찰ID | PK | |
+| 경매ID | FK | AUCTION.경매ID |
+| 순위 | | 1 or 2 |
+| 입찰자ID | FK | USER.사용자ID |
+| 입찰금액 | | |
+| 상태 | | PENDING_PAYMENT, PAID, NO_SHOW, FAILED |
+| 결제마감일시 | | |
+| 생성일시 | | |
+
+---
+
 ### TRANSACTION (거래)
 
 | 컬럼 | 설명 | 비고 |
@@ -118,8 +133,10 @@
 ```
 USER 1:N AUCTION (생성)
 USER 1:N BID (입찰)
+USER 1:N WINNING (낙찰)
 USER 1:N NOTIFICATION (수신)
 AUCTION 1:N BID (입찰받음)
+AUCTION 1:N WINNING (낙찰후보, 최대 2개)
 AUCTION 1:N AUCTION_IMAGE (보유)
 AUCTION 1:1 TRANSACTION (낙찰, Optional)
 ```
