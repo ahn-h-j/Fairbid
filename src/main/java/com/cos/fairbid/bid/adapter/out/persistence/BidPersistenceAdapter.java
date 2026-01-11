@@ -8,6 +8,8 @@ import com.cos.fairbid.bid.domain.Bid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 /**
  * 입찰 영속성 어댑터
  * BidRepository 포트 구현체
@@ -24,5 +26,13 @@ public class BidPersistenceAdapter implements BidRepository {
         BidEntity entity = bidMapper.toEntity(bid);
         BidEntity savedEntity = jpaBidRepository.save(entity);
         return bidMapper.toDomain(savedEntity);
+    }
+
+    @Override
+    public List<Bid> findTop2ByAuctionId(Long auctionId) {
+        return jpaBidRepository.findTop2ByAuctionIdOrderByAmountDesc(auctionId)
+                .stream()
+                .map(bidMapper::toDomain)
+                .toList();
     }
 }

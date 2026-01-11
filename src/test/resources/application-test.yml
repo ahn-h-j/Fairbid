@@ -18,3 +18,7 @@ logging:
     root: WARN
     com.cos.fairbid: INFO
     org.testcontainers: INFO
+
+# Firebase 비활성화 (테스트 환경)
+firebase:
+  enabled: false

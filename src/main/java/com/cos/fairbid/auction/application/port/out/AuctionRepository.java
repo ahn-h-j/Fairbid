@@ -2,6 +2,7 @@ package com.cos.fairbid.auction.application.port.out;
 
 import com.cos.fairbid.auction.domain.Auction;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,4 +35,12 @@ public interface AuctionRepository {
      * @return 경매 도메인 객체 (Optional)
      */
     Optional<Auction> findByIdWithLock(Long id);
+
+    /**
+     * 종료 시간이 도래한 진행 중인 경매 목록을 조회한다
+     * status = BIDDING 이고 scheduledEndTime <= now
+     *
+     * @return 종료 대상 경매 목록
+     */
+    List<Auction> findClosingAuctions();
 }

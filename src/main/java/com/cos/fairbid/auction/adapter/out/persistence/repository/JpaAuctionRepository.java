@@ -1,12 +1,15 @@
 package com.cos.fairbid.auction.adapter.out.persistence.repository;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,4 +28,17 @@ public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM AuctionEntity a WHERE a.id = :id")
     Optional<AuctionEntity> findByIdWithLock(@Param("id") Long id);
+
+    /**
+     * 종료 시간이 도래한 진행 중인 경매 목록을 조회한다
+     *
+     * @param status 경매 상태 (BIDDING)
+     * @param now    현재 시간
+     * @return 종료 대상 경매 엔티티 목록
+     */
+    @Query("SELECT a FROM AuctionEntity a WHERE a.status = :status AND a.scheduledEndTime <= :now")
+    List<AuctionEntity> findClosingAuctions(
+            @Param("status") AuctionStatus status,
+            @Param("now") LocalDateTime now
+    );
 }

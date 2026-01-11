@@ -32,6 +32,8 @@ public class AuctionMapper {
                 .totalBidCount(auction.getTotalBidCount())
                 .status(auction.getStatus())
                 .winnerId(auction.getWinnerId())
+                .createdAt(auction.getCreatedAt())
+                .updatedAt(auction.getUpdatedAt())
                 .build();
     }
 
