@@ -95,7 +95,9 @@ public class AuctionEntity {
             Integer extensionCount,
             Integer totalBidCount,
             AuctionStatus status,
-            Long winnerId
+            Long winnerId,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
     ) {
         this.id = id;
         this.sellerId = sellerId;
@@ -112,5 +114,7 @@ public class AuctionEntity {
         this.totalBidCount = totalBidCount;
         this.status = status;
         this.winnerId = winnerId;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 }

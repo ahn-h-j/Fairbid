@@ -5,9 +5,12 @@ import com.cos.fairbid.auction.adapter.out.persistence.mapper.AuctionMapper;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepository;
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -38,5 +41,16 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
     public Optional<Auction> findByIdWithLock(Long id) {
         return jpaAuctionRepository.findByIdWithLock(id)
                 .map(auctionMapper::toDomain);
+    }
+
+    @Override
+    public List<Auction> findClosingAuctions() {
+        return jpaAuctionRepository.findClosingAuctions(
+                        AuctionStatus.BIDDING,
+                        LocalDateTime.now()
+                )
+                .stream()
+                .map(auctionMapper::toDomain)
+                .toList();
     }
 }
