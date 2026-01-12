@@ -1,6 +1,7 @@
 services:
-  app:
-    build: .
+  # 백엔드 API 서버
+  backend:
+    build: ./backend
     ports:
       - "8080:8080"
     depends_on:
@@ -11,6 +12,14 @@ services:
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USER}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis
+
+  # 프론트엔드 (nginx)
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
 
   mysql:
     image: mysql:8.0
