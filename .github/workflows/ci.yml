@@ -37,13 +37,15 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        run: chmod +x backend/gradlew
 
       - name: Build
         run: ./gradlew build -x test
+        working-directory: backend
 
       - name: Test with TestContainers
         run: ./gradlew test
+        working-directory: backend
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -51,8 +53,8 @@ jobs:
         with:
           name: test-results
           path: |
-            build/reports/tests/
-            build/reports/cucumber/
+            backend/build/reports/tests/
+            backend/build/reports/cucumber/
 
   docker:
     runs-on: ubuntu-latest
@@ -69,8 +71,8 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: false
           tags: fairbid:${{ github.sha }}
           cache-from: type=gha
