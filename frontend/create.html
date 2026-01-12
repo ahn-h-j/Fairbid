@@ -165,16 +165,23 @@
         }
 
         // 즉시구매가 검증
-        document.getElementById('instantBuyPrice').addEventListener('input', function() {
+        function validateInstantBuyPrice() {
             const startPrice = parseInt(document.getElementById('startPrice').value) || 0;
-            const instantBuyPrice = parseInt(this.value) || 0;
+            const instantBuyPriceInput = document.getElementById('instantBuyPrice');
+            const instantBuyPrice = parseInt(instantBuyPriceInput.value) || 0;
 
             if (instantBuyPrice > 0 && instantBuyPrice <= startPrice) {
-                this.setCustomValidity('즉시구매가는 시작가보다 높아야 합니다.');
+                instantBuyPriceInput.setCustomValidity('즉시구매가는 시작가보다 높아야 합니다.');
             } else {
-                this.setCustomValidity('');
+                instantBuyPriceInput.setCustomValidity('');
             }
-        });
+        }
+
+        // 즉시구매가 입력 시 검증
+        document.getElementById('instantBuyPrice').addEventListener('input', validateInstantBuyPrice);
+
+        // 시작가 변경 시 즉시구매가 재검증
+        document.getElementById('startPrice').addEventListener('input', validateInstantBuyPrice);
     </script>
 </body>
 </html>

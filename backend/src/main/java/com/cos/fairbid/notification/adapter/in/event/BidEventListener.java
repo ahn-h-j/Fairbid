@@ -28,8 +28,9 @@ public class BidEventListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleBidPlacedEvent(BidPlacedEvent event) {
-        log.info("Received BidPlacedEvent: auctionId={}, currentPrice={}, extended={}",
-                event.getAuctionId(), event.getCurrentPrice(), event.isExtended());
+        log.info("Received BidPlacedEvent: auctionId={}, currentPrice={}, extended={}, nextMinBidPrice={}, bidIncrement={}, totalBidCount={}",
+                event.getAuctionId(), event.getCurrentPrice(), event.isExtended(),
+                event.getNextMinBidPrice(), event.getBidIncrement(), event.getTotalBidCount());
 
         // 이벤트를 WebSocket 메시지로 변환
         BidUpdateMessage message = BidUpdateMessage.from(
@@ -37,6 +38,9 @@ public class BidEventListener {
                 event.getCurrentPrice(),
                 event.getScheduledEndTime(),
                 event.isExtended(),
+                event.getNextMinBidPrice(),
+                event.getBidIncrement(),
+                event.getTotalBidCount(),
                 event.getOccurredAt()
         );
 

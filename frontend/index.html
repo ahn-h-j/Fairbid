@@ -251,13 +251,12 @@
             }
 
             if (isBidUpdateMessage(message)) {
-                // 가격 업데이트
+                // 서버에서 계산된 값으로 업데이트
                 currentAuction.currentPrice = message.currentPrice;
                 currentAuction.scheduledEndTime = message.scheduledEndTime;
-
-                // 다음 입찰가 계산 (현재가 + 입찰단위)
-                currentAuction.nextMinBidPrice = message.currentPrice + currentAuction.bidIncrement;
-                currentAuction.totalBidCount++;
+                currentAuction.nextMinBidPrice = message.nextMinBidPrice;
+                currentAuction.bidIncrement = message.bidIncrement;
+                currentAuction.totalBidCount = message.totalBidCount;
 
                 updatePriceDisplay(currentAuction);
 
@@ -295,8 +294,11 @@
 
         // 입찰 요청
         async function submitBid(bidData) {
-            const btn = document.getElementById('btn-one-touch');
-            btn.disabled = true;
+            // 모든 입찰 버튼 비활성화
+            const oneTouchBtn = document.getElementById('btn-one-touch');
+            const directBidBtn = document.querySelector('.direct-bid .btn-secondary');
+            oneTouchBtn.disabled = true;
+            directBidBtn.disabled = true;
 
             try {
                 await placeBid(currentAuction.id, bidData);
@@ -305,7 +307,9 @@
             } catch (error) {
                 showBidMessage(error.message, 'error');
             } finally {
-                btn.disabled = false;
+                // 모든 입찰 버튼 다시 활성화
+                oneTouchBtn.disabled = false;
+                directBidBtn.disabled = false;
             }
         }
 

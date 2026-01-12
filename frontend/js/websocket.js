@@ -58,10 +58,14 @@ function subscribeToAuction(auctionId, onMessage) {
     // 새 구독
     const topic = `/topic/auctions/${auctionId}`;
     currentSubscription = stompClient.subscribe(topic, function(message) {
-        const data = JSON.parse(message.body);
-        console.log('WebSocket 메시지 수신:', data);
+        try {
+            const data = JSON.parse(message.body);
+            console.log('WebSocket 메시지 수신:', data);
 
-        if (onMessage) onMessage(data);
+            if (onMessage) onMessage(data);
+        } catch (error) {
+            console.error('WebSocket 메시지 파싱 실패:', error, message.body);
+        }
     });
 
     console.log(`경매 ${auctionId} 구독 시작`);

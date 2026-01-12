@@ -14,6 +14,14 @@
     --gray-500: #6b7280;
     --gray-700: #374151;
     --gray-900: #111827;
+
+    /* 알림 색상 */
+    --alert-success-bg: #dcfce7;
+    --alert-success-text: #166534;
+    --alert-error-bg: #fee2e2;
+    --alert-error-text: #991b1b;
+    --alert-info-bg: #dbeafe;
+    --alert-info-text: #1e40af;
 }
 
 * {
@@ -302,18 +310,18 @@ body {
 }
 
 .alert-success {
-    background-color: #dcfce7;
-    color: #166534;
+    background-color: var(--alert-success-bg);
+    color: var(--alert-success-text);
 }
 
 .alert-error {
-    background-color: #fee2e2;
-    color: #991b1b;
+    background-color: var(--alert-error-bg);
+    color: var(--alert-error-text);
 }
 
 .alert-info {
-    background-color: #dbeafe;
-    color: #1e40af;
+    background-color: var(--alert-info-bg);
+    color: var(--alert-info-text);
 }
 
 /* 상태 배지 */

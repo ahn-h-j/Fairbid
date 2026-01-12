@@ -50,7 +50,15 @@ async function apiRequest(endpoint, options = {}) {
 
     try {
         const response = await fetch(url, config);
-        const data = await response.json();
+
+        // JSON 파싱 시도
+        let data;
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            console.error('JSON 파싱 실패:', parseError);
+            throw new ApiError('PARSE_ERROR', '서버 응답을 처리할 수 없습니다.');
+        }
 
         // 서버 시간 오프셋 업데이트
         updateServerTimeOffset(data.serverTime);
