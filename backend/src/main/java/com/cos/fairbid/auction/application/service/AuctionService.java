@@ -1,11 +1,15 @@
 package com.cos.fairbid.auction.application.service;
 
+import com.cos.fairbid.auction.application.port.in.AuctionSearchCondition;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
+import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase {
+public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase, GetAuctionListUseCase {
 
     private final AuctionRepository auctionRepository;
 
@@ -58,5 +62,17 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
     public Auction getAuctionDetail(Long auctionId) {
         return auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
+    }
+
+    /**
+     * 경매 목록을 조회한다
+     *
+     * @param condition 검색 조건 (status, keyword)
+     * @param pageable  페이지네이션 정보
+     * @return 경매 목록 (페이지)
+     */
+    @Override
+    public Page<Auction> getAuctionList(AuctionSearchCondition condition, Pageable pageable) {
+        return auctionRepository.findAll(condition, pageable);
     }
 }
