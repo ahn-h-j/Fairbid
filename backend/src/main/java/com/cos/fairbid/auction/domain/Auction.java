@@ -5,6 +5,7 @@ import com.cos.fairbid.auction.domain.policy.AuctionExtensionPolicy;
 import com.cos.fairbid.auction.domain.policy.BidIncrementPolicy;
 import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
 import com.cos.fairbid.bid.domain.exception.BidTooLowException;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import lombok.Builder;
 import lombok.Getter;
@@ -175,10 +176,16 @@ public class Auction {
      * 2. 본인 경매 입찰 불가 확인
      *
      * @param bidderId 입찰자 ID
+     * @throws InvalidBidException        입찰자 ID가 null인 경우
      * @throws AuctionEndedException      경매가 종료된 경우
      * @throws SelfBidNotAllowedException 본인 경매에 입찰 시도 시
      */
     public void validateBidEligibility(Long bidderId) {
+        // 입찰자 ID null 체크
+        if (bidderId == null) {
+            throw InvalidBidException.bidderIdRequired();
+        }
+
         // 경매 종료 여부 확인
         if (isEnded()) {
             throw AuctionEndedException.forBid(this.id);

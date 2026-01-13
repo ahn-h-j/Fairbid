@@ -27,4 +27,16 @@ public class InvalidBidException extends RuntimeException {
                 "금액 직접 지정 입찰 시 입찰 금액은 필수입니다."
         );
     }
+
+    /**
+     * 입찰자 ID가 누락된 경우
+     *
+     * @return InvalidBidException 인스턴스
+     */
+    public static InvalidBidException bidderIdRequired() {
+        return new InvalidBidException(
+                "BIDDER_ID_REQUIRED",
+                "입찰자 ID는 필수입니다."
+        );
+    }
 }
