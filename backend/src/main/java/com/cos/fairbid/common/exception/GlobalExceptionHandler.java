@@ -2,6 +2,7 @@ package com.cos.fairbid.common.exception;
 
 
 import com.cos.fairbid.auction.domain.AuctionDuration;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
@@ -19,6 +20,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -104,6 +106,33 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("INVALID_REQUEST_BODY", message));
+    }
+
+    /**
+     * 쿼리 파라미터 타입 변환 실패 예외 처리 (잘못된 enum 값 등)
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatchException(
+            MethodArgumentTypeMismatchException e
+    ) {
+        String paramName = e.getName();
+        String message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다.";
+
+        // enum 타입인 경우 유효한 값 안내
+        Class<?> requiredType = e.getRequiredType();
+        if (requiredType != null && requiredType.isEnum()) {
+            Object[] enumConstants = requiredType.getEnumConstants();
+            String validValues = Arrays.stream(enumConstants)
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+            message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다. 허용 값: " + validValues;
+        }
+
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, e.getValue());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("INVALID_PARAMETER", message));
     }
 
     /**
