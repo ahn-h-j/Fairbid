@@ -4,10 +4,12 @@ import com.cos.fairbid.cucumber.adapter.TestAdapter;
 import com.cos.fairbid.cucumber.adapter.TestContext;
 import io.cucumber.java.Before;
 import io.cucumber.java.ko.그러면;
+import io.cucumber.java.ko.그리고;
 import io.cucumber.java.ko.만약;
 import io.cucumber.java.ko.조건;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,6 +97,43 @@ public class CommonSteps {
             // String 비교로 fallback
             assertThat(actualValue).asString().isEqualTo(expectedValue);
         }
+    }
+
+    @그리고("응답 본문의 목록 크기는 {int}이다")
+    public void 응답_본문의_목록_크기는_이다(int expectedSize) {
+        // Then: 페이지 응답의 content 목록 크기 검증
+        ResponseEntity<Map> response = testContext.getLastResponse();
+        Map<String, Object> body = response.getBody();
+        assertThat(body).isNotNull();
+
+        List<?> content = extractContentList(body);
+        assertThat(content).hasSize(expectedSize);
+    }
+
+    @그리고("응답 본문의 목록 크기는 {int} 이상이다")
+    public void 응답_본문의_목록_크기는_이상이다(int minSize) {
+        // Then: 페이지 응답의 content 목록 최소 크기 검증
+        ResponseEntity<Map> response = testContext.getLastResponse();
+        Map<String, Object> body = response.getBody();
+        assertThat(body).isNotNull();
+
+        List<?> content = extractContentList(body);
+        assertThat(content.size()).isGreaterThanOrEqualTo(minSize);
+    }
+
+    /**
+     * 응답 본문에서 content 목록을 추출한다.
+     * Page 응답 구조: { data: { content: [...] } }
+     */
+    @SuppressWarnings("unchecked")
+    private List<?> extractContentList(Map<String, Object> body) {
+        if (body.containsKey("data") && body.get("data") instanceof Map) {
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            if (data.containsKey("content") && data.get("content") instanceof List) {
+                return (List<?>) data.get("content");
+            }
+        }
+        return List.of();
     }
 
     @SuppressWarnings("unchecked")
