@@ -1,7 +1,7 @@
 package com.cos.fairbid.auction.adapter.out.persistence.repository;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
-import com.cos.fairbid.auction.application.port.in.AuctionSearchCondition;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -20,23 +20,24 @@ public class AuctionSpecification {
     /**
      * 검색 조건에 따른 Specification 생성
      *
-     * @param condition 검색 조건
+     * @param status  경매 상태 필터 (nullable)
+     * @param keyword 검색어 - 상품명 (nullable)
      * @return Specification
      */
-    public static Specification<AuctionEntity> withCondition(AuctionSearchCondition condition) {
+    public static Specification<AuctionEntity> withCondition(AuctionStatus status, String keyword) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             // status 필터링
-            if (condition.hasStatus()) {
-                predicates.add(criteriaBuilder.equal(root.get("status"), condition.status()));
+            if (status != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), status));
             }
 
             // keyword 검색 (title LIKE %keyword%)
-            if (condition.hasKeyword()) {
+            if (keyword != null && !keyword.isBlank()) {
                 predicates.add(criteriaBuilder.like(
                         criteriaBuilder.lower(root.get("title")),
-                        "%" + condition.keyword().toLowerCase() + "%"
+                        "%" + keyword.toLowerCase() + "%"
                 ));
             }
 

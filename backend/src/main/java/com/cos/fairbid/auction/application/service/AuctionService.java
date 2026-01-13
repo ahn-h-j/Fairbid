@@ -1,11 +1,11 @@
 package com.cos.fairbid.auction.application.service;
 
-import com.cos.fairbid.auction.application.port.in.AuctionSearchCondition;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -67,12 +67,13 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
     /**
      * 경매 목록을 조회한다
      *
-     * @param condition 검색 조건 (status, keyword)
-     * @param pageable  페이지네이션 정보
+     * @param status   경매 상태 필터 (nullable)
+     * @param keyword  검색어 - 상품명 (nullable)
+     * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
      */
     @Override
-    public Page<Auction> getAuctionList(AuctionSearchCondition condition, Pageable pageable) {
-        return auctionRepository.findAll(condition, pageable);
+    public Page<Auction> getAuctionList(AuctionStatus status, String keyword, Pageable pageable) {
+        return auctionRepository.findAll(status, keyword, pageable);
     }
 }

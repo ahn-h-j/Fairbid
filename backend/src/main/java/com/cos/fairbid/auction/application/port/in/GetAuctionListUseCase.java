@@ -1,6 +1,7 @@
 package com.cos.fairbid.auction.application.port.in;
 
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -12,9 +13,10 @@ public interface GetAuctionListUseCase {
     /**
      * 경매 목록을 조회한다
      *
-     * @param condition 검색 조건 (status, keyword)
-     * @param pageable  페이지네이션 정보
+     * @param status   경매 상태 필터 (nullable)
+     * @param keyword  검색어 - 상품명 (nullable)
+     * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
      */
-    Page<Auction> getAuctionList(AuctionSearchCondition condition, Pageable pageable);
+    Page<Auction> getAuctionList(AuctionStatus status, String keyword, Pageable pageable);
 }

@@ -4,7 +4,6 @@ import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.adapter.out.persistence.mapper.AuctionMapper;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.AuctionSpecification;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepository;
-import com.cos.fairbid.auction.application.port.in.AuctionSearchCondition;
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
@@ -59,9 +58,9 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
     }
 
     @Override
-    public Page<Auction> findAll(AuctionSearchCondition condition, Pageable pageable) {
+    public Page<Auction> findAll(AuctionStatus status, String keyword, Pageable pageable) {
         return jpaAuctionRepository.findAll(
-                AuctionSpecification.withCondition(condition),
+                AuctionSpecification.withCondition(status, keyword),
                 pageable
         ).map(auctionMapper::toDomain);
     }

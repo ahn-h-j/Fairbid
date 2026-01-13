@@ -3,7 +3,6 @@ package com.cos.fairbid.auction.adapter.in.controller;
 import com.cos.fairbid.auction.adapter.in.dto.AuctionListResponse;
 import com.cos.fairbid.auction.adapter.in.dto.AuctionResponse;
 import com.cos.fairbid.auction.adapter.in.dto.CreateAuctionRequest;
-import com.cos.fairbid.auction.application.port.in.AuctionSearchCondition;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
@@ -67,8 +66,7 @@ public class AuctionController {
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        AuctionSearchCondition condition = new AuctionSearchCondition(status, keyword);
-        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(condition, pageable);
+        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, keyword, pageable);
         Page<AuctionListResponse> response = auctions.map(AuctionListResponse::from);
 
         return ResponseEntity.ok(ApiResponse.success(response));
