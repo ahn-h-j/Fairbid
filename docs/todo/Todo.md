@@ -26,6 +26,18 @@
 - **내용**: SockJS, STOMP 라이브러리 script 태그에 integrity 속성 추가
 - **조건**: 필요성이 생기면 그때 추가 (PR #19 리뷰 보류 항목)
 
+### 검색 쿼리 LOWER() 함수 인덱스 미활용
+- **파일**: `AuctionSpecification.java`
+- **내용**: `LOWER()` 함수 사용으로 title 컬럼 인덱스 미활용
+- **해결**: DB 콜레이션을 `utf8mb4_unicode_ci`로 설정 후 LOWER() 제거
+- **조건**: 대량 데이터에서 성능 이슈 발생 시
+
+### 경매 목록 조회 시 불필요한 컬럼 조회
+- **파일**: `AuctionPersistenceAdapter.java`
+- **내용**: 목록 조회 시 모든 컬럼 SELECT (실제 응답에는 6개 필드만 사용)
+- **해결**: JPA DTO Projection 사용
+- **조건**: 성능 이슈 발생 시
+
 ---
 
 ## 진행 중
