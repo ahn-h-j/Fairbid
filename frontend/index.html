@@ -3,352 +3,349 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FairBid - 경매 상세</title>
+    <title>FairBid - 호구 없는 경매</title>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- SockJS, STOMP 라이브러리 -->
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 </head>
 <body>
+    <!-- 헤더 -->
     <header class="header">
-        <div class="container">
-            <h1>FairBid</h1>
-            <nav class="nav-links">
+        <div class="container header-content">
+            <a href="/" class="logo">FairBid</a>
+
+            <!-- 검색바 -->
+            <form id="search-form" class="search-form" onsubmit="handleSearch(event)">
+                <input
+                    type="text"
+                    id="search-input"
+                    class="search-input"
+                    placeholder="경매 상품 검색..."
+                    aria-label="경매 상품 검색"
+                >
+                <button type="submit" class="btn btn-primary search-btn">검색</button>
+            </form>
+
+            <nav class="nav-menu">
                 <a href="/create.html">경매 등록</a>
             </nav>
         </div>
     </header>
 
-    <main class="container">
+    <main class="container-wide">
+        <!-- 필터 영역 -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label for="status-filter">상태</label>
+                <select id="status-filter" onchange="handleFilterChange()">
+                    <option value="">전체</option>
+                    <option value="BIDDING">진행중</option>
+                    <option value="ENDED">종료</option>
+                    <option value="FAILED">유찰</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="sort-filter">정렬</label>
+                <select id="sort-filter" onchange="handleFilterChange()">
+                    <option value="createdAt,DESC">최신순</option>
+                    <option value="currentPrice,ASC">낮은가격순</option>
+                    <option value="currentPrice,DESC">높은가격순</option>
+                </select>
+            </div>
+
+            <!-- 현재 검색어 표시 -->
+            <div id="search-tag" class="search-tag" style="display: none;">
+                <span id="search-keyword"></span>
+                <button type="button" onclick="clearSearch()" class="clear-btn" aria-label="검색어 지우기">&times;</button>
+            </div>
+        </div>
+
         <!-- 로딩 상태 -->
         <div id="loading" class="loading">
             <div class="spinner"></div>
-            <p>경매 정보를 불러오는 중...</p>
+            <p>경매 목록을 불러오는 중...</p>
         </div>
 
         <!-- 에러 상태 -->
         <div id="error" class="alert alert-error" style="display: none;"></div>
 
-        <!-- 경매 상세 -->
-        <div id="auction-detail" style="display: none;">
-            <!-- 경매 정보 카드 -->
-            <div class="card">
-                <span id="auction-category" class="auction-category"></span>
-                <span id="auction-status" class="status-badge"></span>
-                <h2 id="auction-title" class="auction-title"></h2>
-                <p id="auction-description" class="auction-description"></p>
-            </div>
-
-            <!-- 타이머 -->
-            <div class="timer-section">
-                <div id="timer" class="timer">00:00:00</div>
-                <div class="timer-label">남은 시간</div>
-            </div>
-
-            <!-- 연장 알림 -->
-            <div id="extension-notice" class="extension-notice" style="display: none;">
-                경매가 연장되었습니다!
-            </div>
-
-            <!-- 가격 정보 -->
-            <div class="card">
-                <div class="price-section">
-                    <div class="price-label">현재가</div>
-                    <div id="current-price" class="current-price">0원</div>
-
-                    <div class="price-info">
-                        <div class="price-item">
-                            <div class="price-label">시작가</div>
-                            <div id="start-price" class="value">0원</div>
-                        </div>
-                        <div class="price-item">
-                            <div class="price-label">즉시구매가</div>
-                            <div id="instant-buy-price" class="value">-</div>
-                        </div>
-                        <div class="price-item">
-                            <div class="price-label">입찰 단위</div>
-                            <div id="bid-increment" class="value">0원</div>
-                        </div>
-                        <div class="price-item">
-                            <div class="price-label">총 입찰</div>
-                            <div id="total-bid-count" class="value">0회</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 입찰 섹션 -->
-                <div id="bid-section" class="bid-section">
-                    <h3 class="card-title">입찰하기</h3>
-
-                    <!-- 입찰 결과 메시지 -->
-                    <div id="bid-message" class="alert" style="display: none;"></div>
-
-                    <!-- 원터치 입찰 -->
-                    <div class="bid-buttons">
-                        <button id="btn-one-touch" class="btn btn-primary" onclick="oneTouchBid()">
-                            원터치 입찰 (<span id="next-bid-price">0원</span>)
-                        </button>
-                    </div>
-
-                    <!-- 직접 입찰 -->
-                    <div class="direct-bid">
-                        <input type="number" id="bid-amount" placeholder="입찰 금액 입력">
-                        <button class="btn btn-secondary" onclick="directBid()">직접 입찰</button>
-                    </div>
-
-                    <p class="form-hint" style="margin-top: 12px;">
-                        * 최소 입찰 금액: <span id="min-bid-amount">0원</span>
-                    </p>
-                </div>
-
-                <!-- 종료된 경매 -->
-                <div id="auction-ended" class="bid-section" style="display: none;">
-                    <div class="alert alert-info">
-                        이 경매는 종료되었습니다.
-                    </div>
-                </div>
-            </div>
-
-            <!-- 경매 추가 정보 -->
-            <div class="card">
-                <h3 class="card-title">경매 정보</h3>
-                <div class="price-info">
-                    <div class="price-item">
-                        <div class="price-label">연장 횟수</div>
-                        <div id="extension-count" class="value">0회</div>
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">경매 ID</div>
-                        <div id="auction-id" class="value">-</div>
-                    </div>
-                </div>
-            </div>
+        <!-- 빈 결과 -->
+        <div id="empty" class="empty-state" style="display: none;">
+            <p>검색 결과가 없습니다.</p>
         </div>
+
+        <!-- 경매 목록 그리드 -->
+        <div id="auction-grid" class="auction-grid" style="display: none;"></div>
+
+        <!-- 페이지네이션 -->
+        <div id="pagination" class="pagination" style="display: none;"></div>
     </main>
 
     <script src="/js/api.js"></script>
-    <script src="/js/websocket.js"></script>
     <script>
-        // 현재 경매 정보
-        let currentAuction = null;
-        let timerInterval = null;
+        // 현재 조회 파라미터
+        let currentParams = {
+            keyword: '',
+            status: '',
+            sort: 'createdAt,DESC',
+            page: 0,
+            size: 20
+        };
 
         // 페이지 로드 시 실행
         document.addEventListener('DOMContentLoaded', function() {
-            // URL에서 경매 ID 추출
-            const urlParams = new URLSearchParams(window.location.search);
-            const auctionId = urlParams.get('id');
-
-            if (!auctionId) {
-                showError('경매 ID가 필요합니다. URL에 ?id=1 형식으로 추가해주세요.');
-                return;
-            }
-
-            // 경매 정보 로드
-            loadAuction(auctionId);
+            // URL에서 파라미터 읽기
+            loadParamsFromUrl();
+            // 경매 목록 로드
+            loadAuctions();
         });
 
-        // 경매 정보 로드
-        async function loadAuction(auctionId) {
+        // 브라우저 뒤로가기/앞으로가기 처리
+        window.addEventListener('popstate', function() {
+            loadParamsFromUrl();
+            loadAuctions();
+        });
+
+        // URL에서 파라미터 읽기
+        function loadParamsFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            currentParams.keyword = urlParams.get('keyword') || '';
+            currentParams.status = urlParams.get('status') || '';
+            currentParams.sort = urlParams.get('sort') || 'createdAt,DESC';
+            currentParams.page = parseInt(urlParams.get('page')) || 0;
+
+            // UI 동기화
+            document.getElementById('search-input').value = currentParams.keyword;
+            document.getElementById('status-filter').value = currentParams.status;
+            document.getElementById('sort-filter').value = currentParams.sort;
+
+            // 검색 태그 표시
+            updateSearchTag();
+        }
+
+        // URL 업데이트 (새로고침 없이)
+        function updateUrl() {
+            const params = new URLSearchParams();
+
+            if (currentParams.keyword) params.set('keyword', currentParams.keyword);
+            if (currentParams.status) params.set('status', currentParams.status);
+            if (currentParams.sort !== 'createdAt,DESC') params.set('sort', currentParams.sort);
+            if (currentParams.page > 0) params.set('page', currentParams.page);
+
+            const newUrl = params.toString() ? `?${params.toString()}` : '/';
+            history.pushState(null, '', newUrl);
+        }
+
+        // 검색 태그 업데이트
+        function updateSearchTag() {
+            const tagEl = document.getElementById('search-tag');
+            const keywordEl = document.getElementById('search-keyword');
+
+            if (currentParams.keyword) {
+                keywordEl.textContent = `"${currentParams.keyword}"`;
+                tagEl.style.display = 'flex';
+            } else {
+                tagEl.style.display = 'none';
+            }
+        }
+
+        // 검색 처리
+        function handleSearch(event) {
+            event.preventDefault();
+            const keyword = document.getElementById('search-input').value.trim();
+            currentParams.keyword = keyword;
+            currentParams.page = 0;
+            updateUrl();
+            updateSearchTag();
+            loadAuctions();
+        }
+
+        // 검색 초기화
+        function clearSearch() {
+            currentParams.keyword = '';
+            currentParams.page = 0;
+            document.getElementById('search-input').value = '';
+            updateUrl();
+            updateSearchTag();
+            loadAuctions();
+        }
+
+        // 필터 변경 처리
+        function handleFilterChange() {
+            currentParams.status = document.getElementById('status-filter').value;
+            currentParams.sort = document.getElementById('sort-filter').value;
+            currentParams.page = 0;
+            updateUrl();
+            loadAuctions();
+        }
+
+        // 페이지 변경 처리
+        function goToPage(page) {
+            currentParams.page = page;
+            updateUrl();
+            loadAuctions();
+            // 스크롤 상단으로
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 경매 목록 로드
+        async function loadAuctions() {
+            showLoading();
+
             try {
-                currentAuction = await getAuctionDetail(auctionId);
-                renderAuction(currentAuction);
-
-                // WebSocket 연결
-                connectWebSocket(
-                    () => subscribeToAuction(auctionId, handleWebSocketMessage),
-                    (error) => console.error('WebSocket 연결 실패:', error)
-                );
-
-                // 타이머 시작
-                startTimer();
+                const response = await getAuctionList(currentParams);
+                renderAuctions(response);
             } catch (error) {
                 showError(error.message);
             }
         }
 
-        // 경매 정보 렌더링
-        function renderAuction(auction) {
+        // 경매 목록 렌더링
+        function renderAuctions(pageData) {
+            hideLoading();
+
+            const gridEl = document.getElementById('auction-grid');
+            const emptyEl = document.getElementById('empty');
+            const paginationEl = document.getElementById('pagination');
+
+            // 빈 결과 처리
+            if (!pageData.content || pageData.content.length === 0) {
+                gridEl.style.display = 'none';
+                paginationEl.style.display = 'none';
+                emptyEl.style.display = 'block';
+                return;
+            }
+
+            emptyEl.style.display = 'none';
+            gridEl.style.display = 'grid';
+
+            // 경매 카드 렌더링
+            gridEl.innerHTML = pageData.content.map(auction => createAuctionCard(auction)).join('');
+
+            // 페이지네이션 렌더링
+            renderPagination(pageData);
+        }
+
+        // 경매 카드 생성
+        function createAuctionCard(auction) {
+            const statusClass = getStatusClass(auction.status);
+            const statusText = formatStatus(auction.status);
+
+            return `
+                <a href="/detail.html?id=${auction.id}" class="auction-card">
+                    <div class="card-image">
+                        ${auction.thumbnailUrl
+                            ? `<img src="${auction.thumbnailUrl}" alt="${escapeHtml(auction.title)}">`
+                            : '<div class="no-image">이미지 없음</div>'
+                        }
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="card-body">
+                        <h3 class="card-title">${escapeHtml(auction.title)}</h3>
+                        <div class="card-price">${formatPrice(auction.currentPrice)}</div>
+                        <div class="card-meta">
+                            <span>입찰 ${auction.totalBidCount}회</span>
+                        </div>
+                    </div>
+                </a>
+            `;
+        }
+
+        // 페이지네이션 렌더링
+        function renderPagination(pageData) {
+            const paginationEl = document.getElementById('pagination');
+
+            if (pageData.totalPages <= 1) {
+                paginationEl.style.display = 'none';
+                return;
+            }
+
+            paginationEl.style.display = 'flex';
+
+            const currentPage = pageData.number;
+            const totalPages = pageData.totalPages;
+
+            // 표시할 페이지 범위 계산
+            let startPage = Math.max(0, currentPage - 2);
+            let endPage = Math.min(totalPages - 1, currentPage + 2);
+
+            // 최소 5개 페이지 표시
+            if (endPage - startPage < 4) {
+                if (startPage === 0) {
+                    endPage = Math.min(4, totalPages - 1);
+                } else {
+                    startPage = Math.max(0, totalPages - 5);
+                }
+            }
+
+            let html = '';
+
+            // 이전 버튼
+            html += `<button class="page-btn" ${currentPage === 0 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})" aria-label="이전 페이지">&lt;</button>`;
+
+            // 첫 페이지
+            if (startPage > 0) {
+                html += `<button class="page-btn" onclick="goToPage(0)">1</button>`;
+                if (startPage > 1) {
+                    html += `<span class="page-ellipsis">...</span>`;
+                }
+            }
+
+            // 페이지 번호들
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i + 1}</button>`;
+            }
+
+            // 마지막 페이지
+            if (endPage < totalPages - 1) {
+                if (endPage < totalPages - 2) {
+                    html += `<span class="page-ellipsis">...</span>`;
+                }
+                html += `<button class="page-btn" onclick="goToPage(${totalPages - 1})">${totalPages}</button>`;
+            }
+
+            // 다음 버튼
+            html += `<button class="page-btn" ${currentPage === totalPages - 1 ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})" aria-label="다음 페이지">&gt;</button>`;
+
+            paginationEl.innerHTML = html;
+        }
+
+        // 로딩 표시
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('empty').style.display = 'none';
+            document.getElementById('auction-grid').style.display = 'none';
+            document.getElementById('pagination').style.display = 'none';
+        }
+
+        // 로딩 숨김
+        function hideLoading() {
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('auction-detail').style.display = 'block';
-
-            // 기본 정보
-            document.getElementById('auction-id').textContent = auction.id;
-            document.getElementById('auction-title').textContent = auction.title;
-            document.getElementById('auction-description').textContent = auction.description || '설명 없음';
-            document.getElementById('auction-category').textContent = formatCategory(auction.category);
-
-            // 상태
-            const statusBadge = document.getElementById('auction-status');
-            statusBadge.textContent = formatStatus(auction.status);
-            statusBadge.className = 'status-badge ' + (auction.status === 'BIDDING' ? 'status-bidding' : 'status-ended');
-
-            // 가격 정보
-            updatePriceDisplay(auction);
-
-            // 입찰 섹션 표시/숨김
-            const isEnded = ['ENDED', 'FAILED', 'CANCELLED'].includes(auction.status);
-            document.getElementById('bid-section').style.display = isEnded ? 'none' : 'block';
-            document.getElementById('auction-ended').style.display = isEnded ? 'block' : 'none';
-        }
-
-        // 가격 표시 업데이트
-        function updatePriceDisplay(auction) {
-            document.getElementById('current-price').textContent = formatPrice(auction.currentPrice);
-            document.getElementById('start-price').textContent = formatPrice(auction.startPrice);
-            document.getElementById('instant-buy-price').textContent =
-                auction.instantBuyPrice ? formatPrice(auction.instantBuyPrice) : '-';
-            document.getElementById('bid-increment').textContent = formatPrice(auction.bidIncrement);
-            document.getElementById('total-bid-count').textContent = auction.totalBidCount + '회';
-            document.getElementById('extension-count').textContent = auction.extensionCount + '회';
-
-            // 다음 입찰가
-            document.getElementById('next-bid-price').textContent = formatPrice(auction.nextMinBidPrice);
-            document.getElementById('min-bid-amount').textContent = formatPrice(auction.nextMinBidPrice);
-            document.getElementById('bid-amount').placeholder = `최소 ${formatPrice(auction.nextMinBidPrice)}`;
-        }
-
-        // 타이머 시작
-        function startTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-            }
-
-            timerInterval = setInterval(() => {
-                if (!currentAuction) return;
-
-                const remaining = calculateRemainingTime(currentAuction.scheduledEndTime);
-                const timerEl = document.getElementById('timer');
-
-                timerEl.textContent = formatRemainingTime(currentAuction.scheduledEndTime);
-
-                // 5분 이하일 때 경고 색상
-                const totalSeconds = remaining.hours * 3600 + remaining.minutes * 60 + remaining.seconds;
-                timerEl.classList.remove('warning', 'danger');
-                if (totalSeconds <= 60) {
-                    timerEl.classList.add('danger');
-                } else if (totalSeconds <= 300) {
-                    timerEl.classList.add('warning');
-                }
-
-                // 종료 시
-                if (remaining.isExpired) {
-                    clearInterval(timerInterval);
-                    document.getElementById('bid-section').style.display = 'none';
-                    document.getElementById('auction-ended').style.display = 'block';
-                }
-            }, 1000);
-        }
-
-        // WebSocket 메시지 처리
-        function handleWebSocketMessage(message) {
-            if (isAuctionClosedMessage(message)) {
-                // 경매 종료
-                document.getElementById('bid-section').style.display = 'none';
-                document.getElementById('auction-ended').style.display = 'block';
-                clearInterval(timerInterval);
-                return;
-            }
-
-            if (isBidUpdateMessage(message)) {
-                // 서버에서 계산된 값으로 업데이트
-                currentAuction.currentPrice = message.currentPrice;
-                currentAuction.scheduledEndTime = message.scheduledEndTime;
-                currentAuction.nextMinBidPrice = message.nextMinBidPrice;
-                currentAuction.bidIncrement = message.bidIncrement;
-                currentAuction.totalBidCount = message.totalBidCount;
-
-                updatePriceDisplay(currentAuction);
-
-                // 연장 알림
-                if (message.extended) {
-                    currentAuction.extensionCount++;
-                    showExtensionNotice();
-                }
-            }
-        }
-
-        // 연장 알림 표시
-        function showExtensionNotice() {
-            const notice = document.getElementById('extension-notice');
-            notice.style.display = 'block';
-            setTimeout(() => {
-                notice.style.display = 'none';
-            }, 3000);
-        }
-
-        // 원터치 입찰
-        async function oneTouchBid() {
-            await submitBid({ bidType: 'ONE_TOUCH' });
-        }
-
-        // 직접 입찰
-        async function directBid() {
-            const amount = parseInt(document.getElementById('bid-amount').value);
-            if (!amount || amount <= 0) {
-                showBidMessage('입찰 금액을 입력해주세요.', 'error');
-                return;
-            }
-            await submitBid({ amount: amount, bidType: 'DIRECT' });
-        }
-
-        // 입찰 요청
-        async function submitBid(bidData) {
-            // 모든 입찰 버튼 비활성화
-            const oneTouchBtn = document.getElementById('btn-one-touch');
-            const directBidBtn = document.querySelector('.direct-bid .btn-secondary');
-            oneTouchBtn.disabled = true;
-            directBidBtn.disabled = true;
-
-            try {
-                await placeBid(currentAuction.id, bidData);
-                showBidMessage('입찰이 완료되었습니다!', 'success');
-                document.getElementById('bid-amount').value = '';
-            } catch (error) {
-                showBidMessage(error.message, 'error');
-            } finally {
-                // 모든 입찰 버튼 다시 활성화
-                oneTouchBtn.disabled = false;
-                directBidBtn.disabled = false;
-            }
-        }
-
-        // 입찰 메시지 표시
-        function showBidMessage(message, type) {
-            const el = document.getElementById('bid-message');
-            el.textContent = message;
-            el.className = 'alert alert-' + type;
-            el.style.display = 'block';
-            setTimeout(() => {
-                el.style.display = 'none';
-            }, 3000);
         }
 
         // 에러 표시
         function showError(message) {
-            document.getElementById('loading').style.display = 'none';
+            hideLoading();
             const errorEl = document.getElementById('error');
             errorEl.textContent = message;
             errorEl.style.display = 'block';
         }
 
-        // 카테고리 포맷
-        function formatCategory(category) {
+        // 상태 클래스
+        function getStatusClass(status) {
             const map = {
-                'ELECTRONICS': '전자기기',
-                'FASHION': '패션/의류',
-                'HOME': '가구/생활',
-                'SPORTS': '스포츠/레저',
-                'HOBBY': '취미/수집',
-                'OTHER': '기타'
+                'BIDDING': 'status-bidding',
+                'INSTANT_BUY_PENDING': 'status-instant',
+                'ENDED': 'status-ended',
+                'FAILED': 'status-failed',
+                'CANCELLED': 'status-cancelled'
             };
-            return map[category] || category;
+            return map[status] || 'status-ended';
         }
 
-        // 상태 포맷
+        // 상태 텍스트
         function formatStatus(status) {
             const map = {
-                'PENDING': '대기중',
                 'BIDDING': '진행중',
                 'INSTANT_BUY_PENDING': '즉시구매 대기',
                 'ENDED': '종료',
@@ -358,13 +355,12 @@
             return map[status] || status;
         }
 
-        // 페이지 떠날 때 정리
-        window.addEventListener('beforeunload', function() {
-            disconnectWebSocket();
-            if (timerInterval) {
-                clearInterval(timerInterval);
-            }
-        });
+        // HTML 이스케이프 (XSS 방지)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
     </script>
 </body>
 </html>

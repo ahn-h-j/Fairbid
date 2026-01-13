@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FairBid - 경매 상세</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- SockJS, STOMP 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <a href="/" class="logo">FairBid</a>
+            <nav class="nav-menu">
+                <a href="/">경매 목록</a>
+                <a href="/create.html">경매 등록</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- 로딩 상태 -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>경매 정보를 불러오는 중...</p>
+        </div>
+
+        <!-- 에러 상태 -->
+        <div id="error" class="alert alert-error" style="display: none;"></div>
+
+        <!-- 경매 상세 -->
+        <div id="auction-detail" style="display: none;">
+            <!-- 경매 정보 카드 -->
+            <div class="card">
+                <span id="auction-category" class="auction-category"></span>
+                <span id="auction-status" class="status-badge"></span>
+                <h2 id="auction-title" class="auction-title"></h2>
+                <p id="auction-description" class="auction-description"></p>
+            </div>
+
+            <!-- 타이머 -->
+            <div class="timer-section">
+                <div id="timer" class="timer">00:00:00</div>
+                <div class="timer-label">남은 시간</div>
+            </div>
+
+            <!-- 연장 알림 -->
+            <div id="extension-notice" class="extension-notice" style="display: none;">
+                경매가 연장되었습니다!
+            </div>
+
+            <!-- 가격 정보 -->
+            <div class="card">
+                <div class="price-section">
+                    <div class="price-label">현재가</div>
+                    <div id="current-price" class="current-price">0원</div>
+
+                    <div class="price-info">
+                        <div class="price-item">
+                            <div class="price-label">시작가</div>
+                            <div id="start-price" class="value">0원</div>
+                        </div>
+                        <div class="price-item">
+                            <div class="price-label">즉시구매가</div>
+                            <div id="instant-buy-price" class="value">-</div>
+                        </div>
+                        <div class="price-item">
+                            <div class="price-label">입찰 단위</div>
+                            <div id="bid-increment" class="value">0원</div>
+                        </div>
+                        <div class="price-item">
+                            <div class="price-label">총 입찰</div>
+                            <div id="total-bid-count" class="value">0회</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 입찰 섹션 -->
+                <div id="bid-section" class="bid-section">
+                    <h3 class="card-title">입찰하기</h3>
+
+                    <!-- 입찰 결과 메시지 -->
+                    <div id="bid-message" class="alert" style="display: none;"></div>
+
+                    <!-- 원터치 입찰 -->
+                    <div class="bid-buttons">
+                        <button id="btn-one-touch" class="btn btn-primary" onclick="oneTouchBid()">
+                            원터치 입찰 (<span id="next-bid-price">0원</span>)
+                        </button>
+                    </div>
+
+                    <!-- 직접 입찰 -->
+                    <div class="direct-bid">
+                        <input type="number" id="bid-amount" placeholder="입찰 금액 입력">
+                        <button class="btn btn-secondary" onclick="directBid()">직접 입찰</button>
+                    </div>
+
+                    <p class="form-hint" style="margin-top: 12px;">
+                        * 최소 입찰 금액: <span id="min-bid-amount">0원</span>
+                    </p>
+                </div>
+
+                <!-- 종료된 경매 -->
+                <div id="auction-ended" class="bid-section" style="display: none;">
+                    <div class="alert alert-info">
+                        이 경매는 종료되었습니다.
+                    </div>
+                </div>
+            </div>
+
+            <!-- 경매 추가 정보 -->
+            <div class="card">
+                <h3 class="card-title">경매 정보</h3>
+                <div class="price-info">
+                    <div class="price-item">
+                        <div class="price-label">연장 횟수</div>
+                        <div id="extension-count" class="value">0회</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="price-label">경매 ID</div>
+                        <div id="auction-id" class="value">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/websocket.js"></script>
+    <script>
+        // 현재 경매 정보
+        let currentAuction = null;
+        let timerInterval = null;
+
+        // 페이지 로드 시 실행
+        document.addEventListener('DOMContentLoaded', function() {
+            // URL에서 경매 ID 추출
+            const urlParams = new URLSearchParams(window.location.search);
+            const auctionId = urlParams.get('id');
+
+            if (!auctionId) {
+                showError('경매 ID가 필요합니다. URL에 ?id=1 형식으로 추가해주세요.');
+                return;
+            }
+
+            // 경매 정보 로드
+            loadAuction(auctionId);
+        });
+
+        // 경매 정보 로드
+        async function loadAuction(auctionId) {
+            try {
+                currentAuction = await getAuctionDetail(auctionId);
+                renderAuction(currentAuction);
+
+                // WebSocket 연결
+                connectWebSocket(
+                    () => subscribeToAuction(auctionId, handleWebSocketMessage),
+                    (error) => console.error('WebSocket 연결 실패:', error)
+                );
+
+                // 타이머 시작
+                startTimer();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        // 경매 정보 렌더링
+        function renderAuction(auction) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('auction-detail').style.display = 'block';
+
+            // 기본 정보
+            document.getElementById('auction-id').textContent = auction.id;
+            document.getElementById('auction-title').textContent = auction.title;
+            document.getElementById('auction-description').textContent = auction.description || '설명 없음';
+            document.getElementById('auction-category').textContent = formatCategory(auction.category);
+
+            // 상태
+            const statusBadge = document.getElementById('auction-status');
+            statusBadge.textContent = formatStatus(auction.status);
+            statusBadge.className = 'status-badge ' + (auction.status === 'BIDDING' ? 'status-bidding' : 'status-ended');
+
+            // 가격 정보
+            updatePriceDisplay(auction);
+
+            // 입찰 섹션 표시/숨김
+            const isEnded = ['ENDED', 'FAILED', 'CANCELLED'].includes(auction.status);
+            document.getElementById('bid-section').style.display = isEnded ? 'none' : 'block';
+            document.getElementById('auction-ended').style.display = isEnded ? 'block' : 'none';
+        }
+
+        // 가격 표시 업데이트
+        function updatePriceDisplay(auction) {
+            document.getElementById('current-price').textContent = formatPrice(auction.currentPrice);
+            document.getElementById('start-price').textContent = formatPrice(auction.startPrice);
+            document.getElementById('instant-buy-price').textContent =
+                auction.instantBuyPrice ? formatPrice(auction.instantBuyPrice) : '-';
+            document.getElementById('bid-increment').textContent = formatPrice(auction.bidIncrement);
+            document.getElementById('total-bid-count').textContent = auction.totalBidCount + '회';
+            document.getElementById('extension-count').textContent = auction.extensionCount + '회';
+
+            // 다음 입찰가
+            document.getElementById('next-bid-price').textContent = formatPrice(auction.nextMinBidPrice);
+            document.getElementById('min-bid-amount').textContent = formatPrice(auction.nextMinBidPrice);
+            document.getElementById('bid-amount').placeholder = `최소 ${formatPrice(auction.nextMinBidPrice)}`;
+        }
+
+        // 타이머 시작
+        function startTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+
+            timerInterval = setInterval(() => {
+                if (!currentAuction) return;
+
+                const remaining = calculateRemainingTime(currentAuction.scheduledEndTime);
+                const timerEl = document.getElementById('timer');
+
+                timerEl.textContent = formatRemainingTime(currentAuction.scheduledEndTime);
+
+                // 5분 이하일 때 경고 색상
+                const totalSeconds = remaining.hours * 3600 + remaining.minutes * 60 + remaining.seconds;
+                timerEl.classList.remove('warning', 'danger');
+                if (totalSeconds <= 60) {
+                    timerEl.classList.add('danger');
+                } else if (totalSeconds <= 300) {
+                    timerEl.classList.add('warning');
+                }
+
+                // 종료 시
+                if (remaining.isExpired) {
+                    clearInterval(timerInterval);
+                    document.getElementById('bid-section').style.display = 'none';
+                    document.getElementById('auction-ended').style.display = 'block';
+                }
+            }, 1000);
+        }
+
+        // WebSocket 메시지 처리
+        function handleWebSocketMessage(message) {
+            if (isAuctionClosedMessage(message)) {
+                // 경매 종료
+                document.getElementById('bid-section').style.display = 'none';
+                document.getElementById('auction-ended').style.display = 'block';
+                clearInterval(timerInterval);
+                return;
+            }
+
+            if (isBidUpdateMessage(message)) {
+                // 서버에서 계산된 값으로 업데이트
+                currentAuction.currentPrice = message.currentPrice;
+                currentAuction.scheduledEndTime = message.scheduledEndTime;
+                currentAuction.nextMinBidPrice = message.nextMinBidPrice;
+                currentAuction.bidIncrement = message.bidIncrement;
+                currentAuction.totalBidCount = message.totalBidCount;
+
+                updatePriceDisplay(currentAuction);
+
+                // 연장 알림
+                if (message.extended) {
+                    currentAuction.extensionCount++;
+                    showExtensionNotice();
+                }
+            }
+        }
+
+        // 연장 알림 표시
+        function showExtensionNotice() {
+            const notice = document.getElementById('extension-notice');
+            notice.style.display = 'block';
+            setTimeout(() => {
+                notice.style.display = 'none';
+            }, 3000);
+        }
+
+        // 원터치 입찰
+        async function oneTouchBid() {
+            await submitBid({ bidType: 'ONE_TOUCH' });
+        }
+
+        // 직접 입찰
+        async function directBid() {
+            const amount = parseInt(document.getElementById('bid-amount').value);
+            if (!amount || amount <= 0) {
+                showBidMessage('입찰 금액을 입력해주세요.', 'error');
+                return;
+            }
+            await submitBid({ amount: amount, bidType: 'DIRECT' });
+        }
+
+        // 입찰 요청
+        async function submitBid(bidData) {
+            // 모든 입찰 버튼 비활성화
+            const oneTouchBtn = document.getElementById('btn-one-touch');
+            const directBidBtn = document.querySelector('.direct-bid .btn-secondary');
+            oneTouchBtn.disabled = true;
+            directBidBtn.disabled = true;
+
+            try {
+                await placeBid(currentAuction.id, bidData);
+                showBidMessage('입찰이 완료되었습니다!', 'success');
+                document.getElementById('bid-amount').value = '';
+            } catch (error) {
+                showBidMessage(error.message, 'error');
+            } finally {
+                // 모든 입찰 버튼 다시 활성화
+                oneTouchBtn.disabled = false;
+                directBidBtn.disabled = false;
+            }
+        }
+
+        // 입찰 메시지 표시
+        function showBidMessage(message, type) {
+            const el = document.getElementById('bid-message');
+            el.textContent = message;
+            el.className = 'alert alert-' + type;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 3000);
+        }
+
+        // 에러 표시
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        // 카테고리 포맷
+        function formatCategory(category) {
+            const map = {
+                'ELECTRONICS': '전자기기',
+                'FASHION': '패션/의류',
+                'HOME': '가구/생활',
+                'SPORTS': '스포츠/레저',
+                'HOBBY': '취미/수집',
+                'OTHER': '기타'
+            };
+            return map[category] || category;
+        }
+
+        // 상태 포맷
+        function formatStatus(status) {
+            const map = {
+                'BIDDING': '진행중',
+                'INSTANT_BUY_PENDING': '즉시구매 대기',
+                'ENDED': '종료',
+                'FAILED': '유찰',
+                'CANCELLED': '취소됨'
+            };
+            return map[status] || status;
+        }
+
+        // 페이지 떠날 때 정리
+        window.addEventListener('beforeunload', function() {
+            disconnectWebSocket();
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+        });
+    </script>
+</body>
+</html>

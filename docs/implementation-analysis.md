@@ -1,6 +1,6 @@
 # 구현 진행 상황 분석 문서
 
-> 작성일: 2026-01-11
+> 작성일: 2026-01-11 (최종 수정: 2026-01-13)
 > 분석 대상: docs/feature/*.mmd 시퀀스 다이어그램 기반 구현 현황
 
 ---
@@ -14,6 +14,7 @@
 |------|------|------|
 | 경매등록.mmd | 경매 상품 등록 | docs/feature/auction/ |
 | 경매조회.mmd | 경매 상세 조회 | docs/feature/auction/ |
+| 경매목록조회.mmd | 경매 목록 조회 | docs/feature/auction/ |
 | 입찰.mmd | 입찰 처리 | docs/feature/bid/ |
 | 낙찰.mmd | 경매 종료 및 낙찰 처리 | docs/feature/bid/ |
 
@@ -81,7 +82,41 @@
 
 ---
 
-### 2.3 입찰 (입찰.mmd)
+### 2.3 경매 목록 조회 (경매목록조회.mmd)
+
+#### 명세 요약
+```
+구매자 → AuctionController → AuctionService → AuctionRepository → RDB
+```
+
+#### 명세 상세 로직
+1. 상태(status) 필터링 (선택)
+2. 키워드(keyword) 검색 - 상품명 LIKE 검색 (선택)
+3. 페이지네이션 (기본값: page=0, size=20)
+4. 정렬 (createdAt DESC)
+
+#### 구현 상태: ✅ 완료
+
+| 항목 | 구현 여부 | 구현 위치 |
+|------|----------|----------|
+| GetAuctionListUseCase | ✅ | `auction/application/port/in/GetAuctionListUseCase.java` |
+| AuctionService.getAuctionList() | ✅ | `AuctionService.java` |
+| AuctionRepository.findAll() | ✅ | `AuctionRepository.java` |
+| JPA Specification 동적 쿼리 | ✅ | `AuctionSpecification.java` |
+| 페이지네이션 | ✅ | Spring Data Pageable 사용 |
+| 잘못된 enum 파라미터 예외 처리 | ✅ | `GlobalExceptionHandler` |
+
+#### BDD 테스트: ✅ 존재
+- `features/auction/get-auction-list.feature`
+- 전체 목록 조회
+- 상태 필터링 조회
+- 키워드 검색 조회
+- 빈 결과 조회
+- 잘못된 상태값 400 에러
+
+---
+
+### 2.4 입찰 (입찰.mmd)
 
 #### 명세 요약
 ```
@@ -121,7 +156,7 @@
 
 ---
 
-### 2.4 낙찰 (낙찰.mmd)
+### 2.5 낙찰 (낙찰.mmd)
 
 #### 명세 요약
 ```
@@ -240,7 +275,8 @@ Scheduler → RDB → NotificationService (WebSocket) → 구매자
 |---------|------------|------|
 | health-check.feature | 1 | ✅ |
 | create-auction.feature | 2 | ✅ |
-| get-auction-detail.feature | - | ✅ |
+| get-auction-detail.feature | 2 | ✅ |
+| get-auction-list.feature | 5 | ✅ |
 | place-bid.feature | 4 | ✅ |
 | auction-closing.feature | 3 | ✅ |
 
@@ -298,6 +334,14 @@ docs/feature/auction/경매등록.mmd
 docs/feature/auction/경매조회.mmd
   └─ src/main/java/com/cos/fairbid/auction/
       ├─ adapter/in/controller/AuctionController.java
+      └─ application/service/AuctionService.java
+
+docs/feature/auction/경매목록조회.mmd
+  └─ src/main/java/com/cos/fairbid/auction/
+      ├─ adapter/in/controller/AuctionController.java
+      ├─ adapter/in/dto/AuctionListResponse.java
+      ├─ adapter/out/persistence/repository/AuctionSpecification.java
+      ├─ application/port/in/GetAuctionListUseCase.java
       └─ application/service/AuctionService.java
 
 docs/feature/bid/입찰.mmd

@@ -21,6 +21,11 @@
 - **내용**: `spring.data.web.pageable.max-page-size` 설정 추가
 - **조건**: 필요성이 생기면 그때 추가 (PR #17 리뷰 보류 항목)
 
+### 외부 CDN 스크립트 SRI 해시 추가
+- **파일**: `detail.html`
+- **내용**: SockJS, STOMP 라이브러리 script 태그에 integrity 속성 추가
+- **조건**: 필요성이 생기면 그때 추가 (PR #19 리뷰 보류 항목)
+
 ---
 
 ## 진행 중
