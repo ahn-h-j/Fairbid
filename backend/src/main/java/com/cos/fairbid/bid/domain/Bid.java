@@ -1,5 +1,7 @@
 package com.cos.fairbid.bid.domain;
 
+import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -45,5 +47,29 @@ public class Bid {
      */
     public static BidBuilder reconstitute() {
         return Bid.builder();
+    }
+
+    /**
+     * 입찰 금액을 결정한다
+     * - ONE_TOUCH: 최소 입찰 금액 자동 적용
+     * - DIRECT: 사용자 지정 금액 사용
+     *
+     * @param bidType         입찰 유형
+     * @param requestedAmount 요청 입찰 금액 (DIRECT 시 필수)
+     * @param auction         경매 도메인
+     * @return 입찰 금액
+     * @throws InvalidBidException DIRECT 입찰 시 금액이 null인 경우
+     */
+    public static Long determineBidAmount(BidType bidType, Long requestedAmount, Auction auction) {
+        if (bidType == BidType.ONE_TOUCH) {
+            // 원터치 입찰: 현재가 + 할증된 입찰단위
+            return auction.getMinBidAmount();
+        }
+
+        // 금액 직접 지정: amount 필수 검증
+        if (requestedAmount == null) {
+            throw InvalidBidException.amountRequiredForDirectBid();
+        }
+        return requestedAmount;
     }
 }
