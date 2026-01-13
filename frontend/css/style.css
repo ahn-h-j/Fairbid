@@ -591,20 +591,10 @@ body {
     font-weight: 500;
 }
 
-/* 상태 배지 색상 */
-.status-bidding {
-    background-color: #dcfce7;
-    color: #166534;
-}
-
+/* 상태 배지 색상 (추가) */
 .status-instant {
     background-color: #dbeafe;
     color: #1e40af;
-}
-
-.status-ended {
-    background-color: var(--gray-200);
-    color: var(--gray-700);
 }
 
 .status-failed {
@@ -671,8 +661,10 @@ body {
 }
 
 /* 컨테이너 (목록 페이지용 넓은 버전) */
-.container {
+.container-wide {
     max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
 }
 
 /* 반응형 */

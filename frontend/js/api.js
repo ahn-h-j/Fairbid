@@ -95,7 +95,7 @@ class ApiError extends Error {
  * 경매 목록 조회
  * @param {object} params - 조회 파라미터
  * @param {string} [params.keyword] - 검색 키워드
- * @param {string} [params.status] - 경매 상태 필터 (PENDING, BIDDING, ENDED, FAILED, CANCELLED)
+ * @param {string} [params.status] - 경매 상태 필터 (BIDDING, ENDED, FAILED, CANCELLED)
  * @param {number} [params.page=0] - 페이지 번호
  * @param {number} [params.size=20] - 페이지 크기
  * @param {string} [params.sort='createdAt,DESC'] - 정렬 기준
