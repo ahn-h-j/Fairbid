@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor Buyer as 구매자 (Client)
+    participant Ctrl as AuctionController
+    participant Svc as AuctionService
+    participant Repo as AuctionRepository
+    participant RDB as RDB (Database)
+
+    Buyer->>Ctrl: GET /api/v1/auctions?page=0&size=20&status=BIDDING&keyword=아이폰
+    Note right of Buyer: [Query Parameters]<br/>page: 페이지 번호 (기본값 0)<br/>size: 페이지 크기 (기본값 20)<br/>status: 경매 상태 필터 (BIDDING, CLOSED)<br/>keyword: 검색어 (상품명, 선택)
+
+    Ctrl->>Svc: getAuctionList(status, keyword, pageable)
+
+    Svc->>Repo: findAll(status, keyword, pageable)
+    Repo->>RDB: SELECT * FROM auctions WHERE status = ? AND title LIKE ? ...
+    Note right of RDB: [조회 조건]<br/>- status 필터링<br/>- keyword LIKE 검색 (상품명)<br/>- 페이지네이션 (LIMIT, OFFSET)<br/>- 정렬 (ORDER BY created_at DESC)
+    RDB-->>Repo: Page<AuctionEntity>
+    Repo-->>Svc: Page<Auction>
+
+    Svc-->>Ctrl: Page<Auction>
+    Ctrl->>Ctrl: Page<AuctionListResponse>로 변환
+    Note right of Ctrl: [응답 데이터]<br/>- content: 경매 목록<br/>  - id, title, thumbnailUrl<br/>  - currentPrice, totalBidCount<br/>  - status<br/>- totalElements: 전체 개수<br/>- totalPages: 전체 페이지 수<br/>- hasNext: 다음 페이지 여부
+    Ctrl-->>Buyer: 200 OK (Auction List Page)

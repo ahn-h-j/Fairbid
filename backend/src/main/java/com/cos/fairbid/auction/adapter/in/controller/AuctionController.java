@@ -1,13 +1,20 @@
 package com.cos.fairbid.auction.adapter.in.controller;
 
+import com.cos.fairbid.auction.adapter.in.dto.AuctionListResponse;
 import com.cos.fairbid.auction.adapter.in.dto.AuctionResponse;
 import com.cos.fairbid.auction.adapter.in.dto.CreateAuctionRequest;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
+import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +29,7 @@ public class AuctionController {
 
     private final CreateAuctionUseCase createAuctionUseCase;
     private final GetAuctionDetailUseCase getAuctionDetailUseCase;
+    private final GetAuctionListUseCase getAuctionListUseCase;
 
     /**
      * 경매 등록 API
@@ -42,6 +50,26 @@ public class AuctionController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    /**
+     * 경매 목록 조회 API
+     *
+     * @param status   경매 상태 필터 (선택)
+     * @param keyword  검색어 - 상품명 (선택)
+     * @param pageable 페이지네이션 정보
+     * @return 경매 목록 (페이지)
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<AuctionListResponse>>> getAuctionList(
+            @RequestParam(required = false) AuctionStatus status,
+            @RequestParam(required = false) String keyword,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, keyword, pageable);
+        Page<AuctionListResponse> response = auctions.map(AuctionListResponse::from);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     /**

@@ -19,6 +19,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -107,6 +108,33 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 쿼리 파라미터 타입 변환 실패 예외 처리 (잘못된 enum 값 등)
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatchException(
+            MethodArgumentTypeMismatchException e
+    ) {
+        String paramName = e.getName();
+        String message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다.";
+
+        // enum 타입인 경우 유효한 값 안내
+        Class<?> requiredType = e.getRequiredType();
+        if (requiredType != null && requiredType.isEnum()) {
+            Object[] enumConstants = requiredType.getEnumConstants();
+            String validValues = Arrays.stream(enumConstants)
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+            message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다. 허용 값: " + validValues;
+        }
+
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, sanitizeLogValue(e.getValue()));
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("INVALID_PARAMETER", message));
+    }
+
+    /**
      * 경매 도메인 검증 예외 처리
      * HTTP 400 Bad Request
      */
@@ -192,5 +220,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."));
+    }
+
+    /**
+     * 로그에 출력할 값을 정제한다.
+     * - null이면 "null" 반환
+     * - 50자 초과 시 잘라서 "..." 추가
+     */
+    private String sanitizeLogValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        String str = value.toString();
+        if (str.length() > 50) {
+            return str.substring(0, 50) + "...";
+        }
+        return str;
     }
 }

@@ -2,11 +2,14 @@ package com.cos.fairbid.auction.adapter.out.persistence;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.adapter.out.persistence.mapper.AuctionMapper;
+import com.cos.fairbid.auction.adapter.out.persistence.repository.AuctionSpecification;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepository;
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -52,5 +55,13 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
                 .stream()
                 .map(auctionMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Page<Auction> findAll(AuctionStatus status, String keyword, Pageable pageable) {
+        return jpaAuctionRepository.findAll(
+                AuctionSpecification.withCondition(status, keyword),
+                pageable
+        ).map(auctionMapper::toDomain);
     }
 }
