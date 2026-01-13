@@ -4,6 +4,7 @@ import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,8 +16,9 @@ import java.util.Optional;
 /**
  * 경매 JPA Repository
  * Spring Data JPA 인터페이스
+ * JpaSpecificationExecutor: 동적 쿼리 지원
  */
-public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long> {
+public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long>, JpaSpecificationExecutor<AuctionEntity> {
 
     /**
      * ID로 경매를 조회하며 비관적 락을 획득한다
