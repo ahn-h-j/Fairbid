@@ -2,7 +2,6 @@ package com.cos.fairbid.common.exception;
 
 
 import com.cos.fairbid.auction.domain.AuctionDuration;
-import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
@@ -129,7 +128,7 @@ public class GlobalExceptionHandler {
             message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다. 허용 값: " + validValues;
         }
 
-        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, e.getValue());
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, sanitizeLogValue(e.getValue()));
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("INVALID_PARAMETER", message));
@@ -221,5 +220,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."));
+    }
+
+    /**
+     * 로그에 출력할 값을 정제한다.
+     * - null이면 "null" 반환
+     * - 50자 초과 시 잘라서 "..." 추가
+     */
+    private String sanitizeLogValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        String str = value.toString();
+        if (str.length() > 50) {
+            return str.substring(0, 50) + "...";
+        }
+        return str;
     }
 }

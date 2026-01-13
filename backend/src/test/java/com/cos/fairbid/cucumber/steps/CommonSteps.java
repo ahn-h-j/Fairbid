@@ -118,22 +118,30 @@ public class CommonSteps {
         assertThat(body).isNotNull();
 
         List<?> content = extractContentList(body);
-        assertThat(content.size()).isGreaterThanOrEqualTo(minSize);
+        assertThat(content).hasSizeGreaterThanOrEqualTo(minSize);
     }
 
     /**
      * 응답 본문에서 content 목록을 추출한다.
      * Page 응답 구조: { data: { content: [...] } }
+     *
+     * @throws AssertionError 응답 구조가 기대와 다를 경우
      */
     @SuppressWarnings("unchecked")
     private List<?> extractContentList(Map<String, Object> body) {
-        if (body.containsKey("data") && body.get("data") instanceof Map) {
-            Map<String, Object> data = (Map<String, Object>) body.get("data");
-            if (data.containsKey("content") && data.get("content") instanceof List) {
-                return (List<?>) data.get("content");
-            }
-        }
-        return List.of();
+        // data 필드 검증
+        assertThat(body.get("data"))
+                .as("응답 body.data가 존재하고 Map 타입이어야 합니다")
+                .isInstanceOf(Map.class);
+
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+
+        // content 필드 검증
+        assertThat(data.get("content"))
+                .as("응답 body.data.content가 존재하고 List 타입이어야 합니다")
+                .isInstanceOf(List.class);
+
+        return (List<?>) data.get("content");
     }
 
     @SuppressWarnings("unchecked")

@@ -100,6 +100,13 @@ public class AuctionSteps {
         testContext.setLastResponse(response);
     }
 
+    @만약("잘못된 상태값으로 경매 목록을 조회한다: {string}")
+    public void 잘못된_상태값으로_경매_목록을_조회한다(String invalidStatus) {
+        // When: 잘못된 enum 값으로 경매 목록 조회 (400 에러 예상)
+        ResponseEntity<Map> response = testAdapter.get("/api/v1/auctions?status=" + invalidStatus, Map.class);
+        testContext.setLastResponse(response);
+    }
+
     /**
      * 응답에서 경매 ID를 추출하여 TestContext에 저장한다.
      */
