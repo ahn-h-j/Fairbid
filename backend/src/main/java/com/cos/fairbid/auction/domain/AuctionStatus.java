@@ -5,9 +5,6 @@ package com.cos.fairbid.auction.domain;
  */
 public enum AuctionStatus {
 
-    /** 입찰 대기 중 (등록 직후, 아직 시작 전) */
-    PENDING,
-
     /** 입찰 진행 중 */
     BIDDING,
 

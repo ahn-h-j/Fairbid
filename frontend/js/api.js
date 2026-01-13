@@ -92,6 +92,31 @@ class ApiError extends Error {
 // =====================================================
 
 /**
+ * 경매 목록 조회
+ * @param {object} params - 조회 파라미터
+ * @param {string} [params.keyword] - 검색 키워드
+ * @param {string} [params.status] - 경매 상태 필터 (PENDING, BIDDING, ENDED, FAILED, CANCELLED)
+ * @param {number} [params.page=0] - 페이지 번호
+ * @param {number} [params.size=20] - 페이지 크기
+ * @param {string} [params.sort='createdAt,DESC'] - 정렬 기준
+ * @returns {Promise<object>} 페이징된 경매 목록
+ */
+async function getAuctionList(params = {}) {
+    const queryParams = new URLSearchParams();
+
+    if (params.keyword) queryParams.append('keyword', params.keyword);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.page !== undefined) queryParams.append('page', params.page);
+    if (params.size) queryParams.append('size', params.size);
+    if (params.sort) queryParams.append('sort', params.sort);
+
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/auctions?${queryString}` : '/auctions';
+
+    return apiRequest(endpoint);
+}
+
+/**
  * 경매 상세 조회
  * @param {number} auctionId - 경매 ID
  * @returns {Promise<object>} 경매 상세 정보
