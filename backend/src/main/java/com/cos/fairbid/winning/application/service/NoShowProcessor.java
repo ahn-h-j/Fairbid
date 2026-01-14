@@ -1,4 +1,4 @@
-package com.cos.fairbid.winning.domain.service;
+package com.cos.fairbid.winning.application.service;
 
 import com.cos.fairbid.auction.application.port.out.AuctionRepository;
 import com.cos.fairbid.auction.domain.Auction;
@@ -12,8 +12,10 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 
 /**
- * 노쇼 처리 도메인 서비스
+ * 노쇼 처리 서비스
  * 결제 기한 만료 시 발생하는 비즈니스 로직을 담당
+ *
+ * Port 의존성이 있으므로 application 계층에 위치
  */
 @Slf4j
 @Component

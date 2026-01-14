@@ -4,7 +4,7 @@ package com.cos.fairbid.auction.domain.policy;
  * 입찰 단위 정책
  * 가격 구간별 기본 입찰 단위와 연장 할증을 계산한다
  */
-public class BidIncrementPolicy {
+public final class BidIncrementPolicy {
 
     /**
      * 연장 N회마다 할증 적용

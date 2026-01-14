@@ -1,4 +1,4 @@
-package com.cos.fairbid.winning.domain.service;
+package com.cos.fairbid.winning.application.service;
 
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.bid.domain.Bid;
@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 경매 종료 처리 도메인 서비스
+ * 경매 종료 처리 서비스
  * 경매 종료 시 발생하는 비즈니스 로직을 담당
+ *
+ * Port 의존성이 있으므로 application 계층에 위치
  */
 @Slf4j
 @Component

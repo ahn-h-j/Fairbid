@@ -5,7 +5,6 @@ import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.winning.application.port.out.WinningRepository;
 import com.cos.fairbid.winning.domain.Winning;
-import com.cos.fairbid.winning.domain.service.NoShowProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

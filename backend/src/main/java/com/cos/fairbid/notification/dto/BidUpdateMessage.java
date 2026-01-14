@@ -30,10 +30,14 @@ public record BidUpdateMessage(
     /**
      * BidPlacedEvent로부터 메시지 생성
      *
-     * @param event 입찰 완료 이벤트
+     * @param event 입찰 완료 이벤트 (null 불가)
      * @return BidUpdateMessage 인스턴스
+     * @throws IllegalArgumentException event가 null인 경우
      */
     public static BidUpdateMessage from(BidPlacedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("BidPlacedEvent must not be null");
+        }
         return new BidUpdateMessage(
                 event.getAuctionId(),
                 event.getCurrentPrice(),

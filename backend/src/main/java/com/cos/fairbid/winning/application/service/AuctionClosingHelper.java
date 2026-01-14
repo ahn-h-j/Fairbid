@@ -6,7 +6,6 @@ import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.out.BidRepository;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.winning.application.port.out.AuctionClosedEventPublisher;
-import com.cos.fairbid.winning.domain.service.AuctionClosingProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -52,6 +51,7 @@ public class AuctionClosingHelper {
             closingProcessor.processNoWinner(auction);
             auctionRepository.save(auction);
             eventPublisher.publishAuctionClosed(auctionId);
+            log.info("경매 유찰 완료 - auctionId: {}", auctionId);
             return;
         }
 

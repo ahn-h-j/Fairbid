@@ -16,12 +16,12 @@ import java.util.Arrays;
  */
 public enum PriceBracket {
 
-    UNDER_10K(10_000L, 500L),
-    UNDER_50K(50_000L, 1_000L),
-    UNDER_100K(100_000L, 3_000L),
-    UNDER_500K(500_000L, 5_000L),
-    UNDER_1M(1_000_000L, 10_000L),
-    OVER_1M(Long.MAX_VALUE, 30_000L);
+    BELOW_10K(10_000L, 500L),
+    BELOW_50K(50_000L, 1_000L),
+    BELOW_100K(100_000L, 3_000L),
+    BELOW_500K(500_000L, 5_000L),
+    BELOW_1M(1_000_000L, 10_000L),
+    FROM_1M(Long.MAX_VALUE, 30_000L);
 
     private final Long upperBound;
     private final Long increment;
@@ -50,6 +50,6 @@ public enum PriceBracket {
                 .filter(bracket -> price < bracket.upperBound)
                 .findFirst()
                 .map(PriceBracket::getIncrement)
-                .orElse(OVER_1M.increment);
+                .orElse(FROM_1M.increment);
     }
 }

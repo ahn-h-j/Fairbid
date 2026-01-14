@@ -30,7 +30,15 @@ public class GlobalExceptionHandler {
 
     /**
      * Enum 타입별 한글 설명 매핑
-     * 타입 기반으로 안전하게 메시지 생성
+     * API 요청에서 잘못된 enum 값이 전달될 때 사용자 친화적인 에러 메시지 생성에 사용
+     *
+     * 지원하는 Enum 타입:
+     * - Category: 경매 카테고리 (ELECTRONICS, FASHION, ...)
+     * - AuctionDuration: 경매 기간 (HOURS_24, HOURS_48)
+     * - BidType: 입찰 유형 (ONE_TOUCH, DIRECT)
+     *
+     * 새로운 Enum 타입 추가 시 이 맵에도 추가해야 한글 설명이 적용됨
+     * 미등록 시 기본값 "값"으로 대체됨 (getOrDefault 사용)
      */
     private static final Map<Class<? extends Enum<?>>, String> ENUM_DESCRIPTIONS = Map.of(
             Category.class, "카테고리",

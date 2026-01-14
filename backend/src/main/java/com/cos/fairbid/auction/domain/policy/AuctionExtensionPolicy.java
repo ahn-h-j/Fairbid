@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
  * 경매 연장 정책
  * 종료 직전 입찰 시 경매 시간 연장 규칙을 정의한다
  */
-public class AuctionExtensionPolicy {
+public final class AuctionExtensionPolicy {
 
     /**
      * 연장 구간 (종료 N분 전부터 연장 가능)

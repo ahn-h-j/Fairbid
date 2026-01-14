@@ -38,6 +38,30 @@
 - **해결**: JPA DTO Projection 사용
 - **조건**: 성능 이슈 발생 시
 
+### BidEventPublisher 모듈 간 의존성
+- **파일**: `bid/application/port/out/BidEventPublisher.java`
+- **내용**: bid 모듈이 auction.domain.Auction을 직접 참조하여 결합도 높음
+- **해결**: 이벤트 발행에 필요한 데이터만 포함하는 DTO 사용
+- **조건**: MSA 분리 고려 시 (PR #21 리뷰 보류 항목)
+
+### FCM 토큰 조회 구현
+- **파일**: `notification/adapter/out/fcm/FcmClient.java`
+- **내용**: `getFcmToken()`이 항상 null 반환, 실제 FCM 전송 불가
+- **해결**: User 도메인에서 FCM 토큰 관리 구현
+- **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
+
+### FcmClient 에러 처리 개선
+- **파일**: `notification/adapter/out/fcm/FcmClient.java`
+- **내용**: `Exception` 대신 `FirebaseMessagingException` 구체적 처리 필요
+- **해결**: FCM 특정 에러(토큰 만료 등) 세분화 처리, auctionId 로그 포함
+- **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
+
+### NoShowProcessor 경고 부여 로직
+- **파일**: `winning/application/service/NoShowProcessor.java`
+- **내용**: 1순위 노쇼 시 경고 부여 로직 미구현 (TODO 주석)
+- **해결**: User 도메인에서 경고 시스템 구현
+- **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
+
 ---
 
 ## 진행 중
