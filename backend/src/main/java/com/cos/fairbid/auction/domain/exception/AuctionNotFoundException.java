@@ -1,19 +1,21 @@
 package com.cos.fairbid.auction.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 경매를 찾을 수 없을 때 발생하는 예외
  * HTTP 404 Not Found에 매핑
  */
-@Getter
-public class AuctionNotFoundException extends RuntimeException {
-
-    private final String errorCode;
+public class AuctionNotFoundException extends DomainException {
 
     private AuctionNotFoundException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.NOT_FOUND;
     }
 
     /**

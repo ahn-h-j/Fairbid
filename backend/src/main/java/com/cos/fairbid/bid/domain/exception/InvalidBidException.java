@@ -1,19 +1,21 @@
 package com.cos.fairbid.bid.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 입찰 요청이 유효하지 않을 때 발생하는 예외
  * HTTP 400 Bad Request에 매핑
  */
-@Getter
-public class InvalidBidException extends RuntimeException {
-
-    private final String errorCode;
+public class InvalidBidException extends DomainException {
 
     private InvalidBidException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.BAD_REQUEST;
     }
 
     /**

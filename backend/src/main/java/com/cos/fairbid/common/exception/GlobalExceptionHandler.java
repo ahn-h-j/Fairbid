@@ -3,14 +3,9 @@ package com.cos.fairbid.common.exception;
 
 import com.cos.fairbid.auction.domain.AuctionDuration;
 import com.cos.fairbid.auction.domain.Category;
-import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
-import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
 import com.cos.fairbid.bid.domain.BidType;
-import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
-import com.cos.fairbid.bid.domain.exception.BidTooLowException;
-import com.cos.fairbid.bid.domain.exception.InvalidBidException;
-import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import com.cos.fairbid.common.response.ApiResponse;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,6 +17,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +27,34 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * Enum 타입별 한글 설명 매핑
+     * 타입 기반으로 안전하게 메시지 생성
+     */
+    private static final Map<Class<? extends Enum<?>>, String> ENUM_DESCRIPTIONS = Map.of(
+            Category.class, "카테고리",
+            AuctionDuration.class, "경매 기간",
+            BidType.class, "입찰 유형"
+    );
+
+    // =====================================================
+    // 도메인 예외 처리 (통합)
+    // =====================================================
+
+    /**
+     * 모든 도메인 예외를 통합 처리
+     * 각 예외가 정의한 HttpStatus를 사용
+     */
+    @ExceptionHandler(DomainException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDomainException(DomainException e) {
+        log.warn("{}: {}", e.getClass().getSimpleName(), e.getMessage());
+        return errorResponse(e.getStatus(), e.getErrorCode(), e.getMessage());
+    }
+
+    // =====================================================
+    // Validation 예외 처리
+    // =====================================================
 
     /**
      * @Valid 검증 실패 예외 처리
@@ -45,9 +69,7 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         log.warn("Validation failed: {}", message);
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("VALIDATION_ERROR", message));
+        return errorResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
     }
 
     /**
@@ -63,10 +85,12 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         log.warn("Constraint violation: {}", message);
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("VALIDATION_ERROR", message));
+        return errorResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
     }
+
+    // =====================================================
+    // 요청 파싱 예외 처리
+    // =====================================================
 
     /**
      * JSON 파싱 실패 예외 처리 (잘못된 enum 값 등)
@@ -78,33 +102,21 @@ public class GlobalExceptionHandler {
     ) {
         String message = "요청 본문을 파싱할 수 없습니다.";
 
-        // enum 변환 실패 시 유효한 값 안내
+        // enum 변환 실패 시 타입 기반으로 유효한 값 안내
         Throwable cause = e.getCause();
-        if (cause != null && cause.getMessage() != null) {
-            String causeMessage = cause.getMessage();
-
-            if (causeMessage.contains("Category")) {
-                String validValues = Arrays.stream(Category.values())
-                        .map(Enum::name)
-                        .collect(Collectors.joining(", "));
-                message = "유효하지 않은 카테고리입니다. 허용 값: " + validValues;
-            } else if (causeMessage.contains("AuctionDuration")) {
-                String validValues = Arrays.stream(AuctionDuration.values())
-                        .map(Enum::name)
-                        .collect(Collectors.joining(", "));
-                message = "유효하지 않은 경매 기간입니다. 허용 값: " + validValues;
-            } else if (causeMessage.contains("BidType")) {
-                String validValues = Arrays.stream(BidType.values())
-                        .map(Enum::name)
-                        .collect(Collectors.joining(", "));
-                message = "유효하지 않은 입찰 유형입니다. 허용 값: " + validValues;
+        if (cause instanceof InvalidFormatException invalidFormat) {
+            Class<?> targetType = invalidFormat.getTargetType();
+            if (targetType != null && targetType.isEnum()) {
+                @SuppressWarnings("unchecked")
+                Class<? extends Enum<?>> enumType = (Class<? extends Enum<?>>) targetType;
+                String description = ENUM_DESCRIPTIONS.getOrDefault(enumType, "값");
+                String validValues = getEnumValidValues(enumType);
+                message = "유효하지 않은 " + description + "입니다. 허용 값: " + validValues;
             }
         }
 
         log.warn("HttpMessageNotReadableException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("INVALID_REQUEST_BODY", message));
+        return errorResponse(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_BODY", message);
     }
 
     /**
@@ -121,94 +133,19 @@ public class GlobalExceptionHandler {
         // enum 타입인 경우 유효한 값 안내
         Class<?> requiredType = e.getRequiredType();
         if (requiredType != null && requiredType.isEnum()) {
-            Object[] enumConstants = requiredType.getEnumConstants();
-            String validValues = Arrays.stream(enumConstants)
-                    .map(Object::toString)
-                    .collect(Collectors.joining(", "));
+            @SuppressWarnings("unchecked")
+            Class<? extends Enum<?>> enumType = (Class<? extends Enum<?>>) requiredType;
+            String validValues = getEnumValidValues(enumType);
             message = "'" + paramName + "' 파라미터 값이 유효하지 않습니다. 허용 값: " + validValues;
         }
 
         log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, sanitizeLogValue(e.getValue()));
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("INVALID_PARAMETER", message));
-    }
-
-    /**
-     * 경매 도메인 검증 예외 처리
-     * HTTP 400 Bad Request
-     */
-    @ExceptionHandler(InvalidAuctionException.class)
-    public ResponseEntity<ApiResponse<Void>> handleInvalidAuctionException(InvalidAuctionException e) {
-        log.warn("InvalidAuctionException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
-    }
-
-    /**
-     * 경매를 찾을 수 없을 때 예외 처리
-     * HTTP 404 Not Found
-     */
-    @ExceptionHandler(AuctionNotFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAuctionNotFoundException(AuctionNotFoundException e) {
-        log.warn("AuctionNotFoundException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+        return errorResponse(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", message);
     }
 
     // =====================================================
-    // 입찰 관련 예외 처리
+    // 기타 예외 처리
     // =====================================================
-
-    /**
-     * 경매가 종료된 경우 예외 처리
-     * HTTP 400 Bad Request
-     */
-    @ExceptionHandler(AuctionEndedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAuctionEndedException(AuctionEndedException e) {
-        log.warn("AuctionEndedException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
-    }
-
-    /**
-     * 입찰가가 최소 입찰 금액보다 낮은 경우 예외 처리
-     * HTTP 400 Bad Request
-     */
-    @ExceptionHandler(BidTooLowException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBidTooLowException(BidTooLowException e) {
-        log.warn("BidTooLowException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
-    }
-
-    /**
-     * 입찰 요청이 유효하지 않은 경우 예외 처리
-     * HTTP 400 Bad Request
-     */
-    @ExceptionHandler(InvalidBidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleInvalidBidException(InvalidBidException e) {
-        log.warn("InvalidBidException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
-    }
-
-    /**
-     * 본인 경매에 입찰 시도 시 예외 처리
-     * HTTP 403 Forbidden
-     */
-    @ExceptionHandler(SelfBidNotAllowedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleSelfBidNotAllowedException(SelfBidNotAllowedException e) {
-        log.warn("SelfBidNotAllowedException: {}", e.getMessage());
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
-    }
 
     /**
      * 그 외 예상치 못한 예외 처리
@@ -217,9 +154,37 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
         log.error("Unexpected error occurred", e);
+        return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다.");
+    }
+
+    // =====================================================
+    // 유틸리티 메서드
+    // =====================================================
+
+    /**
+     * Enum의 모든 상수를 콤마로 연결한 문자열 반환
+     *
+     * @param enumClass Enum 클래스
+     * @return "VALUE1, VALUE2, VALUE3" 형식의 문자열
+     */
+    private String getEnumValidValues(Class<? extends Enum<?>> enumClass) {
+        return Arrays.stream(enumClass.getEnumConstants())
+                .map(Enum::name)
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * 에러 응답 생성 헬퍼 메서드
+     *
+     * @param status    HTTP 상태 코드
+     * @param errorCode 에러 코드
+     * @param message   에러 메시지
+     * @return ResponseEntity 객체
+     */
+    private ResponseEntity<ApiResponse<Void>> errorResponse(HttpStatus status, String errorCode, String message) {
         return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."));
+                .status(status)
+                .body(ApiResponse.error(errorCode, message));
     }
 
     /**

@@ -1,19 +1,21 @@
 package com.cos.fairbid.bid.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 입찰 금액이 최소 입찰 가능 금액보다 낮을 때 발생하는 예외
  * HTTP 400 Bad Request에 매핑
  */
-@Getter
-public class BidTooLowException extends RuntimeException {
-
-    private final String errorCode;
+public class BidTooLowException extends DomainException {
 
     private BidTooLowException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.BAD_REQUEST;
     }
 
     /**

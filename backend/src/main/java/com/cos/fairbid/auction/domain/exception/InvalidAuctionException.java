@@ -1,19 +1,22 @@
 package com.cos.fairbid.auction.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 경매 도메인 검증 예외
  * 경매 생성/수정 시 비즈니스 규칙 위반 시 발생
+ * HTTP 400 Bad Request에 매핑
  */
-@Getter
-public class InvalidAuctionException extends RuntimeException {
-
-    private final String errorCode;
+public class InvalidAuctionException extends DomainException {
 
     private InvalidAuctionException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.BAD_REQUEST;
     }
 
     /**
