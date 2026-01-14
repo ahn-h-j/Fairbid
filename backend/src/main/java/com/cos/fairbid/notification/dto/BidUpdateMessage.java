@@ -1,5 +1,7 @@
 package com.cos.fairbid.notification.dto;
 
+import com.cos.fairbid.bid.domain.event.BidPlacedEvent;
+
 import java.time.LocalDateTime;
 
 /**
@@ -27,26 +29,20 @@ public record BidUpdateMessage(
 ) {
     /**
      * BidPlacedEvent로부터 메시지 생성
+     *
+     * @param event 입찰 완료 이벤트
+     * @return BidUpdateMessage 인스턴스
      */
-    public static BidUpdateMessage from(
-            Long auctionId,
-            Long currentPrice,
-            LocalDateTime scheduledEndTime,
-            boolean extended,
-            Long nextMinBidPrice,
-            Long bidIncrement,
-            Integer totalBidCount,
-            LocalDateTime occurredAt
-    ) {
+    public static BidUpdateMessage from(BidPlacedEvent event) {
         return new BidUpdateMessage(
-                auctionId,
-                currentPrice,
-                scheduledEndTime,
-                extended,
-                nextMinBidPrice,
-                bidIncrement,
-                totalBidCount,
-                occurredAt
+                event.getAuctionId(),
+                event.getCurrentPrice(),
+                event.getScheduledEndTime(),
+                event.isExtended(),
+                event.getNextMinBidPrice(),
+                event.getBidIncrement(),
+                event.getTotalBidCount(),
+                event.getOccurredAt()
         );
     }
 }
