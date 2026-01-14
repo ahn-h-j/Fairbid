@@ -1,19 +1,21 @@
 package com.cos.fairbid.bid.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 경매가 이미 종료되었을 때 발생하는 예외
  * HTTP 400 Bad Request에 매핑
  */
-@Getter
-public class AuctionEndedException extends RuntimeException {
-
-    private final String errorCode;
+public class AuctionEndedException extends DomainException {
 
     private AuctionEndedException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.BAD_REQUEST;
     }
 
     /**

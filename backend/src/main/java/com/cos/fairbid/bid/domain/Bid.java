@@ -1,5 +1,6 @@
 package com.cos.fairbid.bid.domain;
 
+import com.cos.fairbid.auction.domain.Auction;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -45,5 +46,19 @@ public class Bid {
      */
     public static BidBuilder reconstitute() {
         return Bid.builder();
+    }
+
+    /**
+     * 입찰 금액을 결정한다
+     * BidType 전략 패턴에 위임
+     *
+     * @param bidType         입찰 유형
+     * @param requestedAmount 요청 입찰 금액 (DIRECT 시 필수)
+     * @param auction         경매 도메인
+     * @return 입찰 금액
+     * @see BidType#calculateAmount(Long, Auction)
+     */
+    public static Long determineBidAmount(BidType bidType, Long requestedAmount, Auction auction) {
+        return bidType.calculateAmount(requestedAmount, auction);
     }
 }

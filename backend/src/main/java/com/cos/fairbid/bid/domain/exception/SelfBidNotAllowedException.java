@@ -1,19 +1,21 @@
 package com.cos.fairbid.bid.domain.exception;
 
-import lombok.Getter;
+import com.cos.fairbid.common.exception.DomainException;
+import org.springframework.http.HttpStatus;
 
 /**
  * 본인이 등록한 경매에 입찰 시도 시 발생하는 예외
  * HTTP 403 Forbidden에 매핑
  */
-@Getter
-public class SelfBidNotAllowedException extends RuntimeException {
-
-    private final String errorCode;
+public class SelfBidNotAllowedException extends DomainException {
 
     private SelfBidNotAllowedException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(errorCode, message);
+    }
+
+    @Override
+    public HttpStatus getStatus() {
+        return HttpStatus.FORBIDDEN;
     }
 
     /**

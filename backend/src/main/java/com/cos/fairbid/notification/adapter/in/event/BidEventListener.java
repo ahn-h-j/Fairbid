@@ -28,33 +28,12 @@ public class BidEventListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleBidPlacedEvent(BidPlacedEvent event) {
-        log.info("Received BidPlacedEvent: auctionId={}, currentPrice={}, extended={}, nextMinBidPrice={}, bidIncrement={}, totalBidCount={}",
-                event.getAuctionId(), event.getCurrentPrice(), event.isExtended(),
-                event.getNextMinBidPrice(), event.getBidIncrement(), event.getTotalBidCount());
+        log.debug("BidPlacedEvent 수신: auctionId={}, currentPrice={}", event.getAuctionId(), event.getCurrentPrice());
 
-        // 이벤트를 WebSocket 메시지로 변환
-        BidUpdateMessage message = BidUpdateMessage.from(
-                event.getAuctionId(),
-                event.getCurrentPrice(),
-                event.getScheduledEndTime(),
-                event.isExtended(),
-                event.getNextMinBidPrice(),
-                event.getBidIncrement(),
-                event.getTotalBidCount(),
-                event.getOccurredAt()
-        );
-
-        // 구독자들에게 브로드캐스트 (실패해도 다른 리스너/트랜잭션에 영향이 없도록 보호)
         try {
-            auctionBroadcastPort.broadcastBidUpdate(message);
+            auctionBroadcastPort.broadcastBidUpdate(BidUpdateMessage.from(event));
         } catch (Exception e) {
-            log.error(
-                    "Failed to broadcast BidUpdateMessage for auctionId={}, currentPrice={}, extended={}",
-                    event.getAuctionId(),
-                    event.getCurrentPrice(),
-                    event.isExtended(),
-                    e
-            );
+            log.error("BidUpdateMessage 브로드캐스트 실패: auctionId={}", event.getAuctionId(), e);
         }
     }
 }

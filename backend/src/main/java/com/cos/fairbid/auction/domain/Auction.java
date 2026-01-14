@@ -1,8 +1,11 @@
 package com.cos.fairbid.auction.domain;
 
 import com.cos.fairbid.auction.domain.exception.InvalidAuctionException;
+import com.cos.fairbid.auction.domain.policy.AuctionExtensionPolicy;
+import com.cos.fairbid.auction.domain.policy.BidIncrementPolicy;
 import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
 import com.cos.fairbid.bid.domain.exception.BidTooLowException;
+import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import lombok.Builder;
 import lombok.Getter;
@@ -90,33 +93,14 @@ public class Auction {
 
     /**
      * 현재 가격 구간에 따른 입찰 단위 계산
-     *
-     * | 현재 가격 구간        | 입찰 단위  |
-     * |--------------------|----------|
-     * | 1만 원 미만          | +500원   |
-     * | 1만 ~ 5만 원 미만     | +1,000원 |
-     * | 5만 ~ 10만 원 미만    | +3,000원 |
-     * | 10만 ~ 50만 원 미만   | +5,000원 |
-     * | 50만 ~ 100만 원 미만  | +10,000원|
-     * | 100만 원 이상        | +30,000원|
+     * BidIncrementPolicy에 위임
      *
      * @param price 현재 가격
      * @return 입찰 단위
+     * @see BidIncrementPolicy
      */
     public static Long calculateBidIncrement(Long price) {
-        if (price < 10_000L) {
-            return 500L;
-        } else if (price < 50_000L) {
-            return 1_000L;
-        } else if (price < 100_000L) {
-            return 3_000L;
-        } else if (price < 500_000L) {
-            return 5_000L;
-        } else if (price < 1_000_000L) {
-            return 10_000L;
-        } else {
-            return 30_000L;
-        }
+        return BidIncrementPolicy.calculateBaseIncrement(price);
     }
 
     /**
@@ -192,10 +176,16 @@ public class Auction {
      * 2. 본인 경매 입찰 불가 확인
      *
      * @param bidderId 입찰자 ID
+     * @throws InvalidBidException        입찰자 ID가 null인 경우
      * @throws AuctionEndedException      경매가 종료된 경우
      * @throws SelfBidNotAllowedException 본인 경매에 입찰 시도 시
      */
     public void validateBidEligibility(Long bidderId) {
+        // 입찰자 ID null 체크
+        if (bidderId == null) {
+            throw InvalidBidException.bidderIdRequired();
+        }
+
         // 경매 종료 여부 확인
         if (isEnded()) {
             throw AuctionEndedException.forBid(this.id);
@@ -209,36 +199,37 @@ public class Auction {
 
     /**
      * 연장 구간(종료 5분 전) 여부를 확인한다
+     * AuctionExtensionPolicy에 위임
      *
      * @return 연장 구간이면 true, 아니면 false
+     * @see AuctionExtensionPolicy
      */
     public boolean isInExtensionPeriod() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime extensionThreshold = scheduledEndTime.minusMinutes(5);
-        return now.isAfter(extensionThreshold) && now.isBefore(scheduledEndTime);
+        return AuctionExtensionPolicy.isInExtensionPeriod(scheduledEndTime, LocalDateTime.now());
     }
 
     /**
-     * 경매 시간을 5분 연장한다
-     * 연장 횟수도 함께 증가시킨다
+     * 경매 시간을 연장한다
+     * AuctionExtensionPolicy에 위임
+     *
+     * @see AuctionExtensionPolicy
      */
     public void extend() {
-        this.scheduledEndTime = LocalDateTime.now().plusMinutes(5);
+        LocalDateTime now = LocalDateTime.now();
+        this.scheduledEndTime = AuctionExtensionPolicy.calculateExtendedEndTime(now);
         this.extensionCount++;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = now;
     }
 
     /**
      * 연장 횟수에 따른 할증된 입찰 단위를 계산한다
-     * 연장 3회마다 기본 입찰 단위에 50%씩 추가
+     * BidIncrementPolicy에 위임
      *
      * @return 할증된 입찰 단위
+     * @see BidIncrementPolicy
      */
     public Long getAdjustedBidIncrement() {
-        // 연장 3회마다 50% 할증
-        int surchargeMultiplier = extensionCount / 3;
-        double surchargeRate = 1.0 + (surchargeMultiplier * 0.5);
-        return Math.round(bidIncrement * surchargeRate);
+        return BidIncrementPolicy.calculateAdjustedIncrement(bidIncrement, extensionCount);
     }
 
     /**
