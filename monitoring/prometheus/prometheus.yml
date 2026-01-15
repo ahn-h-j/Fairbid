@@ -1,0 +1,21 @@
+# Prometheus 설정 파일
+# FairBid 프로젝트 모니터링용
+
+global:
+  scrape_interval: 15s       # 메트릭 수집 주기
+  evaluation_interval: 15s   # 규칙 평가 주기
+
+scrape_configs:
+  # Prometheus 자체 메트릭
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Spring Boot 애플리케이션 메트릭
+  - job_name: 'fairbid-backend'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          application: 'fairbid'
+          environment: 'local'
