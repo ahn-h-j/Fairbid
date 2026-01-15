@@ -41,3 +41,6 @@ out/
 
 # Claude Code local settings
 .claude/
+
+### k6 Load Test ###
+k6/results/

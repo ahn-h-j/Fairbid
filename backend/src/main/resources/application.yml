@@ -22,9 +22,22 @@ logging:
   level:
     org.hibernate.SQL: DEBUG
 
-# Actuator
+# Actuator & Prometheus
 management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # 응답시간 히스토그램 (p50, p95, p99 계산용)
+      percentiles-histogram:
+        http.server.requests: true
+      # SLA 버킷 (50ms, 100ms, 200ms, 500ms, 1s 기준)
+      slo:
+        http.server.requests: 50ms, 100ms, 200ms, 500ms, 1s
