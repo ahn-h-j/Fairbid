@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FairBid - 경매 상세</title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* 테스트용 사용자 선택 버튼 */
+        .user-btn {
+            padding: 6px 16px;
+            border: 1px solid #495057;
+            border-radius: 20px;
+            background: transparent;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .user-btn:hover {
+            border-color: #4dabf7;
+            color: #4dabf7;
+        }
+        .user-btn.active {
+            background: #4dabf7;
+            border-color: #4dabf7;
+            color: #fff;
+        }
+    </style>
     <!-- SockJS, STOMP 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
@@ -17,6 +39,17 @@
                 <a href="/">경매 목록</a>
                 <a href="/create.html">경매 등록</a>
             </nav>
+        </div>
+        <!-- 테스트용 사용자 선택 -->
+        <div class="container" style="padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="color: #aaa; font-size: 14px;">테스트 유저:</span>
+                <button class="user-btn active" onclick="selectUser(1)">유저1</button>
+                <button class="user-btn" onclick="selectUser(2)">유저2</button>
+                <button class="user-btn" onclick="selectUser(3)">유저3</button>
+                <button class="user-btn" onclick="selectUser(4)">유저4</button>
+                <span id="current-user-display" style="color: #4dabf7; font-size: 14px; margin-left: 12px;">현재: 유저1</span>
+            </div>
         </div>
     </header>
 
@@ -133,6 +166,19 @@
         // 현재 경매 정보
         let currentAuction = null;
         let timerInterval = null;
+
+        // 사용자 선택 (테스트용)
+        function selectUser(userId) {
+            setCurrentUserId(userId);
+
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.user-btn').forEach((btn, index) => {
+                btn.classList.toggle('active', index + 1 === userId);
+            });
+
+            // 현재 사용자 표시 업데이트
+            document.getElementById('current-user-display').textContent = `현재: 유저${userId}`;
+        }
 
         // 페이지 로드 시 실행
         document.addEventListener('DOMContentLoaded', function() {

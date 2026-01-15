@@ -8,6 +8,9 @@ const API_BASE = '/api/v1';
 // 서버 시간과의 오프셋 (밀리초)
 let serverTimeOffset = 0;
 
+// 현재 선택된 사용자 ID (테스트용)
+let currentUserId = 1;
+
 /**
  * 서버 시간 기준 현재 시간 반환
  * @returns {Date} 서버 시간 기준 현재 시간
@@ -38,6 +41,7 @@ async function apiRequest(endpoint, options = {}) {
 
     const defaultHeaders = {
         'Content-Type': 'application/json',
+        'X-User-Id': currentUserId.toString(),
     };
 
     const config = {
@@ -202,4 +206,24 @@ function formatRemainingTime(endTimeStr) {
 
     const pad = (n) => n.toString().padStart(2, '0');
     return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+// =====================================================
+// 테스트용 사용자 관리
+// =====================================================
+
+/**
+ * 현재 사용자 ID 설정 (테스트용)
+ * @param {number} userId - 사용자 ID
+ */
+function setCurrentUserId(userId) {
+    currentUserId = userId;
+}
+
+/**
+ * 현재 사용자 ID 반환
+ * @returns {number} 현재 사용자 ID
+ */
+function getCurrentUserId() {
+    return currentUserId;
 }
