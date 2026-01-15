@@ -21,3 +21,10 @@ server:
 logging:
   level:
     org.hibernate.SQL: DEBUG
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
