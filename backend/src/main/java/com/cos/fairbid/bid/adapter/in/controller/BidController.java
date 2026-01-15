@@ -26,15 +26,18 @@ public class BidController {
      *
      * @param auctionId 경매 ID
      * @param request   입찰 요청
+     * @param userIdHeader 테스트용 사용자 ID 헤더 (X-User-Id)
      * @return 생성된 입찰 정보
      */
     @PostMapping
     public ResponseEntity<ApiResponse<BidResponse>> placeBid(
             @PathVariable Long auctionId,
-            @Valid @RequestBody PlaceBidRequest request
+            @Valid @RequestBody PlaceBidRequest request,
+            @RequestHeader(value = "X-User-Id", defaultValue = "2") Long userIdHeader
     ) {
         // TODO: 인증 구현 후 실제 사용자 ID로 변경
-        Long bidderId = 2L;  // 모킹된 입찰자 ID (판매자와 다른 ID 사용)
+        // 현재는 테스트용으로 X-User-Id 헤더에서 사용자 ID를 받음
+        Long bidderId = userIdHeader;
 
         Bid bid = placeBidUseCase.placeBid(request.toCommand(auctionId, bidderId));
         BidResponse response = BidResponse.from(bid);
