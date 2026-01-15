@@ -11,16 +11,13 @@ import http from 'k6/http';
 import ws from 'k6/ws';
 import { check, sleep, group } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
-import { BASE_URL, WS_URL, getHeaders, randomUserId } from './config.js';
+import { BASE_URL, WS_URL, getHeaders, randomUserId, generateBidAmount } from './config.js';
 
 // 커스텀 메트릭
 const auctionListRequests = new Counter('auction_list_requests');
 const auctionDetailRequests = new Counter('auction_detail_requests');
 const bidRequests = new Counter('bid_requests');
 const bidSuccess = new Counter('bid_success');
-
-// 전역 변수 (setup에서 설정)
-let testAuctionId = null;
 
 // 테스트 설정
 export const options = {
@@ -198,7 +195,7 @@ export function placeBids(data) {
             try {
                 const body = JSON.parse(detailRes.body);
                 if (body.success && body.data) {
-                    bidAmount = body.data.currentPrice + body.data.bidIncrement;
+                    bidAmount = generateBidAmount(body.data.currentPrice, body.data.bidIncrement);
                 }
             } catch {
                 // 기본값 사용

@@ -40,8 +40,8 @@ export const options = {
         },
     },
     thresholds: {
-        ws_connecting: ['p(95)<2000'],  // WebSocket 연결 95%가 2초 이내
-        ws_errors: ['count<10'],         // 에러 10개 미만
+        ws_connect_time: ['p(95)<2000'],  // WebSocket 연결 95%가 2초 이내
+        ws_errors: ['count<10'],           // 에러 10개 미만
     },
 };
 
@@ -104,12 +104,14 @@ function parseStompMessage(data) {
     const command = lines[0];
 
     if (command === 'MESSAGE') {
-        // 헤더 파싱
+        // 헤더 파싱 (콜론이 값에 포함될 수 있으므로 첫 번째 콜론만 분리)
         const headers = {};
         let i = 1;
         while (lines[i] && lines[i] !== '') {
-            const [key, value] = lines[i].split(':');
-            if (key && value) {
+            const colonIndex = lines[i].indexOf(':');
+            if (colonIndex > 0) {
+                const key = lines[i].substring(0, colonIndex);
+                const value = lines[i].substring(colonIndex + 1);
                 headers[key] = value;
             }
             i++;

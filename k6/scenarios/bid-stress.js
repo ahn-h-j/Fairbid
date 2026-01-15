@@ -10,7 +10,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
-import { BASE_URL, getHeaders, randomUserId } from './config.js';
+import { BASE_URL, getHeaders, randomUserId, generateBidAmount } from './config.js';
 
 // 커스텀 메트릭
 const bidSuccess = new Counter('bid_success');
@@ -101,8 +101,7 @@ export default function (data) {
     if (infoRes.status === 200) {
         const info = JSON.parse(infoRes.body);
         if (info.success && info.data) {
-            // 현재가 + 입찰단위
-            bidAmount = info.data.currentPrice + info.data.bidIncrement;
+            bidAmount = generateBidAmount(info.data.currentPrice, info.data.bidIncrement);
         }
     }
 
@@ -137,7 +136,7 @@ export default function (data) {
         },
     });
 
-    if (success && res.status === 200 || res.status === 201) {
+    if (success && (res.status === 200 || res.status === 201)) {
         const body = JSON.parse(res.body);
         if (body.success) {
             bidSuccess.add(1);
