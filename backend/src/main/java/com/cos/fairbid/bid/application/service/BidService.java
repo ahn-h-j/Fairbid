@@ -8,6 +8,7 @@ import com.cos.fairbid.bid.application.port.in.PlaceBidUseCase;
 import com.cos.fairbid.bid.application.port.out.BidCachePort;
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
 import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
+import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 public class BidService implements PlaceBidUseCase {
 
     private final BidCachePort bidCachePort;
+    private final BidRepositoryPort bidRepository;
     private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
     private final BidEventPublisherPort bidEventPublisher;
@@ -58,18 +60,12 @@ public class BidService implements PlaceBidUseCase {
         // 4. 웹소켓 이벤트 발행 (실시간 알림) - BidResult에서 최신 값 사용
         bidEventPublisher.publishBidPlaced(command.auctionId(), result);
 
-        // 5. RDB 동기화 모킹
-        mockRdbSync(command, bid, result);
+        // 5. RDB 동기화 (입찰 이력 저장)
+        Bid savedBid = bidRepository.save(bid);
+        log.debug("입찰 이력 RDB 저장 완료: bidId={}, auctionId={}, bidderId={}, amount={}",
+                savedBid.getId(), command.auctionId(), command.bidderId(), bid.getAmount());
 
-        return bid;
-    }
-
-    /**
-     * RDB 동기화 모킹 (실제 저장 X)
-     */
-    private void mockRdbSync(PlaceBidCommand command, Bid bid, BidResult result) {
-        log.info("[MOCK] RDB 동기화 데이터 - auctionId={}, bidderId={}, bidAmount={}, totalBidCount={}, bidIncrement={}",
-                command.auctionId(), command.bidderId(), bid.getAmount(), result.newTotalBidCount(), result.newBidIncrement());
+        return savedBid;
     }
 
     /**
