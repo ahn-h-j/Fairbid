@@ -6,8 +6,10 @@ import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.event.AuctionCreatedEvent;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase, GetAuctionListUseCase {
 
     private final AuctionRepositoryPort auctionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 새로운 경매를 생성한다
@@ -47,8 +50,13 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
                 command.imageUrls()
         );
 
-        // 저장 후 반환
-        return auctionRepository.save(auction);
+        // 저장
+        Auction saved = auctionRepository.save(auction);
+
+        // 이벤트 발행 (AfterCommit 리스너에서 캐시 워밍)
+        eventPublisher.publishEvent(AuctionCreatedEvent.of(saved));
+
+        return saved;
     }
 
     /**
