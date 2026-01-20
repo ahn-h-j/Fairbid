@@ -31,15 +31,6 @@ public interface AuctionRepository {
     Optional<Auction> findById(Long id);
 
     /**
-     * ID로 경매를 조회하며 비관적 락(FOR UPDATE)을 획득한다
-     * 동시성 제어가 필요한 입찰 처리 시 사용
-     *
-     * @param id 경매 ID
-     * @return 경매 도메인 객체 (Optional)
-     */
-    Optional<Auction> findByIdWithLock(Long id);
-
-    /**
      * 종료 시간이 도래한 진행 중인 경매 목록을 조회한다
      * status = BIDDING 이고 scheduledEndTime <= now
      *
@@ -56,4 +47,15 @@ public interface AuctionRepository {
      * @return 경매 목록 (페이지)
      */
     Page<Auction> findAll(AuctionStatus status, String keyword, Pageable pageable);
+
+    /**
+     * 경매의 현재가, 입찰수, 입찰단위를 직접 업데이트한다
+     * Lua 스크립트 입찰 처리 후 DB 동기화용
+     *
+     * @param auctionId      경매 ID
+     * @param currentPrice   새 현재가
+     * @param totalBidCount  새 총 입찰수
+     * @param bidIncrement   새 입찰 단위
+     */
+    void updateCurrentPrice(Long auctionId, Long currentPrice, Integer totalBidCount, Long bidIncrement);
 }
