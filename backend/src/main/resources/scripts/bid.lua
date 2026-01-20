@@ -36,6 +36,12 @@ if status ~= 'BIDDING' then
     return {0, "NOT_ACTIVE"}
 end
 
+-- 2-1. 종료 시간 검증 (스케줄러 처리 전 입찰 차단)
+local scheduledEndTimeMs = tonumber(auction['scheduledEndTimeMs'] or '0')
+if scheduledEndTimeMs > 0 and currentTimeMs > scheduledEndTimeMs then
+    return {0, "AUCTION_ENDED"}
+end
+
 -- 3. 본인 경매 입찰 검증
 local sellerId = auction['sellerId']
 if sellerId == bidderId then
@@ -70,7 +76,6 @@ if bidAmount < minBidAmount then
 end
 
 -- 8. 경매 연장 확인 (종료 5분 전)
-local scheduledEndTimeMs = tonumber(auction['scheduledEndTimeMs'] or '0')
 local extended = 0
 local fiveMinutesMs = 5 * 60 * 1000
 
