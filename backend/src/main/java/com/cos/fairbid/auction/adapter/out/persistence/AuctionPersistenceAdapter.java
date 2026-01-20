@@ -41,12 +41,6 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
     }
 
     @Override
-    public Optional<Auction> findByIdWithLock(Long id) {
-        return jpaAuctionRepository.findByIdWithLock(id)
-                .map(auctionMapper::toDomain);
-    }
-
-    @Override
     public List<Auction> findClosingAuctions() {
         return jpaAuctionRepository.findClosingAuctions(
                         AuctionStatus.BIDDING,
@@ -63,5 +57,10 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
                 AuctionSpecification.withCondition(status, keyword),
                 pageable
         ).map(auctionMapper::toDomain);
+    }
+
+    @Override
+    public void updateCurrentPrice(Long auctionId, Long currentPrice, Integer totalBidCount, Long bidIncrement) {
+        jpaAuctionRepository.updateCurrentPrice(auctionId, currentPrice, totalBidCount, bidIncrement);
     }
 }

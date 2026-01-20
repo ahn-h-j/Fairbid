@@ -2,16 +2,14 @@ package com.cos.fairbid.auction.adapter.out.persistence.repository;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.domain.AuctionStatus;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 경매 JPA Repository
@@ -19,17 +17,6 @@ import java.util.Optional;
  * JpaSpecificationExecutor: 동적 쿼리 지원
  */
 public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long>, JpaSpecificationExecutor<AuctionEntity> {
-
-    /**
-     * ID로 경매를 조회하며 비관적 락을 획득한다
-     * 동시성 제어가 필요한 입찰 처리 시 사용
-     *
-     * @param id 경매 ID
-     * @return 경매 엔티티 (Optional)
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT a FROM AuctionEntity a WHERE a.id = :id")
-    Optional<AuctionEntity> findByIdWithLock(@Param("id") Long id);
 
     /**
      * 종료 시간이 도래한 진행 중인 경매 목록을 조회한다
@@ -42,5 +29,18 @@ public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long>
     List<AuctionEntity> findClosingAuctions(
             @Param("status") AuctionStatus status,
             @Param("now") LocalDateTime now
+    );
+
+    /**
+     * 경매의 현재가, 입찰수, 입찰단위를 직접 업데이트한다
+     * Lua 스크립트 입찰 처리 후 DB 동기화용
+     */
+    @Modifying
+    @Query("UPDATE AuctionEntity a SET a.currentPrice = :currentPrice, a.totalBidCount = :totalBidCount, a.bidIncrement = :bidIncrement WHERE a.id = :auctionId")
+    void updateCurrentPrice(
+            @Param("auctionId") Long auctionId,
+            @Param("currentPrice") Long currentPrice,
+            @Param("totalBidCount") Integer totalBidCount,
+            @Param("bidIncrement") Long bidIncrement
     );
 }
