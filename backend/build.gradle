@@ -35,6 +35,9 @@ dependencies {
     // Prometheus 메트릭 (모니터링)
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
+    // Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
