@@ -73,3 +73,10 @@
 ## 완료
 
 <!-- 완료된 항목 -->
+
+<!-- 프론트 html -> react or next.js -->
+<!-- Todo 스킬 추출 해볼것 -->
+<!-- e2e cucumber 테스트 시도 -->
+<!-- playwrite -->
+    //Todo ResponseEntity, ApiResponse 통합고려
+//Todo 네이밍 변경 : port
