@@ -1,9 +1,9 @@
 package com.cos.fairbid.winning.application.service;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
-import com.cos.fairbid.winning.application.port.out.WinningRepository;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class NoShowProcessingHelper {
 
-    private final WinningRepository winningRepository;
-    private final AuctionRepository auctionRepository;
+    private final WinningRepositoryPort winningRepository;
+    private final AuctionRepositoryPort auctionRepository;
     private final NoShowProcessor noShowProcessor;
 
     /**

@@ -1,76 +1,84 @@
 package com.cos.fairbid.bid.application.service;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.in.PlaceBidUseCase;
-import com.cos.fairbid.bid.application.port.out.BidEventPublisher;
-import com.cos.fairbid.bid.application.port.out.BidRepository;
+import com.cos.fairbid.bid.application.port.out.BidCachePort;
+import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
+import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
+import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 입찰 유스케이스 구현체
+ * 입찰 서비스
+ * Redis 메인 DB + Lua 스크립트로 원자적 입찰 처리
  *
- * 입찰 처리 흐름:
- * 1. 비관적 락으로 경매 조회
- * 2. 입찰 자격 검증 (종료 여부, 본인 경매 여부)
- * 3. 연장 구간 확인 및 연장 처리
- * 4. 입찰 금액 결정
- * 5. 입찰 처리 (현재가 갱신)
- * 6. 경매 상태 저장
- * 7. 입찰 이력 저장
- * 8. 이벤트 발행 (실시간 UI 업데이트)
+ * 흐름:
+ * 1. Redis 캐시 확인 (없으면 RDB에서 로드)
+ * 2. Lua 스크립트로 원자적 입찰 처리 (Read + Write)
+ * 3. RDB 동기화 모킹 (추후 MQ로 비동기 처리)
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Slf4j
 public class BidService implements PlaceBidUseCase {
 
-    private final AuctionRepository auctionRepository;
-    private final BidRepository bidRepository;
-    private final BidEventPublisher bidEventPublisher;
+    private final BidCachePort bidCachePort;
+    private final BidRepositoryPort bidRepository;
+    private final AuctionRepositoryPort auctionRepository;
+    private final AuctionCachePort auctionCachePort;
+    private final BidEventPublisherPort bidEventPublisher;
 
-    /**
-     * 입찰을 처리한다
-     *
-     * @param command 입찰 명령
-     * @return 생성된 입찰 도메인 객체
-     */
     @Override
-    @Transactional
     public Bid placeBid(PlaceBidCommand command) {
-        // 1. 비관적 락으로 경매 조회 (동시성 제어)
-        Auction auction = auctionRepository.findByIdWithLock(command.auctionId())
-                .orElseThrow(() -> AuctionNotFoundException.withId(command.auctionId()));
-
-        // 2. 입찰 자격 검증 (경매 종료 여부, 본인 경매 여부)
-        auction.validateBidEligibility(command.bidderId());
-
-        // 3. 연장 구간 확인 및 처리
-        boolean extended = auction.isInExtensionPeriod();
-        if (extended) {
-            auction.extend();
+        // 1. 캐시 확인 (없으면 RDB에서 로드)
+        if (!bidCachePort.existsInCache(command.auctionId())) {
+            loadAuctionToRedis(command.auctionId());
         }
 
-        // 4. 입찰 금액 결정 (Bid 도메인에 위임)
-        Long bidAmount = Bid.determineBidAmount(command.bidType(), command.amount(), auction);
+        // 2. Lua 스크립트로 원자적 입찰 처리 (현재 시간 전달)
+        long currentTimeMs = System.currentTimeMillis();
+        BidResult result = bidCachePort.placeBidAtomic(
+                command.auctionId(),
+                command.amount() != null ? command.amount() : 0L,
+                command.bidderId(),
+                command.bidType().name(),
+                currentTimeMs
+        );
 
-        // 5. 입찰 처리 (현재가 갱신, 입찰수 증가, 입찰단위 재계산)
-        auction.placeBid(bidAmount);
+        log.debug("입찰 성공 (Redis Lua): auctionId={}, bidAmount={}, totalBidCount={}",
+                command.auctionId(), result.newCurrentPrice(), result.newTotalBidCount());
 
-        // 6. 경매 상태 저장
-        auctionRepository.save(auction);
+        // 3. Bid 도메인 생성
+        Bid bid = Bid.create(command.auctionId(), command.bidderId(), result.newCurrentPrice(), command.bidType());
 
-        // 7. 입찰 이력 생성 및 저장
-        Bid bid = Bid.create(command.auctionId(), command.bidderId(), bidAmount, command.bidType());
+        // 4. 웹소켓 이벤트 발행 (실시간 알림) - BidResult에서 최신 값 사용
+        bidEventPublisher.publishBidPlaced(command.auctionId(), result);
+
+        // 5. RDB 동기화 (입찰 이력 저장)
         Bid savedBid = bidRepository.save(bid);
-
-        // 8. 이벤트 발행 (Port에 위임)
-        bidEventPublisher.publishBidPlaced(auction, extended);
+        log.debug("입찰 이력 RDB 저장 완료: bidId={}, auctionId={}, bidderId={}, amount={}",
+                savedBid.getId(), command.auctionId(), command.bidderId(), bid.getAmount());
 
         return savedBid;
+    }
+
+    /**
+     * 캐시 미스 시 RDB에서 경매 정보를 조회하여 Redis에 로드
+     *
+     * @param auctionId 경매 ID
+     * @return 로드된 경매 도메인 객체
+     */
+    private Auction loadAuctionToRedis(Long auctionId) {
+        Auction auction = auctionRepository.findById(auctionId)
+                .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
+        auctionCachePort.saveToCache(auction);
+        log.info("캐시 미스, RDB에서 Redis로 로드: auctionId={}", auctionId);
+        return auction;
     }
 }

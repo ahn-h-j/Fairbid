@@ -3,7 +3,7 @@ package com.cos.fairbid.winning.adapter.out.persistence;
 import com.cos.fairbid.winning.adapter.out.persistence.entity.WinningEntity;
 import com.cos.fairbid.winning.adapter.out.persistence.mapper.WinningMapper;
 import com.cos.fairbid.winning.adapter.out.persistence.repository.JpaWinningRepository;
-import com.cos.fairbid.winning.application.port.out.WinningRepository;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import com.cos.fairbid.winning.domain.WinningStatus;
 import lombok.RequiredArgsConstructor;
@@ -15,11 +15,11 @@ import java.util.Optional;
 
 /**
  * 낙찰 영속성 어댑터
- * WinningRepository 포트 구현체
+ * WinningRepositoryPort 포트 구현체
  */
 @Repository
 @RequiredArgsConstructor
-public class WinningPersistenceAdapter implements WinningRepository {
+public class WinningPersistenceAdapter implements WinningRepositoryPort {
 
     private final JpaWinningRepository jpaWinningRepository;
     private final WinningMapper winningMapper;

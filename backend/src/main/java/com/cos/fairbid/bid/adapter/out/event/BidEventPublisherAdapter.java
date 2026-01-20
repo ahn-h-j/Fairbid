@@ -1,19 +1,23 @@
 package com.cos.fairbid.bid.adapter.out.event;
 
-import com.cos.fairbid.auction.domain.Auction;
-import com.cos.fairbid.bid.application.port.out.BidEventPublisher;
+import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
+import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
 import com.cos.fairbid.bid.domain.event.BidPlacedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 /**
  * 입찰 이벤트 발행 어댑터
- * BidEventPublisher 포트 구현체
+ * BidEventPublisherPort 포트 구현체
  */
 @Component
 @RequiredArgsConstructor
-public class BidEventPublisherAdapter implements BidEventPublisher {
+public class BidEventPublisherAdapter implements BidEventPublisherPort {
 
     private final ApplicationEventPublisher eventPublisher;
 
@@ -21,19 +25,28 @@ public class BidEventPublisherAdapter implements BidEventPublisher {
      * 입찰 완료 이벤트를 발행한다
      * 실시간 UI 업데이트용 (현재가, 종료시간, 다음 입찰가, 입찰 단위, 총 입찰수)
      *
-     * @param auction  경매 도메인 객체
-     * @param extended 연장 여부
+     * @param auctionId 경매 ID
+     * @param result    Lua 스크립트 입찰 결과 (최신 값)
      */
     @Override
-    public void publishBidPlaced(Auction auction, boolean extended) {
+    public void publishBidPlaced(Long auctionId, BidResult result) {
+        // 밀리초 → LocalDateTime 변환
+        LocalDateTime scheduledEndTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(result.scheduledEndTimeMs()),
+                ZoneId.systemDefault()
+        );
+
+        // 다음 최소 입찰가 계산
+        Long nextMinBidPrice = result.newCurrentPrice() + result.newBidIncrement();
+
         BidPlacedEvent event = BidPlacedEvent.of(
-                auction.getId(),
-                auction.getCurrentPrice(),
-                auction.getScheduledEndTime(),
-                extended,
-                auction.getNextMinBidPrice(),
-                auction.getBidIncrement(),
-                auction.getTotalBidCount()
+                auctionId,
+                result.newCurrentPrice(),
+                scheduledEndTime,
+                result.extended(),
+                nextMinBidPrice,
+                result.newBidIncrement(),
+                result.newTotalBidCount()
         );
         eventPublisher.publishEvent(event);
     }

@@ -4,7 +4,7 @@ import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.adapter.out.persistence.mapper.AuctionMapper;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.AuctionSpecification;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepository;
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import lombok.RequiredArgsConstructor;
@@ -18,11 +18,11 @@ import java.util.Optional;
 
 /**
  * 경매 영속성 어댑터
- * AuctionRepository 포트 구현체
+ * AuctionRepositoryPort 포트 구현체
  */
 @Repository
 @RequiredArgsConstructor
-public class AuctionPersistenceAdapter implements AuctionRepository {
+public class AuctionPersistenceAdapter implements AuctionRepositoryPort {
 
     private final JpaAuctionRepository jpaAuctionRepository;
     private final AuctionMapper auctionMapper;
@@ -37,12 +37,6 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
     @Override
     public Optional<Auction> findById(Long id) {
         return jpaAuctionRepository.findById(id)
-                .map(auctionMapper::toDomain);
-    }
-
-    @Override
-    public Optional<Auction> findByIdWithLock(Long id) {
-        return jpaAuctionRepository.findByIdWithLock(id)
                 .map(auctionMapper::toDomain);
     }
 
@@ -63,5 +57,10 @@ public class AuctionPersistenceAdapter implements AuctionRepository {
                 AuctionSpecification.withCondition(status, keyword),
                 pageable
         ).map(auctionMapper::toDomain);
+    }
+
+    @Override
+    public void updateCurrentPrice(Long auctionId, Long currentPrice, Integer totalBidCount, Long bidIncrement) {
+        jpaAuctionRepository.updateCurrentPrice(auctionId, currentPrice, totalBidCount, bidIncrement);
     }
 }

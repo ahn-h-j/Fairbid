@@ -8,7 +8,7 @@ import com.cos.fairbid.bid.domain.BidType;
 import com.cos.fairbid.cucumber.adapter.TestAdapter;
 import com.cos.fairbid.cucumber.adapter.TestContext;
 import com.cos.fairbid.winning.application.port.in.CloseAuctionUseCase;
-import com.cos.fairbid.winning.application.port.out.WinningRepository;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import io.cucumber.java.ko.그러면;
 import io.cucumber.java.ko.그리고;
@@ -37,7 +37,7 @@ public class WinningSteps {
     private JpaAuctionRepository jpaAuctionRepository;
 
     @Autowired
-    private WinningRepository winningRepository;
+    private WinningRepositoryPort winningRepository;
 
     public WinningSteps(TestAdapter testAdapter, TestContext testContext) {
         this.testAdapter = testAdapter;

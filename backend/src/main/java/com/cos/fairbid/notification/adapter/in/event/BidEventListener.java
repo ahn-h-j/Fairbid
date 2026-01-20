@@ -5,9 +5,8 @@ import com.cos.fairbid.notification.application.port.out.AuctionBroadcastPort;
 import com.cos.fairbid.notification.dto.BidUpdateMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * 입찰 이벤트 리스너
@@ -22,11 +21,11 @@ public class BidEventListener {
 
     /**
      * 입찰 완료 이벤트 처리
-     * 트랜잭션 커밋 후에만 실행되어 롤백 시 메시지 미전송 보장
+     * Redis Lua 스크립트 기반 입찰은 트랜잭션 없이 동작하므로 @EventListener 사용
      *
      * @param event 입찰 완료 이벤트
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void handleBidPlacedEvent(BidPlacedEvent event) {
         log.debug("BidPlacedEvent 수신: auctionId={}, currentPrice={}", event.getAuctionId(), event.getCurrentPrice());
 

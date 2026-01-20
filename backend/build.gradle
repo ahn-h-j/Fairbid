@@ -35,6 +35,9 @@ dependencies {
     // Prometheus 메트릭 (모니터링)
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
+    // Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -57,6 +60,7 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers:1.20.4'
     testImplementation 'org.testcontainers:junit-jupiter:1.20.4'
     testImplementation 'org.testcontainers:mysql:1.20.4'
+    testImplementation 'com.redis:testcontainers-redis:2.2.2'
 
     // Firebase Admin SDK (FCM)
     implementation 'com.google.firebase:firebase-admin:9.2.0'

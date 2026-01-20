@@ -1,6 +1,6 @@
 package com.cos.fairbid.winning.application.service;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.winning.application.port.in.CloseAuctionUseCase;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuctionClosingService implements CloseAuctionUseCase {
 
-    private final AuctionRepository auctionRepository;
+    private final AuctionRepositoryPort auctionRepository;
     private final AuctionClosingHelper auctionClosingHelper;
 
     @Override

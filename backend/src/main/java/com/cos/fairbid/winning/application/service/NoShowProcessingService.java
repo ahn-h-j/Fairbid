@@ -1,7 +1,7 @@
 package com.cos.fairbid.winning.application.service;
 
 import com.cos.fairbid.winning.application.port.in.ProcessNoShowUseCase;
-import com.cos.fairbid.winning.application.port.out.WinningRepository;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +29,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class NoShowProcessingService implements ProcessNoShowUseCase {
 
-    private final WinningRepository winningRepository;
+    private final WinningRepositoryPort winningRepository;
     private final NoShowProcessingHelper noShowProcessingHelper;
 
     @Override
