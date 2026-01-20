@@ -62,6 +62,16 @@
 - **해결**: User 도메인에서 경고 시스템 구현
 - **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
 
+### RedisConfig 설정 클래스 추가
+- **파일**: `common/config/RedisConfig.java`
+- **내용**: Spring Boot 자동 설정 대신 명시적 Redis 설정 (직렬화, 커넥션 팩토리 등)
+- **조건**: 복잡한 객체 저장 또는 커넥션 풀 세부 튜닝 필요 시 (PR #30 리뷰 보류 항목)
+
+### Redis Connection Pool 설정
+- **파일**: `application.yml`
+- **내용**: Lettuce 커넥션 풀 설정 (max-active, max-idle, min-idle)
+- **조건**: 부하테스트 결과에 따라 튜닝 필요 시 (PR #30 리뷰 보류 항목)
+
 ---
 
 ## 진행 중
