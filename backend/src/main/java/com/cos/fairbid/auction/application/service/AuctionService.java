@@ -3,7 +3,7 @@ package com.cos.fairbid.auction.application.service;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase, GetAuctionListUseCase {
 
-    private final AuctionRepository auctionRepository;
+    private final AuctionRepositoryPort auctionRepository;
 
     /**
      * 새로운 경매를 생성한다

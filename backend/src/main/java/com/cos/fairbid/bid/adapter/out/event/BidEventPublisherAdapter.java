@@ -1,7 +1,7 @@
 package com.cos.fairbid.bid.adapter.out.event;
 
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
-import com.cos.fairbid.bid.application.port.out.BidEventPublisher;
+import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
 import com.cos.fairbid.bid.domain.event.BidPlacedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -13,11 +13,11 @@ import java.time.ZoneId;
 
 /**
  * 입찰 이벤트 발행 어댑터
- * BidEventPublisher 포트 구현체
+ * BidEventPublisherPort 포트 구현체
  */
 @Component
 @RequiredArgsConstructor
-public class BidEventPublisherAdapter implements BidEventPublisher {
+public class BidEventPublisherAdapter implements BidEventPublisherPort {
 
     private final ApplicationEventPublisher eventPublisher;
 

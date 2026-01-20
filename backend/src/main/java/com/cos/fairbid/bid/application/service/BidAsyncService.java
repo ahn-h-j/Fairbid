@@ -1,9 +1,9 @@
 package com.cos.fairbid.bid.application.service;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
-import com.cos.fairbid.bid.application.port.out.BidEventPublisher;
-import com.cos.fairbid.bid.application.port.out.BidRepository;
+import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
+import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.bid.domain.BidType;
 import lombok.RequiredArgsConstructor;
@@ -21,9 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class BidAsyncService {
 
-    private final AuctionRepository auctionRepository;
-    private final BidRepository bidRepository;
-    private final BidEventPublisher bidEventPublisher;
+    private final AuctionRepositoryPort auctionRepository;
+    private final BidRepositoryPort bidRepository;
+    private final BidEventPublisherPort bidEventPublisher;
 
     /**
      * DB 영속화 (비동기)

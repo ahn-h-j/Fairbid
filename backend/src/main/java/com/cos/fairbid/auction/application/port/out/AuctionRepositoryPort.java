@@ -12,7 +12,7 @@ import java.util.Optional;
  * 경매 저장소 아웃바운드 포트
  * 영속성 계층과의 통신을 위한 인터페이스
  */
-public interface AuctionRepository {
+public interface AuctionRepositoryPort {
 
     /**
      * 경매를 저장한다

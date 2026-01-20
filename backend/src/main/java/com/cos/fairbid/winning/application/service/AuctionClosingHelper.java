@@ -1,11 +1,11 @@
 package com.cos.fairbid.winning.application.service;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
-import com.cos.fairbid.bid.application.port.out.BidRepository;
+import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
-import com.cos.fairbid.winning.application.port.out.AuctionClosedEventPublisher;
+import com.cos.fairbid.winning.application.port.out.AuctionClosedEventPublisherPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,10 +26,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuctionClosingHelper {
 
-    private final AuctionRepository auctionRepository;
-    private final BidRepository bidRepository;
+    private final AuctionRepositoryPort auctionRepository;
+    private final BidRepositoryPort bidRepository;
     private final AuctionClosingProcessor closingProcessor;
-    private final AuctionClosedEventPublisher eventPublisher;
+    private final AuctionClosedEventPublisherPort eventPublisher;
 
     /**
      * 단일 경매 종료 처리

@@ -8,7 +8,7 @@ import java.util.List;
  * 입찰 저장소 아웃바운드 포트
  * 영속성 계층과의 통신을 위한 인터페이스
  */
-public interface BidRepository {
+public interface BidRepositoryPort {
 
     /**
      * 입찰 이력을 저장한다

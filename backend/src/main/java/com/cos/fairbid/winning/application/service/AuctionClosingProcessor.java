@@ -3,7 +3,7 @@ package com.cos.fairbid.winning.application.service;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
-import com.cos.fairbid.winning.application.port.out.WinningRepository;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AuctionClosingProcessor {
 
-    private final WinningRepository winningRepository;
+    private final WinningRepositoryPort winningRepository;
     private final PushNotificationPort pushNotificationPort;
 
     /**

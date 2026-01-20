@@ -1,13 +1,13 @@
 package com.cos.fairbid.bid.application.service;
 
 import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
-import com.cos.fairbid.auction.application.port.out.AuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.in.PlaceBidUseCase;
 import com.cos.fairbid.bid.application.port.out.BidCachePort;
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
-import com.cos.fairbid.bid.application.port.out.BidEventPublisher;
+import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
 import com.cos.fairbid.bid.domain.Bid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,9 +28,9 @@ import org.springframework.stereotype.Service;
 public class BidService implements PlaceBidUseCase {
 
     private final BidCachePort bidCachePort;
-    private final AuctionRepository auctionRepository;
+    private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
-    private final BidEventPublisher bidEventPublisher;
+    private final BidEventPublisherPort bidEventPublisher;
 
     @Override
     public Bid placeBid(PlaceBidCommand command) {

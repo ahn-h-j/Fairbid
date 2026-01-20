@@ -6,7 +6,7 @@ import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
  * 입찰 이벤트 발행 아웃바운드 포트
  * 실시간 UI 업데이트를 위한 이벤트 발행 인터페이스
  */
-public interface BidEventPublisher {
+public interface BidEventPublisherPort {
 
     /**
      * 입찰 완료 이벤트를 발행한다
