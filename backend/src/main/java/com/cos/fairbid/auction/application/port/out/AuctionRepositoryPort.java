@@ -58,4 +58,26 @@ public interface AuctionRepositoryPort {
      * @param bidIncrement   새 입찰 단위
      */
     void updateCurrentPrice(Long auctionId, Long currentPrice, Integer totalBidCount, Long bidIncrement);
+
+    /**
+     * 즉시 구매 활성화 상태로 업데이트한다
+     * Lua 스크립트 즉시 구매 처리 후 DB 동기화용
+     *
+     * @param auctionId                경매 ID
+     * @param currentPrice             새 현재가 (즉시구매가)
+     * @param totalBidCount            새 총 입찰수
+     * @param bidIncrement             새 입찰 단위
+     * @param instantBuyerId           즉시 구매 요청자 ID
+     * @param instantBuyActivatedTimeMs 즉시 구매 활성화 시간 (밀리초)
+     * @param scheduledEndTimeMs       새 종료 예정 시간 (밀리초)
+     */
+    void updateInstantBuyActivated(
+            Long auctionId,
+            Long currentPrice,
+            Integer totalBidCount,
+            Long bidIncrement,
+            Long instantBuyerId,
+            Long instantBuyActivatedTimeMs,
+            Long scheduledEndTimeMs
+    );
 }

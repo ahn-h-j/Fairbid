@@ -13,6 +13,7 @@ import com.cos.fairbid.bid.domain.Bid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 입찰 서비스
@@ -21,11 +22,12 @@ import org.springframework.stereotype.Service;
  * 흐름:
  * 1. Redis 캐시 확인 (없으면 RDB에서 로드)
  * 2. Lua 스크립트로 원자적 입찰 처리 (Read + Write)
- * 3. RDB 동기화 모킹 (추후 MQ로 비동기 처리)
+ * 3. RDB 동기화 (경매 목록 페이지용)
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class BidService implements PlaceBidUseCase {
 
     private final BidCachePort bidCachePort;
@@ -60,7 +62,15 @@ public class BidService implements PlaceBidUseCase {
         // 4. 웹소켓 이벤트 발행 (실시간 알림) - BidResult에서 최신 값 사용
         bidEventPublisher.publishBidPlaced(command.auctionId(), result);
 
-        // 5. RDB 동기화 (입찰 이력 저장)
+        // 5. RDB 동기화 (경매 목록 페이지용)
+        auctionRepository.updateCurrentPrice(
+                command.auctionId(),
+                result.newCurrentPrice(),
+                result.newTotalBidCount(),
+                result.newBidIncrement()
+        );
+
+        // 6. 입찰 이력 저장 (RDB)
         Bid savedBid = bidRepository.save(bid);
         log.debug("입찰 이력 RDB 저장 완료: bidId={}, auctionId={}, bidderId={}, amount={}",
                 savedBid.getId(), command.auctionId(), command.bidderId(), bid.getAmount());
