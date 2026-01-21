@@ -227,3 +227,52 @@ function setCurrentUserId(userId) {
 function getCurrentUserId() {
     return currentUserId;
 }
+
+// =====================================================
+// 테스트용 API
+// =====================================================
+
+/**
+ * 경매 종료 시간을 5분 후로 설정 (연장 테스트용)
+ * @param {number} auctionId - 경매 ID
+ * @returns {Promise<object>} 처리 결과
+ */
+async function setEndingSoon(auctionId) {
+    return apiRequest(`/test/auctions/${auctionId}/set-ending-soon`, {
+        method: 'POST',
+    });
+}
+
+/**
+ * 경매 종료 시간을 지정한 초 후로 설정
+ * @param {number} auctionId - 경매 ID
+ * @param {number} seconds - 초 단위
+ * @returns {Promise<object>} 처리 결과
+ */
+async function setEndTime(auctionId, seconds) {
+    return apiRequest(`/test/auctions/${auctionId}/set-end-time?seconds=${seconds}`, {
+        method: 'POST',
+    });
+}
+
+/**
+ * 경매 강제 종료
+ * @param {number} auctionId - 경매 ID
+ * @returns {Promise<object>} 처리 결과
+ */
+async function forceCloseAuction(auctionId) {
+    return apiRequest(`/test/auctions/${auctionId}/force-close`, {
+        method: 'POST',
+    });
+}
+
+/**
+ * 경매 캐시 새로고침
+ * @param {number} auctionId - 경매 ID
+ * @returns {Promise<object>} 처리 결과
+ */
+async function refreshAuctionCache(auctionId) {
+    return apiRequest(`/test/auctions/${auctionId}/refresh-cache`, {
+        method: 'POST',
+    });
+}

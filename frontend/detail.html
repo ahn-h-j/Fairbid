@@ -124,6 +124,16 @@
                         </button>
                     </div>
 
+                    <!-- 즉시 구매 -->
+                    <div id="instant-buy-section" class="bid-buttons" style="display: none; margin-top: 12px;">
+                        <button id="btn-instant-buy" class="btn" style="background: #f03e3e; color: white;" onclick="instantBuy()">
+                            즉시 구매 (<span id="instant-buy-btn-price">0원</span>)
+                        </button>
+                        <p class="form-hint" style="margin-top: 8px; color: #f03e3e;">
+                            * 즉시 구매 시 1시간 최종 입찰 기회가 제공됩니다
+                        </p>
+                    </div>
+
                     <!-- 직접 입찰 -->
                     <div class="direct-bid">
                         <input type="number" id="bid-amount" placeholder="입찰 금액 입력">
@@ -156,6 +166,29 @@
                         <div id="auction-id" class="value">-</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- 테스트 도구 -->
+            <div class="card" style="border: 1px dashed #fcc419; background: rgba(252, 196, 25, 0.05);">
+                <h3 class="card-title" style="color: #fcc419;">테스트 도구</h3>
+                <p class="form-hint" style="margin-bottom: 16px;">개발/테스트 환경에서만 사용하세요</p>
+
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="testSetEndingSoon()" style="border-color: #fcc419; color: #fcc419;">
+                        종료 5분 전으로 설정
+                    </button>
+                    <button class="btn btn-secondary" onclick="testSetEndTime(60)" style="border-color: #fcc419; color: #fcc419;">
+                        종료 1분 전으로 설정
+                    </button>
+                    <button class="btn btn-secondary" onclick="testForceClose()" style="border-color: #f03e3e; color: #f03e3e;">
+                        경매 강제 종료
+                    </button>
+                    <button class="btn btn-secondary" onclick="testRefreshCache()" style="border-color: #868e96; color: #868e96;">
+                        캐시 새로고침
+                    </button>
+                </div>
+
+                <div id="test-message" class="alert" style="display: none; margin-top: 12px;"></div>
             </div>
         </div>
     </main>
@@ -228,10 +261,14 @@
             // 상태
             const statusBadge = document.getElementById('auction-status');
             statusBadge.textContent = formatStatus(auction.status);
-            statusBadge.className = 'status-badge ' + (auction.status === 'BIDDING' ? 'status-bidding' : 'status-ended');
+            const isActive = auction.status === 'BIDDING' || auction.status === 'INSTANT_BUY_PENDING';
+            statusBadge.className = 'status-badge ' + (isActive ? 'status-bidding' : 'status-ended');
 
             // 가격 정보
             updatePriceDisplay(auction);
+
+            // 즉시 구매 버튼 표시 여부
+            updateInstantBuyButton(auction);
 
             // 입찰 섹션 표시/숨김
             const isEnded = ['ENDED', 'FAILED', 'CANCELLED'].includes(auction.status);
@@ -307,6 +344,9 @@
 
                 updatePriceDisplay(currentAuction);
 
+                // 즉시 구매 버튼 상태 업데이트 (90% 이상이면 비활성화)
+                updateInstantBuyButton(currentAuction);
+
                 // 연장 알림
                 if (message.extended) {
                     currentAuction.extensionCount++;
@@ -339,24 +379,44 @@
             await submitBid({ amount: amount, bidType: 'DIRECT' });
         }
 
+        // 즉시 구매
+        async function instantBuy() {
+            if (!confirm('즉시 구매를 진행하시겠습니까?\n\n즉시 구매 시 1시간 최종 입찰 기회가 제공됩니다.\n다른 사용자가 더 높은 금액으로 입찰할 수 있습니다.')) {
+                return;
+            }
+            await submitBid({ bidType: 'INSTANT_BUY' });
+        }
+
         // 입찰 요청
         async function submitBid(bidData) {
             // 모든 입찰 버튼 비활성화
             const oneTouchBtn = document.getElementById('btn-one-touch');
             const directBidBtn = document.querySelector('.direct-bid .btn-secondary');
+            const instantBuyBtn = document.getElementById('btn-instant-buy');
             oneTouchBtn.disabled = true;
             directBidBtn.disabled = true;
+            if (instantBuyBtn) instantBuyBtn.disabled = true;
 
             try {
                 await placeBid(currentAuction.id, bidData);
-                showBidMessage('입찰이 완료되었습니다!', 'success');
+                const msg = bidData.bidType === 'INSTANT_BUY'
+                    ? '즉시 구매가 완료되었습니다! 1시간 최종 입찰 기회가 시작됩니다.'
+                    : '입찰이 완료되었습니다!';
+                showBidMessage(msg, 'success');
                 document.getElementById('bid-amount').value = '';
+
+                // 즉시 구매 후 버튼 숨김 (상태가 INSTANT_BUY_PENDING으로 변경됨)
+                if (bidData.bidType === 'INSTANT_BUY') {
+                    document.getElementById('instant-buy-section').style.display = 'none';
+                }
             } catch (error) {
                 showBidMessage(error.message, 'error');
             } finally {
-                // 모든 입찰 버튼 다시 활성화
+                // 원터치/직접 입찰 버튼만 다시 활성화
                 oneTouchBtn.disabled = false;
                 directBidBtn.disabled = false;
+                // 즉시 구매 버튼은 상태에 따라 활성화/비활성화 결정
+                updateInstantBuyButton(currentAuction);
             }
         }
 
@@ -402,6 +462,109 @@
                 'CANCELLED': '취소됨'
             };
             return map[status] || status;
+        }
+
+        // =====================================================
+        // 즉시 구매 버튼 표시/숨김 로직
+        // =====================================================
+
+        // 즉시 구매 버튼 표시 여부 업데이트
+        function updateInstantBuyButton(auction) {
+            const section = document.getElementById('instant-buy-section');
+            const btn = document.getElementById('btn-instant-buy');
+            const priceEl = document.getElementById('instant-buy-btn-price');
+
+            // 즉시구매가가 없으면 숨김
+            if (!auction.instantBuyPrice) {
+                section.style.display = 'none';
+                return;
+            }
+
+            // 이미 INSTANT_BUY_PENDING 상태면 숨김
+            if (auction.status === 'INSTANT_BUY_PENDING') {
+                section.style.display = 'none';
+                return;
+            }
+
+            // 버튼 표시
+            section.style.display = 'block';
+            priceEl.textContent = formatPrice(auction.instantBuyPrice);
+
+            // 현재가가 즉시구매가의 90% 이상이면 비활성화 (회색)
+            const threshold = auction.instantBuyPrice * 0.9;
+            if (auction.currentPrice >= threshold) {
+                btn.disabled = true;
+                btn.style.background = '#868e96';
+                btn.style.cursor = 'not-allowed';
+            } else {
+                btn.disabled = false;
+                btn.style.background = '#f03e3e';
+                btn.style.cursor = 'pointer';
+            }
+        }
+
+        // =====================================================
+        // 테스트 도구 함수
+        // =====================================================
+
+        // 종료 5분 전으로 설정
+        async function testSetEndingSoon() {
+            try {
+                const result = await setEndingSoon(currentAuction.id);
+                showTestMessage(result.message, 'success');
+                // 페이지 새로고침하여 타이머 갱신
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showTestMessage(error.message, 'error');
+            }
+        }
+
+        // 종료 시간 설정
+        async function testSetEndTime(seconds) {
+            try {
+                const result = await setEndTime(currentAuction.id, seconds);
+                showTestMessage(result.message, 'success');
+                // 페이지 새로고침하여 타이머 갱신
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showTestMessage(error.message, 'error');
+            }
+        }
+
+        // 경매 강제 종료
+        async function testForceClose() {
+            if (!confirm('경매를 강제 종료하시겠습니까?')) {
+                return;
+            }
+            try {
+                const result = await forceCloseAuction(currentAuction.id);
+                showTestMessage(result.message, 'success');
+                // 페이지 새로고침
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showTestMessage(error.message, 'error');
+            }
+        }
+
+        // 캐시 새로고침
+        async function testRefreshCache() {
+            try {
+                const result = await refreshAuctionCache(currentAuction.id);
+                showTestMessage(result.message, 'success');
+            } catch (error) {
+                showTestMessage(error.message, 'error');
+            }
+        }
+
+        // 테스트 메시지 표시
+        function showTestMessage(message, type) {
+            const el = document.getElementById('test-message');
+            el.textContent = message;
+            el.className = 'alert alert-' + type;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 3000);
         }
 
         // 페이지 떠날 때 정리
