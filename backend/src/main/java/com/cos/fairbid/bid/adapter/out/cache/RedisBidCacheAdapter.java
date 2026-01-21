@@ -3,6 +3,7 @@ package com.cos.fairbid.bid.adapter.out.cache;
 import com.cos.fairbid.bid.application.port.out.BidCachePort;
 import com.cos.fairbid.bid.domain.exception.BidTooLowException;
 import com.cos.fairbid.bid.domain.exception.AuctionEndedException;
+import com.cos.fairbid.bid.domain.exception.InstantBuyException;
 import com.cos.fairbid.bid.domain.exception.SelfBidNotAllowedException;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import jakarta.annotation.PostConstruct;
@@ -71,15 +72,24 @@ public class RedisBidCacheAdapter implements BidCachePort {
             handleBidError(errorCode, auctionId, bidderId, bidAmount, result);
         }
 
-        // 성공 케이스: {1, newCurrentPrice, newTotalBidCount, newBidIncrement, extended, extensionCount, scheduledEndTimeMs}
+        // 성공 케이스: {1, newCurrentPrice, newTotalBidCount, newBidIncrement, extended, extensionCount, scheduledEndTimeMs, instantBuyActivated}
         Long newCurrentPrice = (Long) result.get(1);
         Long newTotalBidCount = (Long) result.get(2);
         Long newBidIncrement = (Long) result.get(3);
         Long extended = (Long) result.get(4);
         Long extensionCount = (Long) result.get(5);
         Long scheduledEndTimeMs = (Long) result.get(6);
+        Long instantBuyActivated = (Long) result.get(7);
 
-        return new BidResult(newCurrentPrice, newTotalBidCount.intValue(), newBidIncrement, extended == 1L, extensionCount.intValue(), scheduledEndTimeMs);
+        return new BidResult(
+                newCurrentPrice,
+                newTotalBidCount.intValue(),
+                newBidIncrement,
+                extended == 1L,
+                extensionCount.intValue(),
+                scheduledEndTimeMs,
+                instantBuyActivated == 1L
+        );
     }
 
     /**
@@ -94,6 +104,10 @@ public class RedisBidCacheAdapter implements BidCachePort {
                 Long minBidAmount = (Long) result.get(3);
                 throw BidTooLowException.belowMinimum(bidAmount, minBidAmount);
             }
+            // 즉시 구매 관련 에러
+            case "INSTANT_BUY_NOT_AVAILABLE" -> throw InstantBuyException.notAvailable(auctionId);
+            case "INSTANT_BUY_DISABLED" -> throw InstantBuyException.disabled(auctionId);
+            case "INSTANT_BUY_ALREADY_ACTIVATED" -> throw InstantBuyException.alreadyActivated(auctionId);
             default -> throw new RuntimeException("Unknown bid error: " + errorCode);
         }
     }

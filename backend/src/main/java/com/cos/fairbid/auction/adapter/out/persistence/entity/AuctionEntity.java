@@ -71,6 +71,13 @@ public class AuctionEntity {
     @Column(name = "winner_id")
     private Long winnerId;
 
+    // 즉시 구매 관련 필드
+    @Column(name = "instant_buyer_id")
+    private Long instantBuyerId;
+
+    @Column(name = "instant_buy_activated_time")
+    private LocalDateTime instantBuyActivatedTime;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -96,6 +103,8 @@ public class AuctionEntity {
             Integer totalBidCount,
             AuctionStatus status,
             Long winnerId,
+            Long instantBuyerId,
+            LocalDateTime instantBuyActivatedTime,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {
@@ -114,6 +123,8 @@ public class AuctionEntity {
         this.totalBidCount = totalBidCount;
         this.status = status;
         this.winnerId = winnerId;
+        this.instantBuyerId = instantBuyerId;
+        this.instantBuyActivatedTime = instantBuyActivatedTime;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }

@@ -42,10 +42,13 @@ public class AuctionPersistenceAdapter implements AuctionRepositoryPort {
 
     @Override
     public List<Auction> findClosingAuctions() {
-        return jpaAuctionRepository.findClosingAuctions(
-                        AuctionStatus.BIDDING,
-                        LocalDateTime.now()
-                )
+        // BIDDING과 INSTANT_BUY_PENDING 상태 모두 종료 대상
+        List<AuctionStatus> closingStatuses = List.of(
+                AuctionStatus.BIDDING,
+                AuctionStatus.INSTANT_BUY_PENDING
+        );
+
+        return jpaAuctionRepository.findClosingAuctions(closingStatuses, LocalDateTime.now())
                 .stream()
                 .map(auctionMapper::toDomain)
                 .toList();
@@ -62,5 +65,36 @@ public class AuctionPersistenceAdapter implements AuctionRepositoryPort {
     @Override
     public void updateCurrentPrice(Long auctionId, Long currentPrice, Integer totalBidCount, Long bidIncrement) {
         jpaAuctionRepository.updateCurrentPrice(auctionId, currentPrice, totalBidCount, bidIncrement);
+    }
+
+    @Override
+    public void updateInstantBuyActivated(
+            Long auctionId,
+            Long currentPrice,
+            Integer totalBidCount,
+            Long bidIncrement,
+            Long instantBuyerId,
+            Long instantBuyActivatedTimeMs,
+            Long scheduledEndTimeMs
+    ) {
+        // 밀리초를 LocalDateTime으로 변환
+        LocalDateTime instantBuyActivatedTime = LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(instantBuyActivatedTimeMs),
+                java.time.ZoneId.systemDefault()
+        );
+        LocalDateTime scheduledEndTime = LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(scheduledEndTimeMs),
+                java.time.ZoneId.systemDefault()
+        );
+
+        jpaAuctionRepository.updateInstantBuyActivated(
+                auctionId,
+                currentPrice,
+                totalBidCount,
+                bidIncrement,
+                instantBuyerId,
+                instantBuyActivatedTime,
+                scheduledEndTime
+        );
     }
 }

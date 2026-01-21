@@ -32,6 +32,8 @@ public class AuctionMapper {
                 .totalBidCount(auction.getTotalBidCount())
                 .status(auction.getStatus())
                 .winnerId(auction.getWinnerId())
+                .instantBuyerId(auction.getInstantBuyerId())
+                .instantBuyActivatedTime(auction.getInstantBuyActivatedTime())
                 .createdAt(auction.getCreatedAt())
                 .updatedAt(auction.getUpdatedAt())
                 .build();
@@ -58,6 +60,8 @@ public class AuctionMapper {
                 .totalBidCount(entity.getTotalBidCount())
                 .status(entity.getStatus())
                 .winnerId(entity.getWinnerId())
+                .instantBuyerId(entity.getInstantBuyerId())
+                .instantBuyActivatedTime(entity.getInstantBuyActivatedTime())
                 .imageUrls(Collections.emptyList())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
