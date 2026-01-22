@@ -195,10 +195,12 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
 
     /**
      * 밀리초 값에서 LocalDateTime 파싱
+     * 필수 시간 필드가 누락된 경우 예외 발생
      */
     private LocalDateTime parseLocalDateTime(Object msValue) {
         if (msValue == null || msValue.toString().isEmpty()) {
-            return LocalDateTime.now();
+            log.error("필수 시간 필드(scheduledEndTimeMs)가 누락되었습니다. 캐시 데이터 손상 가능성.");
+            throw new IllegalStateException("scheduledEndTimeMs는 필수 필드입니다");
         }
         long ms = Long.parseLong(msValue.toString());
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.systemDefault());

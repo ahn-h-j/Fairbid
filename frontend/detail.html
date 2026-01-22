@@ -398,15 +398,23 @@
             if (instantBuyBtn) instantBuyBtn.disabled = true;
 
             try {
+                const isInstantBuy = bidData.bidType === 'INSTANT_BUY';
                 await placeBid(currentAuction.id, bidData);
-                const msg = bidData.bidType === 'INSTANT_BUY'
+
+                // 즉시 구매 성공 시 상태 즉시 갱신 (WebSocket 업데이트 전에 UI 반영)
+                if (isInstantBuy) {
+                    currentAuction.status = 'INSTANT_BUY_PENDING';
+                    currentAuction.currentPrice = currentAuction.instantBuyPrice || currentAuction.currentPrice;
+                }
+
+                const msg = isInstantBuy
                     ? '즉시 구매가 완료되었습니다! 1시간 최종 입찰 기회가 시작됩니다.'
                     : '입찰이 완료되었습니다!';
                 showBidMessage(msg, 'success');
                 document.getElementById('bid-amount').value = '';
 
-                // 즉시 구매 후 버튼 숨김 (상태가 INSTANT_BUY_PENDING으로 변경됨)
-                if (bidData.bidType === 'INSTANT_BUY') {
+                // 즉시 구매 후 버튼 숨김
+                if (isInstantBuy) {
                     document.getElementById('instant-buy-section').style.display = 'none';
                 }
             } catch (error) {

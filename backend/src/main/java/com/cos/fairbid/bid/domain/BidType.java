@@ -1,6 +1,7 @@
 package com.cos.fairbid.bid.domain;
 
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.bid.domain.exception.InstantBuyException;
 import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 
 /**
@@ -39,7 +40,11 @@ public enum BidType {
     INSTANT_BUY {
         @Override
         public Long calculateAmount(Long requestedAmount, Auction auction) {
-            return auction.getInstantBuyPrice();
+            Long instantBuyPrice = auction.getInstantBuyPrice();
+            if (instantBuyPrice == null) {
+                throw InstantBuyException.notAvailable(auction.getId());
+            }
+            return instantBuyPrice;
         }
     };
 

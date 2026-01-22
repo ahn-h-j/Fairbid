@@ -39,12 +39,14 @@
       | title           | 갤럭시 S24 울트라              |
       | description     | 개봉만 한 새상품                |
       | category        | ELECTRONICS                |
-      | startPrice      | 900000                     |
+      | startPrice      | 800000                     |
       | instantBuyPrice | 1000000                    |
       | duration        | HOURS_24                   |
     그리고 경매 등록을 요청한다
     그리고 응답 상태 코드는 201이다
-    만약 구매자가 즉시 구매를 요청한다
+    그리고 구매자가 900000원으로 직접 입찰을 요청한다
+    그리고 응답 상태 코드는 201이다
+    만약 다른 구매자가 즉시 구매를 요청한다
     그러면 응답 상태 코드는 400이다
     그리고 응답 본문의 "errorCode" 값은 "INSTANT_BUY_DISABLED"이다
 

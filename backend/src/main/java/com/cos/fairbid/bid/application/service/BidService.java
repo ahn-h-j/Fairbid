@@ -62,13 +62,28 @@ public class BidService implements PlaceBidUseCase {
         // 4. 웹소켓 이벤트 발행 (실시간 알림) - BidResult에서 최신 값 사용
         bidEventPublisher.publishBidPlaced(command.auctionId(), result);
 
-        // 5. RDB 동기화 (경매 목록 페이지용)
-        auctionRepository.updateCurrentPrice(
-                command.auctionId(),
-                result.newCurrentPrice(),
-                result.newTotalBidCount(),
-                result.newBidIncrement()
-        );
+        // 5. RDB 동기화 (즉시 구매 여부에 따라 분기)
+        if (Boolean.TRUE.equals(result.instantBuyActivated())) {
+            // 즉시 구매 활성화: 상태 + 종료시간 + 구매자 정보 모두 업데이트
+            auctionRepository.updateInstantBuyActivated(
+                    command.auctionId(),
+                    result.newCurrentPrice(),
+                    result.newTotalBidCount(),
+                    result.newBidIncrement(),
+                    command.bidderId(),
+                    currentTimeMs,
+                    result.scheduledEndTimeMs()
+            );
+            log.info("즉시 구매 활성화 RDB 동기화: auctionId={}, instantBuyerId={}", command.auctionId(), command.bidderId());
+        } else {
+            // 일반 입찰: 현재가/입찰수/입찰단위만 업데이트
+            auctionRepository.updateCurrentPrice(
+                    command.auctionId(),
+                    result.newCurrentPrice(),
+                    result.newTotalBidCount(),
+                    result.newBidIncrement()
+            );
+        }
 
         // 6. 입찰 이력 저장 (RDB)
         Bid savedBid = bidRepository.save(bid);

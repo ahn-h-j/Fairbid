@@ -105,28 +105,28 @@ public class BidSteps {
 
     @만약("다른 구매자가 즉시 구매를 요청한다")
     public void 다른_구매자가_즉시_구매를_요청한다() {
-        // When: 다른 구매자의 즉시 구매 요청 (동일 경매)
+        // When: 다른 구매자의 즉시 구매 요청 (bidderId = 3)
         Long auctionId = testContext.getLastCreatedAuctionId();
 
         PlaceBidRequest request = PlaceBidRequest.builder()
                 .bidType(BidType.INSTANT_BUY)
                 .build();
 
-        String url = "/api/v1/auctions/" + auctionId + "/bids";
+        String url = "/api/v1/auctions/" + auctionId + "/bids?bidderId=3";
         ResponseEntity<Map> response = testAdapter.post(url, request, Map.class);
         testContext.setLastResponse(response);
     }
 
     @만약("다른 구매자가 원터치 입찰을 요청한다")
     public void 다른_구매자가_원터치_입찰을_요청한다() {
-        // When: 다른 구매자의 원터치 입찰 요청 (동일 경매)
+        // When: 다른 구매자의 원터치 입찰 요청 (bidderId = 3)
         Long auctionId = testContext.getLastCreatedAuctionId();
 
         PlaceBidRequest request = PlaceBidRequest.builder()
                 .bidType(BidType.ONE_TOUCH)
                 .build();
 
-        String url = "/api/v1/auctions/" + auctionId + "/bids";
+        String url = "/api/v1/auctions/" + auctionId + "/bids?bidderId=3";
         ResponseEntity<Map> response = testAdapter.post(url, request, Map.class);
         testContext.setLastResponse(response);
     }

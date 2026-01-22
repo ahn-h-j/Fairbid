@@ -85,6 +85,7 @@ if bidType == 'INSTANT_BUY' then
     -- 5-5. 종료 시간을 현재 + 1시간으로 변경 (1시간 최종 입찰 기회)
     local newEndTimeMs = currentTimeMs + oneHourMs
     redis.call('HSET', auctionKey, 'scheduledEndTimeMs', newEndTimeMs)
+    redis.call('HSET', auctionKey, 'scheduledEndTime', tostring(newEndTimeMs))
     scheduledEndTimeMs = newEndTimeMs
 
     -- 5-6. 현재가를 즉시 구매가로 갱신
@@ -148,6 +149,7 @@ if status == 'BIDDING' and scheduledEndTimeMs > 0 and currentTimeMs > 0 then
         extended = 1
         local newEndTimeMs = currentTimeMs + fiveMinutesMs
         redis.call('HSET', auctionKey, 'scheduledEndTimeMs', newEndTimeMs)
+        redis.call('HSET', auctionKey, 'scheduledEndTime', tostring(newEndTimeMs))
         extensionCount = extensionCount + 1
         redis.call('HSET', auctionKey, 'extensionCount', extensionCount)
     end
