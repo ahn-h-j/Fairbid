@@ -40,6 +40,10 @@ public class Auction {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // 즉시 구매 관련 필드
+    private Long instantBuyerId;                    // 즉시 구매 요청자 ID
+    private LocalDateTime instantBuyActivatedTime;  // 즉시 구매 활성화 시간
+
     /**
      * 새로운 경매 생성을 위한 정적 팩토리 메서드
      *
@@ -280,12 +284,12 @@ public class Auction {
      * 경매를 종료하고 낙찰자를 지정한다
      *
      * @param winnerId 낙찰자 ID
-     * @throws IllegalStateException BIDDING 상태가 아닌 경우
+     * @throws IllegalStateException BIDDING 또는 INSTANT_BUY_PENDING 상태가 아닌 경우
      * @throws IllegalArgumentException winnerId가 null인 경우
      */
     public void close(Long winnerId) {
-        if (this.status != AuctionStatus.BIDDING) {
-            throw new IllegalStateException("BIDDING 상태에서만 종료 가능합니다. 현재 상태: " + this.status);
+        if (this.status != AuctionStatus.BIDDING && this.status != AuctionStatus.INSTANT_BUY_PENDING) {
+            throw new IllegalStateException("BIDDING 또는 INSTANT_BUY_PENDING 상태에서만 종료 가능합니다. 현재 상태: " + this.status);
         }
         if (winnerId == null) {
             throw new IllegalArgumentException("낙찰자 ID는 null일 수 없습니다. 낙찰자가 없으면 fail()을 호출하세요.");
@@ -300,11 +304,13 @@ public class Auction {
      * 경매를 유찰 처리한다
      * 입찰자가 없거나 2순위 승계 조건 미충족 시 사용
      *
-     * @throws IllegalStateException BIDDING 또는 ENDED 상태가 아닌 경우
+     * @throws IllegalStateException BIDDING, INSTANT_BUY_PENDING 또는 ENDED 상태가 아닌 경우
      */
     public void fail() {
-        if (this.status != AuctionStatus.BIDDING && this.status != AuctionStatus.ENDED) {
-            throw new IllegalStateException("BIDDING 또는 ENDED 상태에서만 유찰 처리 가능합니다. 현재 상태: " + this.status);
+        if (this.status != AuctionStatus.BIDDING
+                && this.status != AuctionStatus.INSTANT_BUY_PENDING
+                && this.status != AuctionStatus.ENDED) {
+            throw new IllegalStateException("BIDDING, INSTANT_BUY_PENDING 또는 ENDED 상태에서만 유찰 처리 가능합니다. 현재 상태: " + this.status);
         }
         this.status = AuctionStatus.FAILED;
         this.actualEndTime = LocalDateTime.now();

@@ -29,11 +29,12 @@ public class BidAsyncService {
      * DB 영속화 (비동기)
      * 경매 상태 업데이트 + 입찰 이력 저장 + 이벤트 발행
      *
-     * @param auctionId 경매 ID
-     * @param bidderId 입찰자 ID
-     * @param bidAmount 입찰 금액
-     * @param bidType 입찰 유형
-     * @param result Lua 스크립트 실행 결과
+     * @param auctionId     경매 ID
+     * @param bidderId      입찰자 ID
+     * @param bidAmount     입찰 금액
+     * @param bidType       입찰 유형
+     * @param result        Lua 스크립트 실행 결과
+     * @param currentTimeMs 입찰 처리 시간 (밀리초, 즉시 구매 활성화 시간으로 사용)
      */
     @Async("bidAsyncExecutor")
     @Transactional
@@ -42,16 +43,32 @@ public class BidAsyncService {
             Long bidderId,
             Long bidAmount,
             BidType bidType,
-            BidResult result
+            BidResult result,
+            Long currentTimeMs
     ) {
         try {
-            // 1. 경매 상태 업데이트
-            auctionRepository.updateCurrentPrice(
-                    auctionId,
-                    result.newCurrentPrice(),
-                    result.newTotalBidCount(),
-                    result.newBidIncrement()
-            );
+            // 1. 경매 상태 업데이트 (즉시 구매 여부에 따라 분기)
+            if (Boolean.TRUE.equals(result.instantBuyActivated())) {
+                // 즉시 구매 활성화: 상태 + 즉시 구매 정보 업데이트
+                auctionRepository.updateInstantBuyActivated(
+                        auctionId,
+                        result.newCurrentPrice(),
+                        result.newTotalBidCount(),
+                        result.newBidIncrement(),
+                        bidderId,                       // 즉시 구매 요청자
+                        currentTimeMs,                  // 즉시 구매 활성화 시간
+                        result.scheduledEndTimeMs()     // 새 종료 시간 (현재 + 1시간)
+                );
+                log.info("즉시 구매 활성화 DB 동기화: auctionId={}, instantBuyerId={}", auctionId, bidderId);
+            } else {
+                // 일반 입찰: 현재가/입찰수/입찰단위만 업데이트
+                auctionRepository.updateCurrentPrice(
+                        auctionId,
+                        result.newCurrentPrice(),
+                        result.newTotalBidCount(),
+                        result.newBidIncrement()
+                );
+            }
 
             // 2. 입찰 이력 저장
             Bid bid = Bid.create(auctionId, bidderId, bidAmount, bidType);

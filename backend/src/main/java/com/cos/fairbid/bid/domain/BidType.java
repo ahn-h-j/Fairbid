@@ -1,6 +1,7 @@
 package com.cos.fairbid.bid.domain;
 
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.bid.domain.exception.InstantBuyException;
 import com.cos.fairbid.bid.domain.exception.InvalidBidException;
 
 /**
@@ -29,6 +30,21 @@ public enum BidType {
                 throw InvalidBidException.amountRequiredForDirectBid();
             }
             return requestedAmount;
+        }
+    },
+
+    /**
+     * 즉시 구매 - 판매자가 설정한 즉시 구매가로 입찰
+     * 즉시 구매 발생 시 1시간 최종 입찰 기회 제공
+     */
+    INSTANT_BUY {
+        @Override
+        public Long calculateAmount(Long requestedAmount, Auction auction) {
+            Long instantBuyPrice = auction.getInstantBuyPrice();
+            if (instantBuyPrice == null) {
+                throw InstantBuyException.notAvailable(auction.getId());
+            }
+            return instantBuyPrice;
         }
     };
 
