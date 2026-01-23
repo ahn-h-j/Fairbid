@@ -1,0 +1,80 @@
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import UserSelector from './UserSelector';
+
+/**
+ * 앱 전체 레이아웃 컴포넌트
+ * 글래스 모피즘 헤더 + 그라데이션 배경 + 메인 콘텐츠 영역
+ */
+export default function Layout() {
+  const location = useLocation();
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc]">
+      {/* 배경 장식 */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-gradient-to-br from-blue-100/40 to-violet-100/40 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -left-40 w-[400px] h-[400px] bg-gradient-to-br from-blue-50/50 to-cyan-50/50 rounded-full blur-3xl" />
+      </div>
+
+      {/* 헤더 */}
+      <header className="sticky top-0 z-50 glass border-b border-white/60" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-8" style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left, 0px))', paddingRight: 'max(1.25rem, env(safe-area-inset-right, 0px))' }}>
+          <div className="flex items-center justify-between h-[56px] sm:h-[64px]">
+            {/* 로고 */}
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="relative w-9 h-9 bg-gradient-to-br from-blue-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow duration-300">
+                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[17px] font-extrabold gradient-text leading-tight tracking-tight">FairBid</span>
+                <span className="hidden sm:block text-[10px] text-gray-400 font-medium tracking-wide">호구 없는 경매</span>
+              </div>
+            </Link>
+
+            {/* 네비게이션 */}
+            <nav className="flex items-center gap-1">
+              <Link
+                to="/"
+                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-all duration-200 ${
+                  isActive('/')
+                    ? 'text-blue-600 bg-blue-50/80'
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
+                }`}
+              >
+                {isActive('/') && (
+                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-blue-500 rounded-full" />
+                )}
+                <span className="hidden sm:inline">경매 </span>목록
+              </Link>
+              <Link
+                to="/auctions/create"
+                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-all duration-200 ${
+                  isActive('/auctions/create')
+                    ? 'text-blue-600 bg-blue-50/80'
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
+                }`}
+              >
+                {isActive('/auctions/create') && (
+                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-blue-500 rounded-full" />
+                )}
+                <span className="hidden sm:inline">경매 </span>등록
+              </Link>
+              <div className="hidden sm:flex items-center border-l border-gray-200/60 pl-3 ml-2">
+                <UserSelector />
+              </div>
+            </nav>
+          </div>
+        </div>
+      </header>
+
+      {/* 메인 콘텐츠 */}
+      <main className="max-w-6xl mx-auto px-5 sm:px-8 py-8">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

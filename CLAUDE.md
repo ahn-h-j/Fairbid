@@ -58,6 +58,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 아키텍처: `/docs/architecture.md`
 - 코딩 컨벤션: `/docs/convention.md`
 - 테스트 전략: `/docs/testing.md`
+- 프론트엔드 가이드라인: `/docs/frontend-guidelines.md`
 
 ---
 
@@ -78,6 +79,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Redis
 - Redis Pub/Sub
 - Redis Stream
+
+### Frontend
+- React 18+ (Vite)
+- Tailwind CSS v4
+- React Router v6
+- SWR (서버 상태 관리)
+- SockJS + @stomp/stompjs (WebSocket)
 
 ### Infra
 - Docker
@@ -105,6 +113,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Docker (requires .env file with DB credentials)
 docker-compose up -d
+
+# Frontend (frontend/ 디렉토리에서 실행)
+cd frontend && npm install
+cd frontend && npm run dev      # 개발 서버 (port 3000)
+cd frontend && npm run build    # 프로덕션 빌드
 ```
 
 ---
