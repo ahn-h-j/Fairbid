@@ -62,6 +62,11 @@
 - **해결**: User 도메인에서 경고 시스템 구현
 - **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
 
+### useInfiniteScroll getCursor 주입 가능하게 변경
+- **파일**: `frontend/src/hooks/useInfiniteScroll.js`
+- **내용**: `id || auctionId` 하드코딩으로 다른 엔티티에서 재사용 어려움. `getCursor` 함수를 인자로 주입받도록 변경
+- **조건**: 현재 2곳(auctions, bids)에서만 사용하며 둘 다 id/auctionId로 충분. 확장 필요 시 적용 (PR #43 리뷰 보류 항목)
+
 ### Error Boundary 추가
 - **파일**: `frontend/src/App.jsx`
 - **내용**: 렌더링 에러 발생 시 전체 앱 크래시 방지를 위한 ErrorBoundary 컴포넌트 추가

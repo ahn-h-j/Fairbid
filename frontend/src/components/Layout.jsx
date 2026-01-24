@@ -1,14 +1,20 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import UserSelector from './UserSelector';
+import { useAuth, AUTH_STATE } from '../contexts/AuthContext';
+import UserDropdown from './UserDropdown';
 
 /**
  * 앱 전체 레이아웃 컴포넌트
  * 글래스 모피즘 헤더 + 그라데이션 배경 + 메인 콘텐츠 영역
+ * 인증 상태에 따라 헤더 우측 UI가 변경된다.
  */
 export default function Layout() {
   const location = useLocation();
+  const { authState } = useAuth();
 
   const isActive = (path) => location.pathname === path;
+
+  const isLoggedIn =
+    authState === AUTH_STATE.AUTHENTICATED || authState === AUTH_STATE.ONBOARDING_REQUIRED;
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -39,7 +45,7 @@ export default function Layout() {
             <nav className="flex items-center gap-1">
               <Link
                 to="/"
-                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-all duration-200 ${
+                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
                   isActive('/')
                     ? 'text-blue-600 bg-blue-50/80'
                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
@@ -52,7 +58,7 @@ export default function Layout() {
               </Link>
               <Link
                 to="/auctions/create"
-                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-all duration-200 ${
+                className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
                   isActive('/auctions/create')
                     ? 'text-blue-600 bg-blue-50/80'
                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
@@ -63,8 +69,25 @@ export default function Layout() {
                 )}
                 <span className="hidden sm:inline">경매 </span>등록
               </Link>
-              <div className="hidden sm:flex items-center border-l border-gray-200/60 pl-3 ml-2">
-                <UserSelector />
+
+              {/* 인증 영역: 로그인 상태에 따라 분기 */}
+              <div className="flex items-center border-l border-gray-200/60 pl-3 ml-2">
+                {authState === AUTH_STATE.LOADING ? (
+                  /* 로딩 중에는 빈 공간 (깜빡임 방지) */
+                  <div className="w-16 h-8" />
+                ) : isLoggedIn ? (
+                  /* 로그인 상태: 닉네임 드롭다운 */
+                  <UserDropdown />
+                ) : (
+                  /* 비로그인 상태: 로그인 버튼 */
+                  <Link
+                    to="/login"
+                    state={{ from: location.pathname + location.search + location.hash }}
+                    className="text-[13px] font-semibold px-4 py-2 text-white bg-gradient-to-r from-blue-500 to-violet-600 rounded-xl shadow-sm shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow duration-200"
+                  >
+                    로그인
+                  </Link>
+                )}
               </div>
             </nav>
           </div>
