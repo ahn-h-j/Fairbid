@@ -4,6 +4,8 @@ import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import lombok.Builder;
 
+import java.time.LocalDateTime;
+
 /**
  * 경매 목록 응답 DTO
  * 목록 조회용 간단한 정보만 포함
@@ -14,8 +16,10 @@ public record AuctionListResponse(
         String title,
         String thumbnailUrl,
         Long currentPrice,
+        Long startPrice,
         Integer totalBidCount,
-        AuctionStatus status
+        AuctionStatus status,
+        LocalDateTime scheduledEndTime
 ) {
     /**
      * Domain → Response DTO 변환
@@ -29,8 +33,10 @@ public record AuctionListResponse(
                 .title(auction.getTitle())
                 .thumbnailUrl(extractThumbnail(auction))
                 .currentPrice(auction.getCurrentPrice())
+                .startPrice(auction.getStartPrice())
                 .totalBidCount(auction.getTotalBidCount())
                 .status(auction.getStatus())
+                .scheduledEndTime(auction.getScheduledEndTime())
                 .build();
     }
 

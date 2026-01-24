@@ -60,6 +60,10 @@ public class TestController {
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(newEndTimeMs));
         auctionCachePort.addToClosingQueue(auctionId, newEndTimeMs);
 
+        // 3. RDB도 함께 업데이트 (목록 조회 시 정확한 시간 표시를 위해)
+        auction.updateScheduledEndTime(newEndTime);
+        auctionRepository.save(auction);
+
         log.info("[TEST] 경매 종료 시간 변경: auctionId={}, newEndTime={}", auctionId, newEndTime);
 
         return ResponseEntity.ok(ApiResponse.success(Map.of(
@@ -96,6 +100,10 @@ public class TestController {
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(newEndTimeMs));
         auctionCachePort.addToClosingQueue(auctionId, newEndTimeMs);
 
+        // 3. RDB도 함께 업데이트 (목록 조회 시 정확한 시간 표시를 위해)
+        auction.updateScheduledEndTime(newEndTime);
+        auctionRepository.save(auction);
+
         log.info("[TEST] 경매 종료 시간 변경: auctionId={}, newEndTime={}, seconds={}", auctionId, newEndTime, seconds);
 
         return ResponseEntity.ok(ApiResponse.success(Map.of(
@@ -131,7 +139,11 @@ public class TestController {
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(pastTimeMs));
         auctionCachePort.addToClosingQueue(auctionId, pastTimeMs);
 
-        // 3. 스케줄러 즉시 실행
+        // 3. RDB도 함께 업데이트
+        auction.updateScheduledEndTime(pastTime);
+        auctionRepository.save(auction);
+
+        // 4. 스케줄러 즉시 실행
         closeAuctionUseCase.closeExpiredAuctions();
 
         log.info("[TEST] 경매 강제 종료: auctionId={}", auctionId);

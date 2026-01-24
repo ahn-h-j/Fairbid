@@ -332,6 +332,16 @@ public class Auction {
     }
 
     /**
+     * 종료 시간을 변경한다 (테스트용)
+     *
+     * @param newEndTime 새로운 종료 시간
+     */
+    public void updateScheduledEndTime(LocalDateTime newEndTime) {
+        this.scheduledEndTime = newEndTime;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
      * 종료 시간이 도래했는지 확인한다
      *
      * @return 종료 시간이 지났으면 true

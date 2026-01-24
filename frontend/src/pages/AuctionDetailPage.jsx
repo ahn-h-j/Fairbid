@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuction } from '../api/useAuction';
 import { placeBid } from '../api/mutations';
+import { apiRequest } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import Timer from '../components/Timer';
 import StatusBadge from '../components/StatusBadge';
@@ -305,6 +306,94 @@ export default function AuctionDetailPage() {
           <p className="text-gray-600 font-semibold text-[15px]">이 경매는 종료되었습니다</p>
         </div>
       )}
+      {/* 테스트 도구 */}
+      <TestTools auctionId={auctionId} mutate={mutate} />
+    </div>
+  );
+}
+
+/** 테스트 도구 패널 (개발용) */
+function TestTools({ auctionId, mutate }) {
+  const [seconds, setSeconds] = useState(300);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testMessage, setTestMessage] = useState(null);
+
+  const callTestApi = async (endpoint) => {
+    setTestLoading(true);
+    setTestMessage(null);
+    try {
+      const result = await apiRequest(endpoint, { method: 'POST' });
+      setTestMessage({ type: 'success', message: result.message });
+      mutate(); // 데이터 재조회
+    } catch (err) {
+      setTestMessage({ type: 'error', message: err.message });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-amber-50/50 rounded-2xl p-5 ring-1 ring-amber-200/60">
+      <h3 className="text-[13px] font-bold text-amber-800 flex items-center gap-2 mb-3">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        테스트 도구
+      </h3>
+
+      {testMessage ? (
+        <div className={`mb-3 px-3 py-2 rounded-lg text-[12px] font-medium ${
+          testMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        }`}>
+          {testMessage.message}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => callTestApi(`/test/auctions/${auctionId}/set-ending-soon`)}
+          disabled={testLoading}
+          className="px-3 py-2.5 bg-white text-amber-800 text-[12px] font-semibold rounded-xl ring-1 ring-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-colors btn-press"
+        >
+          5분 후 마감
+        </button>
+        <button
+          type="button"
+          onClick={() => callTestApi(`/test/auctions/${auctionId}/force-close`)}
+          disabled={testLoading}
+          className="px-3 py-2.5 bg-white text-red-700 text-[12px] font-semibold rounded-xl ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors btn-press"
+        >
+          강제 종료
+        </button>
+        <button
+          type="button"
+          onClick={() => callTestApi(`/test/auctions/${auctionId}/refresh-cache`)}
+          disabled={testLoading}
+          className="px-3 py-2.5 bg-white text-blue-700 text-[12px] font-semibold rounded-xl ring-1 ring-blue-200 hover:bg-blue-50 disabled:opacity-50 transition-colors btn-press"
+        >
+          캐시 새로고침
+        </button>
+        <div className="flex gap-1.5">
+          <input
+            type="number"
+            value={seconds}
+            onChange={(e) => setSeconds(parseInt(e.target.value, 10) || 0)}
+            className="w-16 px-2 py-2.5 bg-white text-[12px] text-center rounded-xl ring-1 ring-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            min={1}
+            aria-label="종료까지 초"
+          />
+          <button
+            type="button"
+            onClick={() => callTestApi(`/test/auctions/${auctionId}/set-end-time?seconds=${seconds}`)}
+            disabled={testLoading}
+            className="flex-1 px-2 py-2.5 bg-white text-amber-800 text-[12px] font-semibold rounded-xl ring-1 ring-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-colors btn-press"
+          >
+            {seconds}초 후
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

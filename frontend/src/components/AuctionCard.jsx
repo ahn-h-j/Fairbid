@@ -17,9 +17,11 @@ export default function AuctionCard({ auction }) {
     totalBidCount,
     scheduledEndTime,
     imageUrls,
+    thumbnailUrl: rawThumbnailUrl,
   } = auction;
 
-  const thumbnailUrl = imageUrls?.[0];
+  // 목록 API는 thumbnailUrl(문자열), 상세 API는 imageUrls(배열) 반환
+  const thumbnailUrl = imageUrls?.[0] ?? rawThumbnailUrl;
 
   // 마감 임박 여부: 진행중이고 종료까지 10분 이내
   const isClosingSoon = (() => {
