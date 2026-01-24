@@ -81,9 +81,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Redis Stream
 
 ### Frontend
-- React 18+ (Vite)
+- React 19 (Vite)
 - Tailwind CSS v4
-- React Router v6
+- React Router v7
 - SWR (서버 상태 관리)
 - SockJS + @stomp/stompjs (WebSocket)
 

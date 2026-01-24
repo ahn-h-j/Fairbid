@@ -66,7 +66,13 @@ export async function apiRequest(endpoint, options = {}) {
     },
   };
 
-  const response = await fetch(url, config);
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (err) {
+    throw new ApiError('NETWORK_ERROR', `네트워크 오류가 발생했습니다: ${err.message}`);
+  }
+
   let data;
   try {
     data = await response.json();

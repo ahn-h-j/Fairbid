@@ -62,6 +62,16 @@
 - **해결**: User 도메인에서 경고 시스템 구현
 - **조건**: User 도메인 모킹 해제 후 (PR #21 리뷰 보류 항목)
 
+### Error Boundary 추가
+- **파일**: `frontend/src/App.jsx`
+- **내용**: 렌더링 에러 발생 시 전체 앱 크래시 방지를 위한 ErrorBoundary 컴포넌트 추가
+- **조건**: 프로덕션 배포 전 (PR #38 리뷰 보류 항목)
+
+### PWA 아이콘 파일 생성
+- **파일**: `frontend/public/icons/icon-192.png`, `frontend/public/icons/icon-512.png`
+- **내용**: manifest.json에서 참조하는 PWA 아이콘 에셋 생성 (192x192, 512x512)
+- **조건**: 디자인 확정 후, favicon.svg 기반 PNG 변환 필요 (수동 작업) (PR #38 리뷰 보류 항목)
+
 ### RedisConfig 설정 클래스 추가
 - **파일**: `common/config/RedisConfig.java`
 - **내용**: Spring Boot 자동 설정 대신 명시적 Redis 설정 (직렬화, 커넥션 팩토리 등)

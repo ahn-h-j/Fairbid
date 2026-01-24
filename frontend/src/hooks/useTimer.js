@@ -26,6 +26,10 @@ export function useTimer(endTimeStr) {
     }
 
     const endTime = new Date(endTimeStr).getTime();
+    if (Number.isNaN(endTime)) {
+      return { hours: 0, minutes: 0, seconds: 0, totalSeconds: 0, isExpired: true };
+    }
+
     const now = getServerTime().getTime();
     const diff = endTime - now;
 

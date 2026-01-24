@@ -197,7 +197,7 @@ export default function AuctionDetailPage() {
         <div className="relative text-center pt-5 border-t border-gray-100">
           <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">현재가</p>
           <p className="text-3xl sm:text-4xl font-extrabold text-gray-900 tabular-nums tracking-tight">
-            {formatPrice(auction.currentPrice || auction.startPrice)}
+            {formatPrice(auction.currentPrice ?? auction.startPrice)}
           </p>
         </div>
       </div>

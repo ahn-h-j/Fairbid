@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import StatusBadge from './StatusBadge';
-import Timer from './Timer';
 import { formatPrice } from '../utils/formatters';
+import { getServerTime } from '../api/client';
 
 /**
  * 경매 목록 카드 컴포넌트
@@ -20,7 +20,16 @@ export default function AuctionCard({ auction }) {
   } = auction;
 
   const thumbnailUrl = imageUrls?.[0];
-  const isBidding = status === 'BIDDING';
+
+  // 마감 임박 여부: 진행중이고 종료까지 10분 이내
+  const isClosingSoon = (() => {
+    if (status !== 'BIDDING' && status !== 'INSTANT_BUY_PENDING') return false;
+    if (!scheduledEndTime) return false;
+    const endTime = new Date(scheduledEndTime).getTime();
+    if (Number.isNaN(endTime)) return false;
+    const remaining = endTime - getServerTime().getTime();
+    return remaining > 0 && remaining <= 10 * 60 * 1000;
+  })();
 
   return (
     <Link
@@ -54,10 +63,15 @@ export default function AuctionCard({ auction }) {
           <StatusBadge status={status} />
         </div>
 
-        {/* 타이머 오버레이 (진행중일 때만) */}
-        {isBidding ? (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pt-8 pb-2.5 px-3.5">
-            <Timer endTime={scheduledEndTime} compact />
+        {/* 마감 임박 뱃지 (종료 10분 이내) */}
+        {isClosingSoon ? (
+          <div className="absolute bottom-3 right-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-500/90 text-white text-[11px] font-bold rounded-lg shadow-sm backdrop-blur-sm">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              마감 임박
+            </span>
           </div>
         ) : null}
       </div>
@@ -74,7 +88,7 @@ export default function AuctionCard({ auction }) {
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">현재가</p>
             <p className="text-[17px] font-bold text-gray-900 tabular-nums leading-tight">
-              {formatPrice(currentPrice || startPrice)}
+              {formatPrice(currentPrice ?? startPrice)}
             </p>
           </div>
           {(totalBidCount > 0) ? (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuctions } from '../api/useAuctions';
 import AuctionCard from '../components/AuctionCard';
@@ -12,7 +12,13 @@ import { CATEGORIES, STATUSES } from '../utils/constants';
  */
 export default function AuctionListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchInput, setSearchInput] = useState(searchParams.get('keyword') || '');
+  const keywordParam = searchParams.get('keyword') || '';
+  const [searchInput, setSearchInput] = useState(keywordParam);
+
+  // 뒤로가기/앞으로가기 시 입력값을 URL keyword와 동기화
+  useEffect(() => {
+    setSearchInput(keywordParam);
+  }, [keywordParam]);
 
   const params = {
     keyword: searchParams.get('keyword') || '',
