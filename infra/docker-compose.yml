@@ -1,0 +1,30 @@
+services:
+  terraform:
+    image: hashicorp/terraform:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=ap-northeast-2
+
+  # EC2만 내리기 (Hosted Zone 유지, 네임서버 안 바뀜)
+  destroy-ec2:
+    image: hashicorp/terraform:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=ap-northeast-2
+    command:
+      - destroy
+      - -target=aws_instance.fairbid
+      - -target=aws_security_group.fairbid
+      - -target=aws_key_pair.fairbid
+      - -target=aws_route53_record.root
+      - -target=aws_route53_record.www
+      - -target=aws_route53_record.api
+      - -auto-approve
