@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.springframework.data.domain.Pageable;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -43,6 +45,27 @@ public interface JpaAuctionRepository extends JpaRepository<AuctionEntity, Long>
             @Param("currentPrice") Long currentPrice,
             @Param("totalBidCount") Integer totalBidCount,
             @Param("bidIncrement") Long bidIncrement
+    );
+
+    /**
+     * 판매자의 경매 목록을 커서 기반으로 조회한다.
+     * 마이페이지 내 판매 목록에서 사용한다.
+     *
+     * @param sellerId 판매자 ID
+     * @param status   필터링할 경매 상태 (null이면 전체)
+     * @param cursor   커서 (이전 페이지의 마지막 경매 ID, null이면 처음부터)
+     * @param pageable 페이지 크기 지정용
+     * @return 경매 엔티티 목록
+     */
+    @Query("SELECT a FROM AuctionEntity a WHERE a.sellerId = :sellerId " +
+            "AND (:status IS NULL OR a.status = :status) " +
+            "AND (:cursor IS NULL OR a.id < :cursor) " +
+            "ORDER BY a.id DESC")
+    List<AuctionEntity> findBySellerIdWithCursor(
+            @Param("sellerId") Long sellerId,
+            @Param("status") AuctionStatus status,
+            @Param("cursor") Long cursor,
+            Pageable pageable
     );
 
     /**
