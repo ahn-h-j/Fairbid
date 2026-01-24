@@ -31,13 +31,13 @@ resource "aws_security_group" "fairbid" {
   name        = "fairbid-sg"
   description = "FairBid EC2 Security Group"
 
-  # SSH - 본인 IP만 허용
+  # SSH - CD 파이프라인(GitHub Actions)에서 접근 필요하므로 전체 허용
   ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # HTTP
