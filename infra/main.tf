@@ -21,7 +21,7 @@ data "aws_ami" "ubuntu" {
 # =============================================================================
 resource "aws_key_pair" "fairbid" {
   key_name   = var.key_name
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDm1vP7gHHLSGAU/kEJMf5Lj5yAe1qJff1tUfrM/h/DLXnlQkdqqSqmwv+jzFs4bqGky0Q5CE/wSzL9ETQJtNR1++ibKKdNRmIs3EIb/M71ujp5LyIYVcMuMHU0rBqUu0X6XOmhak5QfQ6Am4McYz9fYjp417FTfjC6/HCJ9nTl3JDrwiLtMtT1uY1m7iziMiQVL7jGwrIaCWp8Pa1R8dcLURrwn/ngZT9uWU49MpzKFVoz20HOzEc1PsVzdNy6wWG1TtR8j9sn4tYzOQDMl+ohw+j/nDAWfCaM9tK/dCo2BPixbfcBpepQ1VXSsnfdtbzozjhdCLsZyGuSFIg2jb0N"
+  public_key = var.public_key
 }
 
 # =============================================================================
@@ -58,13 +58,13 @@ resource "aws_security_group" "fairbid" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Spring Boot API (Nginx 프록시 전 직접 접근용, 필요 시 제거 가능)
+  # Spring Boot API (디버깅용, 본인 IP만 허용)
   ingress {
     description = "Spring Boot API"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.my_ip]
   }
 
   # Outbound 전체 허용

@@ -97,3 +97,12 @@ SSL_SCRIPT
 
 chmod +x /home/ubuntu/setup-ssl.sh
 chown ubuntu:ubuntu /home/ubuntu/setup-ssl.sh
+
+# =============================================================================
+# 설치 검증
+# =============================================================================
+echo "=== 설치 검증 시작 ==="
+docker --version && echo "[OK] Docker 설치 완료" || echo "[FAIL] Docker 설치 실패"
+nginx -t && echo "[OK] Nginx 설정 정상" || echo "[FAIL] Nginx 설정 오류"
+certbot --version && echo "[OK] Certbot 설치 완료" || echo "[FAIL] Certbot 설치 실패"
+echo "=== 설치 검증 완료 ==="

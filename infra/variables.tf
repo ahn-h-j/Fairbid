@@ -30,3 +30,8 @@ variable "my_ip" {
   description = "SSH 접근을 허용할 IP (CIDR 형식, 예: 123.456.789.0/32)"
   type        = string
 }
+
+variable "public_key" {
+  description = "EC2 SSH 접속용 public key (ssh-keygen -y -f key.pem 으로 추출)"
+  type        = string
+}
