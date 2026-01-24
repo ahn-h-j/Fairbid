@@ -7,12 +7,15 @@ import com.cos.fairbid.auth.application.port.in.RefreshTokenUseCase;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 /**
  * 인증 컨트롤러
@@ -30,7 +33,9 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private static final String REFRESH_TOKEN_COOKIE = "refresh_token";
+    private static final String OAUTH_STATE_COOKIE = "oauth_state";
     private static final int REFRESH_TOKEN_MAX_AGE = 14 * 24 * 60 * 60; // 2주 (초)
+    private static final int OAUTH_STATE_MAX_AGE = 300; // 5분 (초)
 
     private final OAuthLoginUseCase oAuthLoginUseCase;
     private final RefreshTokenUseCase refreshTokenUseCase;
@@ -59,14 +64,20 @@ public class AuthController {
 
     /**
      * OAuth Provider 인증 페이지로 리다이렉트한다.
-     * 프론트엔드에서 로그인 버튼 클릭 시 호출된다.
+     * CSRF 방지를 위해 랜덤 state를 생성하고 쿠키에 저장한 후
+     * Authorization URL에 포함하여 전달한다.
      *
      * @param provider OAuth Provider (kakao, naver, google)
      */
     @GetMapping("/oauth2/{provider}")
     public void redirectToProvider(@PathVariable String provider, HttpServletResponse response) throws Exception {
-        OAuthProvider oAuthProvider = OAuthProvider.valueOf(provider.toUpperCase());
-        String authorizationUrl = buildAuthorizationUrl(oAuthProvider);
+        OAuthProvider oAuthProvider = parseProvider(provider);
+
+        // CSRF 방지: 랜덤 state 생성 → 쿠키 저장 → Auth URL에 포함
+        String state = UUID.randomUUID().toString();
+        setOAuthStateCookie(response, state);
+
+        String authorizationUrl = buildAuthorizationUrl(oAuthProvider, state);
         response.sendRedirect(authorizationUrl);
     }
 
@@ -75,14 +86,29 @@ public class AuthController {
      * Provider에서 Authorization Code를 받아 로그인/가입 처리 후
      * Refresh Token을 HttpOnly 쿠키에 설정하고 프론트엔드로 리다이렉트한다.
      *
+     * state 파라미터를 쿠키에 저장된 값과 비교하여 CSRF 공격을 방지한다.
+     *
      * @param provider OAuth Provider (kakao, naver, google)
      * @param code     Authorization Code
+     * @param state    CSRF 방지 state 파라미터
      */
     @GetMapping("/oauth2/callback/{provider}")
     public void handleCallback(@PathVariable String provider,
                                @RequestParam String code,
+                               @RequestParam(required = false) String state,
+                               HttpServletRequest request,
                                HttpServletResponse response) throws Exception {
-        OAuthProvider oAuthProvider = OAuthProvider.valueOf(provider.toUpperCase());
+        OAuthProvider oAuthProvider = parseProvider(provider);
+
+        // CSRF 방지: state 검증
+        String storedState = extractStateCookie(request);
+        if (storedState == null || !storedState.equals(state)) {
+            log.warn("OAuth state 불일치: provider={}", provider);
+            response.sendRedirect(frontendUrl + "/auth/error?reason=invalid_state");
+            return;
+        }
+        // state 쿠키 제거 (일회용)
+        clearOAuthStateCookie(response);
 
         // OAuth 로그인 처리
         OAuthLoginUseCase.LoginResult result = oAuthLoginUseCase.login(oAuthProvider, code);
@@ -118,10 +144,7 @@ public class AuthController {
         setRefreshTokenCookie(response, result.newRefreshToken());
 
         // Access Token + onboarded 정보 응답
-        // onboarded 판단은 Access Token 내 클레임에서 추출 가능하지만,
-        // 최초 콜백 시에는 SecurityContext가 없으므로 별도로 제공하지 않음
-        // → 프론트는 Access Token 디코딩으로 판단
-        return ResponseEntity.ok(new TokenResponse(result.accessToken(), true));
+        return ResponseEntity.ok(new TokenResponse(result.accessToken(), result.onboarded()));
     }
 
     /**
@@ -143,12 +166,6 @@ public class AuthController {
      * Refresh Token을 HttpOnly, Secure, SameSite=Strict 쿠키에 설정한다.
      */
     private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
-        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE, refreshToken);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/api/v1/auth");
-        cookie.setMaxAge(REFRESH_TOKEN_MAX_AGE);
-        // SameSite=Strict는 Cookie API로 직접 설정 불가, 헤더로 추가
         response.addHeader("Set-Cookie",
                 REFRESH_TOKEN_COOKIE + "=" + refreshToken
                         + "; Path=/api/v1/auth"
@@ -172,24 +189,94 @@ public class AuthController {
     }
 
     /**
-     * OAuth Provider별 인증 URL을 생성한다.
+     * OAuth state를 HttpOnly 쿠키에 저장한다. (CSRF 방지)
+     * 짧은 TTL(5분)로 설정하여 만료된 state를 자동 제거한다.
      */
-    private String buildAuthorizationUrl(OAuthProvider provider) {
+    private void setOAuthStateCookie(HttpServletResponse response, String state) {
+        response.addHeader("Set-Cookie",
+                OAUTH_STATE_COOKIE + "=" + state
+                        + "; Path=/api/v1/auth/oauth2"
+                        + "; Max-Age=" + OAUTH_STATE_MAX_AGE
+                        + "; HttpOnly"
+                        + "; Secure"
+                        + "; SameSite=Lax");
+    }
+
+    /**
+     * OAuth state 쿠키를 제거한다.
+     */
+    private void clearOAuthStateCookie(HttpServletResponse response) {
+        response.addHeader("Set-Cookie",
+                OAUTH_STATE_COOKIE + "="
+                        + "; Path=/api/v1/auth/oauth2"
+                        + "; Max-Age=0"
+                        + "; HttpOnly"
+                        + "; Secure"
+                        + "; SameSite=Lax");
+    }
+
+    /**
+     * 요청의 쿠키에서 OAuth state 값을 추출한다.
+     *
+     * @param request HTTP 요청
+     * @return state 값 (없으면 null)
+     */
+    private String extractStateCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (Cookie cookie : cookies) {
+            if (OAUTH_STATE_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * provider 문자열을 OAuthProvider enum으로 파싱한다.
+     * 유효하지 않은 provider면 IllegalArgumentException을 던진다.
+     *
+     * @param provider 소문자 provider 문자열
+     * @return OAuthProvider enum 값
+     * @throws IllegalArgumentException 지원하지 않는 provider
+     */
+    private OAuthProvider parseProvider(String provider) {
+        try {
+            return OAuthProvider.valueOf(provider.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("지원하지 않는 OAuth Provider입니다: " + provider);
+        }
+    }
+
+    /**
+     * OAuth Provider별 인증 URL을 생성한다.
+     * CSRF 방지를 위해 state 파라미터를 포함한다.
+     *
+     * @param provider OAuthProvider enum
+     * @param state    CSRF 방지 state 값
+     * @return 인증 URL
+     */
+    private String buildAuthorizationUrl(OAuthProvider provider, String state) {
         return switch (provider) {
             case KAKAO -> "https://kauth.kakao.com/oauth/authorize"
                     + "?client_id=" + kakaoClientId
                     + "&redirect_uri=" + kakaoRedirectUri
                     + "&response_type=code"
-                    + "&scope=account_email";
+                    + "&scope=account_email"
+                    + "&state=" + state;
             case NAVER -> "https://nid.naver.com/oauth2.0/authorize"
                     + "?client_id=" + naverClientId
                     + "&redirect_uri=" + naverRedirectUri
-                    + "&response_type=code";
+                    + "&response_type=code"
+                    + "&state=" + state;
             case GOOGLE -> "https://accounts.google.com/o/oauth2/v2/auth"
                     + "?client_id=" + googleClientId
                     + "&redirect_uri=" + googleRedirectUri
                     + "&response_type=code"
-                    + "&scope=email profile";
+                    + "&scope=email profile"
+                    + "&state=" + state;
         };
     }
 }

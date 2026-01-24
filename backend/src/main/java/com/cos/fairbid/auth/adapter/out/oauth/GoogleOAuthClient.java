@@ -4,6 +4,7 @@ import com.cos.fairbid.auth.domain.exception.OAuthEmailRequiredException;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -17,13 +18,6 @@ import java.util.Map;
  * 인증 흐름:
  * 1. Authorization Code → Access Token 교환 (POST https://oauth2.googleapis.com/token)
  * 2. Access Token → 사용자 정보 조회 (GET https://www.googleapis.com/oauth2/v2/userinfo)
- *
- * 구글 응답 구조:
- * {
- *   "id": "123456789",
- *   "email": "user@gmail.com",
- *   "verified_email": true
- * }
  */
 @Slf4j
 @Component
@@ -36,7 +30,10 @@ public class GoogleOAuthClient {
     private final OAuthProperties oAuthProperties;
 
     public GoogleOAuthClient(OAuthProperties oAuthProperties) {
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
         this.oAuthProperties = oAuthProperties;
     }
 
@@ -58,15 +55,23 @@ public class GoogleOAuthClient {
                 .retrieve()
                 .body(Map.class);
 
+        if (response == null) {
+            throw new IllegalStateException("구글 사용자 정보 응답이 비어있습니다.");
+        }
+
         // 3. 응답에서 이메일, providerId 추출
         String providerId = (String) response.get("id");
         String email = (String) response.get("email");
+
+        if (providerId == null || providerId.isBlank()) {
+            throw new IllegalStateException("구글 사용자 ID를 추출할 수 없습니다.");
+        }
 
         if (email == null || email.isBlank()) {
             throw OAuthEmailRequiredException.from("GOOGLE");
         }
 
-        log.debug("구글 로그인 성공: providerId={}, email={}", providerId, email);
+        log.debug("구글 로그인 성공: providerId={}", providerId);
         return new OAuthUserInfo(email, providerId, OAuthProvider.GOOGLE);
     }
 
@@ -90,6 +95,11 @@ public class GoogleOAuthClient {
                 .body(params)
                 .retrieve()
                 .body(Map.class);
+
+        if (response == null || response.get("access_token") == null) {
+            String error = response != null ? String.valueOf(response.get("error")) : "null response";
+            throw new IllegalStateException("구글 Access Token 발급 실패: " + error);
+        }
 
         return (String) response.get("access_token");
     }

@@ -4,6 +4,7 @@ import com.cos.fairbid.auth.domain.exception.OAuthEmailRequiredException;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -17,15 +18,6 @@ import java.util.Map;
  * 인증 흐름:
  * 1. Authorization Code → Access Token 교환 (POST https://kauth.kakao.com/oauth/token)
  * 2. Access Token → 사용자 정보 조회 (GET https://kapi.kakao.com/v2/user/me)
- *
- * 카카오 응답 구조:
- * {
- *   "id": 123456789,
- *   "kakao_account": {
- *     "email": "user@example.com",
- *     "is_email_verified": true
- *   }
- * }
  */
 @Slf4j
 @Component
@@ -38,7 +30,10 @@ public class KakaoOAuthClient {
     private final OAuthProperties oAuthProperties;
 
     public KakaoOAuthClient(OAuthProperties oAuthProperties) {
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
         this.oAuthProperties = oAuthProperties;
     }
 
@@ -60,16 +55,28 @@ public class KakaoOAuthClient {
                 .retrieve()
                 .body(Map.class);
 
+        if (response == null) {
+            throw new IllegalStateException("카카오 사용자 정보 응답이 비어있습니다.");
+        }
+
         // 3. 응답에서 이메일, providerId 추출
         String providerId = String.valueOf(response.get("id"));
-        Map<String, Object> kakaoAccount = (Map<String, Object>) response.get("kakao_account");
+        if (providerId == null || "null".equals(providerId)) {
+            throw new IllegalStateException("카카오 사용자 ID를 추출할 수 없습니다.");
+        }
 
+        Object kakaoAccountObj = response.get("kakao_account");
+        if (!(kakaoAccountObj instanceof Map)) {
+            throw OAuthEmailRequiredException.from("KAKAO");
+        }
+
+        Map<String, Object> kakaoAccount = (Map<String, Object>) kakaoAccountObj;
         String email = (String) kakaoAccount.get("email");
         if (email == null || email.isBlank()) {
             throw OAuthEmailRequiredException.from("KAKAO");
         }
 
-        log.debug("카카오 로그인 성공: providerId={}, email={}", providerId, email);
+        log.debug("카카오 로그인 성공: providerId={}", providerId);
         return new OAuthUserInfo(email, providerId, OAuthProvider.KAKAO);
     }
 
@@ -93,6 +100,11 @@ public class KakaoOAuthClient {
                 .body(params)
                 .retrieve()
                 .body(Map.class);
+
+        if (response == null || response.get("access_token") == null) {
+            String error = response != null ? String.valueOf(response.get("error")) : "null response";
+            throw new IllegalStateException("카카오 Access Token 발급 실패: " + error);
+        }
 
         return (String) response.get("access_token");
     }

@@ -21,10 +21,12 @@ public interface RefreshTokenUseCase {
      *
      * @param accessToken     새로운 Access Token
      * @param newRefreshToken 새로운 Refresh Token (Rotation 적용)
+     * @param onboarded       온보딩 완료 여부
      */
     record TokenResult(
             String accessToken,
-            String newRefreshToken
+            String newRefreshToken,
+            boolean onboarded
     ) {
     }
 }

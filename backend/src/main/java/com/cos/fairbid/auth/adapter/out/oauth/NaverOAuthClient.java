@@ -4,6 +4,7 @@ import com.cos.fairbid.auth.domain.exception.OAuthEmailRequiredException;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -17,14 +18,6 @@ import java.util.Map;
  * 인증 흐름:
  * 1. Authorization Code → Access Token 교환 (POST https://nid.naver.com/oauth2.0/token)
  * 2. Access Token → 사용자 정보 조회 (GET https://openapi.naver.com/v1/nid/me)
- *
- * 네이버 응답 구조:
- * {
- *   "response": {
- *     "id": "abc123",
- *     "email": "user@naver.com"
- *   }
- * }
  */
 @Slf4j
 @Component
@@ -37,7 +30,10 @@ public class NaverOAuthClient {
     private final OAuthProperties oAuthProperties;
 
     public NaverOAuthClient(OAuthProperties oAuthProperties) {
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
         this.oAuthProperties = oAuthProperties;
     }
 
@@ -59,16 +55,29 @@ public class NaverOAuthClient {
                 .retrieve()
                 .body(Map.class);
 
+        if (response == null) {
+            throw new IllegalStateException("네이버 사용자 정보 응답이 비어있습니다.");
+        }
+
         // 3. 응답에서 이메일, providerId 추출 (네이버는 response 필드 안에 위치)
-        Map<String, Object> naverResponse = (Map<String, Object>) response.get("response");
+        Object naverResponseObj = response.get("response");
+        if (!(naverResponseObj instanceof Map)) {
+            throw new IllegalStateException("네이버 응답 구조가 예상과 다릅니다.");
+        }
+
+        Map<String, Object> naverResponse = (Map<String, Object>) naverResponseObj;
         String providerId = (String) naverResponse.get("id");
         String email = (String) naverResponse.get("email");
+
+        if (providerId == null || providerId.isBlank()) {
+            throw new IllegalStateException("네이버 사용자 ID를 추출할 수 없습니다.");
+        }
 
         if (email == null || email.isBlank()) {
             throw OAuthEmailRequiredException.from("NAVER");
         }
 
-        log.debug("네이버 로그인 성공: providerId={}, email={}", providerId, email);
+        log.debug("네이버 로그인 성공: providerId={}", providerId);
         return new OAuthUserInfo(email, providerId, OAuthProvider.NAVER);
     }
 
@@ -92,6 +101,11 @@ public class NaverOAuthClient {
                 .body(params)
                 .retrieve()
                 .body(Map.class);
+
+        if (response == null || response.get("access_token") == null) {
+            String error = response != null ? String.valueOf(response.get("error")) : "null response";
+            throw new IllegalStateException("네이버 Access Token 발급 실패: " + error);
+        }
 
         return (String) response.get("access_token");
     }

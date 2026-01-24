@@ -20,8 +20,8 @@ public class User {
     private String phoneNumber;
     private OAuthProvider provider;
     private String providerId;
-    private Integer warningCount;
-    private Boolean isActive;
+    private int warningCount;
+    private boolean isActive;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

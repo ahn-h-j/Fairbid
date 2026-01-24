@@ -1,5 +1,7 @@
 package com.cos.fairbid.auth.infrastructure.security;
 
+import com.cos.fairbid.auth.domain.exception.TokenExpiredException;
+import com.cos.fairbid.auth.domain.exception.TokenInvalidException;
 import com.cos.fairbid.auth.infrastructure.jwt.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -57,9 +59,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
                 log.debug("JWT 인증 성공: userId={}", userId);
-            } catch (Exception e) {
-                // 토큰 유효하지 않은 경우 SecurityContext 비워둠 → 접근 제어에서 처리
+            } catch (TokenExpiredException | TokenInvalidException e) {
+                // JWT 관련 예외: 토큰 만료/무효 → SecurityContext 비워둠
                 log.debug("JWT 인증 실패: {}", e.getMessage());
+            } catch (Exception e) {
+                // 예상치 못한 예외: 로깅 후 통과 (접근 제어에서 처리)
+                log.warn("JWT 처리 중 예상치 못한 오류: {}", e.getMessage());
             }
         }
 

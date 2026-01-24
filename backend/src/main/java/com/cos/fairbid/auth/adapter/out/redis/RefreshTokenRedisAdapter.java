@@ -6,19 +6,23 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Refresh Token Redis 어댑터
- * Redis를 사용하여 Refresh Token을 관리한다.
+ * Redis를 사용하여 Refresh Token을 SHA-256 해시로 관리한다.
  *
  * - Key 형식: refresh:{userId}
- * - Value: Refresh Token 문자열
+ * - Value: Refresh Token의 SHA-256 해시
  * - TTL: Refresh Token 만료 시간과 동일 (2주)
  *
+ * 해시 저장 이유: Redis 유출 시 토큰 직접 사용을 방지한다.
  * 단일 세션 정책: 사용자당 하나의 Refresh Token만 저장된다.
- * 새로운 로그인 시 기존 토큰을 덮어쓰므로 이전 기기는 자동 로그아웃된다.
  */
 @Slf4j
 @Component
@@ -32,7 +36,8 @@ public class RefreshTokenRedisAdapter implements RefreshTokenPort {
     @Override
     public void save(Long userId, String refreshToken, long ttlSeconds) {
         String key = generateKey(userId);
-        redisTemplate.opsForValue().set(key, refreshToken, ttlSeconds, TimeUnit.SECONDS);
+        String hashed = hash(refreshToken);
+        redisTemplate.opsForValue().set(key, hashed, ttlSeconds, TimeUnit.SECONDS);
         log.debug("Refresh Token 저장 완료: userId={}", userId);
     }
 
@@ -53,7 +58,7 @@ public class RefreshTokenRedisAdapter implements RefreshTokenPort {
     @Override
     public boolean matches(Long userId, String refreshToken) {
         return find(userId)
-                .map(stored -> stored.equals(refreshToken))
+                .map(storedHash -> storedHash.equals(hash(refreshToken)))
                 .orElse(false);
     }
 
@@ -65,5 +70,22 @@ public class RefreshTokenRedisAdapter implements RefreshTokenPort {
      */
     private String generateKey(Long userId) {
         return KEY_PREFIX + userId;
+    }
+
+    /**
+     * 토큰을 SHA-256으로 해시한다.
+     * Redis 유출 시 토큰 직접 사용을 방지한다.
+     *
+     * @param token 원본 토큰
+     * @return Base64URL 인코딩된 해시 문자열
+     */
+    private String hash(String token) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(token.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
+        }
     }
 }

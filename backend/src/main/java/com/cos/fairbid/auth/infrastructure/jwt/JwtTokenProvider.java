@@ -31,11 +31,17 @@ public class JwtTokenProvider {
 
     /**
      * Base64로 인코딩된 secret key를 SecretKey 객체로 변환한다.
+     * 잘못된 형식이면 애플리케이션 시작을 차단한다.
      */
     @PostConstruct
     void init() {
-        byte[] keyBytes = Base64.getDecoder().decode(jwtProperties.getSecretKey());
-        this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        String encodedKey = jwtProperties.getSecretKey();
+        try {
+            byte[] keyBytes = Base64.getDecoder().decode(encodedKey);
+            this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("JWT secret-key의 Base64 형식이 올바르지 않습니다.", e);
+        }
     }
 
     /**
@@ -80,8 +86,8 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 토큰을 파싱하여 Claims를 반환한다.
-     * 만료 또는 유효하지 않은 토큰일 경우 적절한 예외를 발생시킨다.
+     * Access Token을 검증하여 Claims를 반환한다.
+     * 만료 시 TokenExpiredException.accessToken()을 던진다.
      *
      * @param token JWT 토큰 문자열
      * @return Claims 객체
@@ -96,7 +102,7 @@ public class JwtTokenProvider {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (ExpiredJwtException e) {
-            log.debug("JWT 토큰 만료: {}", e.getMessage());
+            log.debug("Access Token 만료: {}", e.getMessage());
             throw TokenExpiredException.accessToken();
         } catch (JwtException e) {
             log.debug("JWT 토큰 검증 실패: {}", e.getMessage());
@@ -105,8 +111,33 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 토큰에서 사용자 ID를 추출한다.
-     * subject 클레임을 Long으로 변환하여 반환한다.
+     * Refresh Token을 검증하여 userId를 반환한다.
+     * 만료 시 TokenExpiredException.refreshToken()을 던진다.
+     *
+     * @param token Refresh Token 문자열
+     * @return 사용자 ID
+     * @throws TokenExpiredException  토큰 만료 시 (refreshToken 타입)
+     * @throws TokenInvalidException  토큰 무효 시
+     */
+    public Long getUserIdFromRefreshToken(String token) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+            return Long.parseLong(claims.getSubject());
+        } catch (ExpiredJwtException e) {
+            log.debug("Refresh Token 만료: {}", e.getMessage());
+            throw TokenExpiredException.refreshToken();
+        } catch (JwtException e) {
+            log.debug("Refresh Token 검증 실패: {}", e.getMessage());
+            throw TokenInvalidException.malformed();
+        }
+    }
+
+    /**
+     * Access Token에서 사용자 ID를 추출한다.
      *
      * @param token JWT 토큰 문자열
      * @return 사용자 ID

@@ -26,7 +26,7 @@ public class UserMapper {
                 .provider(user.getProvider())
                 .providerId(user.getProviderId())
                 .warningCount(user.getWarningCount())
-                .isActive(user.getIsActive())
+                .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

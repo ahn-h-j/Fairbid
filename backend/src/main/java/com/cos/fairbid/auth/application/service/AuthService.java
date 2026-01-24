@@ -7,8 +7,6 @@ import com.cos.fairbid.auth.application.port.in.RefreshTokenUseCase;
 import com.cos.fairbid.auth.application.port.out.OAuthClientPort;
 import com.cos.fairbid.auth.application.port.out.RefreshTokenPort;
 import com.cos.fairbid.auth.domain.exception.RefreshTokenReusedException;
-import com.cos.fairbid.auth.domain.exception.TokenExpiredException;
-import com.cos.fairbid.auth.domain.exception.TokenInvalidException;
 import com.cos.fairbid.auth.infrastructure.jwt.JwtTokenProvider;
 import com.cos.fairbid.user.application.port.out.LoadUserPort;
 import com.cos.fairbid.user.application.port.out.SaveUserPort;
@@ -57,7 +55,7 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
     public LoginResult login(OAuthProvider provider, String code) {
         // 1. OAuth Provider에서 사용자 정보 조회
         OAuthUserInfo userInfo = oAuthClientPort.getUserInfo(provider, code);
-        log.info("OAuth 로그인 시도: provider={}, email={}", provider, userInfo.email());
+        log.debug("OAuth 로그인 시도: provider={}, email={}", provider, maskEmail(userInfo.email()));
 
         // 2. 기존 사용자 조회
         boolean isNewUser = false;
@@ -74,7 +72,7 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
 
         // 4. 차단 상태 체크
         if (user.isBlocked()) {
-            if (!user.getIsActive()) {
+            if (!user.isActive()) {
                 throw UserBlockedException.byDeactivation();
             }
             throw UserBlockedException.byWarningCount();
@@ -103,12 +101,7 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
     @Override
     public TokenResult refresh(String refreshToken) {
         // 1. Refresh Token 유효성 검증 + userId 추출
-        Long userId;
-        try {
-            userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
-        } catch (Exception e) {
-            throw TokenInvalidException.malformed();
-        }
+        Long userId = jwtTokenProvider.getUserIdFromRefreshToken(refreshToken);
 
         // 2. Redis에 저장된 토큰과 일치하는지 확인 (Token Rotation 재사용 감지)
         if (!refreshTokenPort.matches(userId, refreshToken)) {
@@ -129,7 +122,7 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
         // 5. Redis 갱신 (Token Rotation: 이전 토큰 무효화)
         refreshTokenPort.save(userId, newRefreshToken, jwtTokenProvider.getRefreshExpirationSeconds());
 
-        return new TokenResult(newAccessToken, newRefreshToken);
+        return new TokenResult(newAccessToken, newRefreshToken, user.isOnboarded());
     }
 
     /**
@@ -140,5 +133,25 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
     public void logout(Long userId) {
         refreshTokenPort.delete(userId);
         log.info("로그아웃 완료: userId={}", userId);
+    }
+
+    /**
+     * 이메일을 마스킹한다. (PII 보호)
+     * 예: "user@example.com" → "u***@example.com"
+     *
+     * @param email 원본 이메일
+     * @return 마스킹된 이메일
+     */
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return "***";
+        }
+        int atIndex = email.indexOf("@");
+        String local = email.substring(0, atIndex);
+        String domain = email.substring(atIndex);
+        if (local.length() <= 1) {
+            return "*" + domain;
+        }
+        return local.charAt(0) + "***" + domain;
     }
 }
