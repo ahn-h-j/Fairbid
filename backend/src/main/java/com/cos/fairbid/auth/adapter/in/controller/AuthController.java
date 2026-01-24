@@ -4,6 +4,7 @@ import com.cos.fairbid.auth.adapter.in.dto.TokenResponse;
 import com.cos.fairbid.auth.application.port.in.LogoutUseCase;
 import com.cos.fairbid.auth.application.port.in.OAuthLoginUseCase;
 import com.cos.fairbid.auth.application.port.in.RefreshTokenUseCase;
+import com.cos.fairbid.auth.infrastructure.security.CookieUtils;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import jakarta.servlet.http.Cookie;
@@ -34,7 +35,6 @@ public class AuthController {
 
     private static final String REFRESH_TOKEN_COOKIE = "refresh_token";
     private static final String OAUTH_STATE_COOKIE = "oauth_state";
-    private static final int REFRESH_TOKEN_MAX_AGE = 14 * 24 * 60 * 60; // 2주 (초)
     private static final int OAUTH_STATE_MAX_AGE = 300; // 5분 (초)
 
     private final OAuthLoginUseCase oAuthLoginUseCase;
@@ -114,7 +114,7 @@ public class AuthController {
         OAuthLoginUseCase.LoginResult result = oAuthLoginUseCase.login(oAuthProvider, code);
 
         // Refresh Token을 HttpOnly 쿠키에 설정
-        setRefreshTokenCookie(response, result.refreshToken());
+        CookieUtils.setRefreshTokenCookie(response, result.refreshToken());
 
         // 프론트엔드 콜백 페이지로 리다이렉트
         // 프론트에서 /auth/callback 로드 → POST /api/v1/auth/refresh 호출 → Access Token 수신
@@ -141,7 +141,7 @@ public class AuthController {
         RefreshTokenUseCase.TokenResult result = refreshTokenUseCase.refresh(refreshToken);
 
         // 새 Refresh Token 쿠키 설정
-        setRefreshTokenCookie(response, result.newRefreshToken());
+        CookieUtils.setRefreshTokenCookie(response, result.newRefreshToken());
 
         // Access Token + onboarded 정보 응답
         return ResponseEntity.ok(new TokenResponse(result.accessToken(), result.onboarded()));
@@ -157,35 +157,9 @@ public class AuthController {
         logoutUseCase.logout(userId);
 
         // Refresh Token 쿠키 제거
-        clearRefreshTokenCookie(response);
+        CookieUtils.clearRefreshTokenCookie(response);
 
         return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Refresh Token을 HttpOnly, Secure, SameSite=Strict 쿠키에 설정한다.
-     */
-    private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
-        response.addHeader("Set-Cookie",
-                REFRESH_TOKEN_COOKIE + "=" + refreshToken
-                        + "; Path=/api/v1/auth"
-                        + "; Max-Age=" + REFRESH_TOKEN_MAX_AGE
-                        + "; HttpOnly"
-                        + "; Secure"
-                        + "; SameSite=Strict");
-    }
-
-    /**
-     * Refresh Token 쿠키를 제거한다.
-     */
-    private void clearRefreshTokenCookie(HttpServletResponse response) {
-        response.addHeader("Set-Cookie",
-                REFRESH_TOKEN_COOKIE + "="
-                        + "; Path=/api/v1/auth"
-                        + "; Max-Age=0"
-                        + "; HttpOnly"
-                        + "; Secure"
-                        + "; SameSite=Strict");
     }
 
     /**
