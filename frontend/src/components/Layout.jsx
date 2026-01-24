@@ -82,7 +82,7 @@ export default function Layout() {
                   /* 비로그인 상태: 로그인 버튼 */
                   <Link
                     to="/login"
-                    state={{ from: location.pathname }}
+                    state={{ from: location.pathname + location.search + location.hash }}
                     className="text-[13px] font-semibold px-4 py-2 text-white bg-gradient-to-r from-blue-500 to-violet-600 rounded-xl shadow-sm shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow duration-200"
                   >
                     로그인

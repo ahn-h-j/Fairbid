@@ -100,10 +100,12 @@ export default function LoginPage() {
 
   const error = searchParams.get('error');
 
-  // 이미 로그인된 상태면 홈으로 리다이렉트
+  // 이미 로그인된 상태면 적절한 페이지로 리다이렉트
   useEffect(() => {
-    if (authState === AUTH_STATE.AUTHENTICATED || authState === AUTH_STATE.ONBOARDING_REQUIRED) {
+    if (authState === AUTH_STATE.AUTHENTICATED) {
       navigate('/', { replace: true });
+    } else if (authState === AUTH_STATE.ONBOARDING_REQUIRED) {
+      navigate('/onboarding', { replace: true });
     }
   }, [authState, navigate]);
 

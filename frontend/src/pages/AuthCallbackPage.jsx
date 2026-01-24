@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { decodeJwtPayload } from '../api/client';
 import Spinner from '../components/Spinner';
 
 /**
@@ -26,20 +27,20 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      // JWT에서 onboarded 확인
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      // JWT에서 onboarded 확인 (base64url 패딩 및 UTF-8을 올바르게 처리하는 유틸 사용)
+      const payload = decodeJwtPayload(token);
 
-        if (!payload.onboarded) {
-          navigate('/onboarding', { replace: true });
-        } else {
-          const redirectPath = localStorage.getItem('redirectAfterLogin') || '/';
-          localStorage.removeItem('redirectAfterLogin');
-          navigate(redirectPath, { replace: true });
-        }
-      } catch {
-        // JWT 파싱 실패 시 홈으로 이동
+      if (!payload) {
         navigate('/', { replace: true });
+        return;
+      }
+
+      if (!payload.onboarded) {
+        navigate('/onboarding', { replace: true });
+      } else {
+        const redirectPath = localStorage.getItem('redirectAfterLogin') || '/';
+        localStorage.removeItem('redirectAfterLogin');
+        navigate(redirectPath, { replace: true });
       }
     };
 

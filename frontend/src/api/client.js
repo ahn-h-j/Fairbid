@@ -69,7 +69,9 @@ export function setAuthStateListener(listener) {
 export function decodeJwtPayload(token) {
   try {
     const payload = token.split('.')[1];
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    // base64url → base64 변환 후 패딩 추가 (JWT 표준에서 패딩은 생략됨)
+    let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
     const jsonStr = decodeURIComponent(
       atob(base64)
         .split('')

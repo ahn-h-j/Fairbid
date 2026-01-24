@@ -28,6 +28,7 @@ export default function MyPage() {
   const [editNickname, setEditNickname] = useState('');
   const [nicknameError, setNicknameError] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -140,14 +141,16 @@ export default function MyPage() {
 
   /** 회원 탈퇴 처리 */
   const handleDeleteAccount = async () => {
+    setDeleteError('');
     try {
       await apiRequest('/users/me', { method: 'DELETE' });
+      setShowDeleteModal(false);
       await logout();
       navigate('/', { replace: true });
-    } catch {
-      // 탈퇴 실패 시 모달 닫기
+    } catch (err) {
+      // 탈퇴 실패 시 에러 메시지 표시, 모달 유지
+      setDeleteError(err.message || '탈퇴에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
-    setShowDeleteModal(false);
   };
 
   /** 가격 포맷팅 */
@@ -255,31 +258,33 @@ export default function MyPage() {
       {/* 판매/구매 탭 */}
       <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* 탭 헤더 */}
-        <div className="flex border-b border-gray-100">
+        <div className="flex border-b border-gray-100" role="tablist" aria-label="마이페이지 탭">
           <button
             type="button"
+            id="tab-sales"
             onClick={() => setActiveTab('sales')}
             className={`flex-1 py-3 text-sm font-semibold text-center transition-colors duration-200 ${
               activeTab === 'sales'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
-            aria-label="판매 탭"
             aria-selected={activeTab === 'sales'}
+            aria-controls="tabpanel-sales"
             role="tab"
           >
             판매
           </button>
           <button
             type="button"
+            id="tab-bids"
             onClick={() => setActiveTab('bids')}
             className={`flex-1 py-3 text-sm font-semibold text-center transition-colors duration-200 ${
               activeTab === 'bids'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
-            aria-label="구매 탭"
             aria-selected={activeTab === 'bids'}
+            aria-controls="tabpanel-bids"
             role="tab"
           >
             구매
@@ -288,7 +293,7 @@ export default function MyPage() {
 
         {/* 판매 탭 콘텐츠 */}
         {activeTab === 'sales' && (
-          <div role="tabpanel">
+          <div role="tabpanel" id="tabpanel-sales" aria-labelledby="tab-sales">
             {/* 상태 필터 */}
             <div className="flex gap-2 p-4 overflow-x-auto">
               {SALE_FILTERS.map((filter) => (
@@ -347,7 +352,7 @@ export default function MyPage() {
 
         {/* 구매 탭 콘텐츠 */}
         {activeTab === 'bids' && (
-          <div role="tabpanel">
+          <div role="tabpanel" id="tabpanel-bids" aria-labelledby="tab-bids">
             <div className="divide-y divide-gray-50">
               {bidsLoading ? (
                 <div className="flex justify-center py-10"><Spinner /></div>
@@ -410,9 +415,14 @@ export default function MyPage() {
         >
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-lg font-bold text-gray-900 mb-2">회원 탈퇴</h3>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-gray-500 mb-4">
               정말 탈퇴하시겠습니까? 탈퇴 후 계정을 복구할 수 없습니다.
             </p>
+            {deleteError && (
+              <p className="text-xs text-red-600 mb-4" role="alert" aria-live="polite">
+                {deleteError}
+              </p>
+            )}
             <div className="flex gap-3">
               <button
                 type="button"

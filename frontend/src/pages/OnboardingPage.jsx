@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../api/client';
 
@@ -22,6 +22,7 @@ function formatPhoneNumber(value) {
 export default function OnboardingPage() {
   const { updateAuthFromToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [nickname, setNickname] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -78,6 +79,9 @@ export default function OnboardingPage() {
     if (nickname.length < 2 || nickname.length > 20) {
       newErrors.nickname = '닉네임은 2~20자로 입력해주세요.';
     }
+    if (nicknameStatus === 'checking') {
+      newErrors.nickname = '닉네임 중복 확인 중입니다. 잠시 후 다시 시도해주세요.';
+    }
     if (nicknameStatus === 'duplicate') {
       newErrors.nickname = '이미 사용 중인 닉네임입니다.';
     }
@@ -111,7 +115,8 @@ export default function OnboardingPage() {
         updateAuthFromToken(result.accessToken);
       }
 
-      const redirectPath = localStorage.getItem('redirectAfterLogin') || '/';
+      // location.state?.from을 우선 사용하고, 없으면 localStorage fallback
+      const redirectPath = location.state?.from || localStorage.getItem('redirectAfterLogin') || '/';
       localStorage.removeItem('redirectAfterLogin');
       navigate(redirectPath, { replace: true });
     } catch (err) {
@@ -216,7 +221,7 @@ export default function OnboardingPage() {
           {/* 제출 버튼 */}
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || nicknameStatus === 'checking'}
             className="w-full py-3 bg-gradient-to-r from-blue-500 to-violet-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-shadow duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

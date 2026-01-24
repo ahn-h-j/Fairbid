@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import { fetcher } from '../api/client';
 
@@ -38,7 +39,7 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
     return `${baseEndpoint}?${searchParams.toString()}`;
   };
 
-  const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(
+  const { data, error, size, setSize, isLoading, mutate } = useSWRInfinite(
     getKey,
     fetcher,
     {
@@ -46,6 +47,17 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
       revalidateOnFocus: false,
     }
   );
+
+  // params 변경 시 페이지네이션을 첫 페이지로 리셋
+  const prevParamsRef = useRef(params);
+  useEffect(() => {
+    const prev = prevParamsRef.current;
+    const changed = JSON.stringify(prev) !== JSON.stringify(params);
+    if (changed) {
+      prevParamsRef.current = params;
+      setSize(1);
+    }
+  }, [params, setSize]);
 
   // 전체 아이템 목록 평탄화
   const items = data ? data.flatMap((page) => page.content || []) : [];
@@ -56,12 +68,12 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
   // 추가 로딩 중 여부
   const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === 'undefined');
 
-  /** 다음 페이지 로드 */
-  const loadMore = () => {
+  /** 다음 페이지 로드 (메모이제이션으로 Observer 재생성 방지) */
+  const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore) {
       setSize((prev) => prev + 1);
     }
-  };
+  }, [isLoadingMore, hasMore, setSize]);
 
   return {
     items,

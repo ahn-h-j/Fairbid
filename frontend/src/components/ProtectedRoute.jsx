@@ -22,14 +22,16 @@ export default function ProtectedRoute({ requireOnboarding = false }) {
     );
   }
 
-  // 비로그인 → 로그인 페이지로 이동 (현재 경로를 state로 전달)
+  // 비로그인 → 로그인 페이지로 이동 (현재 전체 경로를 state로 전달)
   if (authState === AUTH_STATE.UNAUTHENTICATED) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    const fullPath = location.pathname + location.search + location.hash;
+    return <Navigate to="/login" state={{ from: fullPath }} replace />;
   }
 
   // 온보딩 필요 라우트인데 온보딩 미완료 → 온보딩 페이지로 이동
   if (requireOnboarding && authState === AUTH_STATE.ONBOARDING_REQUIRED) {
-    return <Navigate to="/onboarding" state={{ from: location.pathname }} replace />;
+    const fullPath = location.pathname + location.search + location.hash;
+    return <Navigate to="/onboarding" state={{ from: fullPath }} replace />;
   }
 
   return <Outlet />;
