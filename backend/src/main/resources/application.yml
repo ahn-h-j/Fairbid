@@ -57,3 +57,28 @@ management:
       # SLA 버킷 (50ms, 100ms, 200ms, 500ms, 1s 기준)
       slo:
         http.server.requests: 50ms, 100ms, 200ms, 500ms, 1s
+
+# JWT 설정
+jwt:
+  secret-key: ${JWT_SECRET_KEY:dGhpc0lzQURlZmF1bHRTZWNyZXRLZXlGb3JEZXZlbG9wbWVudE9ubHlQbGVhc2VDaGFuZ2VJblByb2R1Y3Rpb24=}
+  access-expiration: 1800000      # 30분 (밀리초)
+  refresh-expiration: 1209600000  # 2주 (밀리초)
+
+# OAuth2 클라이언트 설정
+oauth2:
+  kakao:
+    client-id: ${KAKAO_CLIENT_ID:}
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+    redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth2/callback/kakao}
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+    redirect-uri: ${NAVER_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth2/callback/naver}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth2/callback/google}
+
+# 앱 설정
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}

@@ -156,6 +156,16 @@ public class GlobalExceptionHandler {
     // =====================================================
 
     /**
+     * 잘못된 인자 예외 처리 (유효하지 않은 enum 값 등)
+     * HTTP 400 Bad Request
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("IllegalArgumentException: {}", e.getMessage());
+        return errorResponse(HttpStatus.BAD_REQUEST, "INVALID_ARGUMENT", e.getMessage());
+    }
+
+    /**
      * 그 외 예상치 못한 예외 처리
      * HTTP 500 Internal Server Error
      */

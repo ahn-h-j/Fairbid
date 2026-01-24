@@ -22,3 +22,28 @@ logging:
 # Firebase 비활성화 (테스트 환경)
 firebase:
   enabled: false
+
+# JWT 설정 (테스트 환경)
+jwt:
+  secret-key: dGVzdFNlY3JldEtleUZvckp3dFRva2VuR2VuZXJhdGlvblRlc3RpbmdPbmx5MTIzNDU2Nzg5MA==
+  access-expiration: 1800000
+  refresh-expiration: 1209600000
+
+# OAuth2 설정 (테스트 환경 - 더미 값)
+oauth2:
+  kakao:
+    client-id: test-kakao-client-id
+    client-secret: test-kakao-client-secret
+    redirect-uri: http://localhost:8080/api/v1/auth/oauth2/callback/kakao
+  naver:
+    client-id: test-naver-client-id
+    client-secret: test-naver-client-secret
+    redirect-uri: http://localhost:8080/api/v1/auth/oauth2/callback/naver
+  google:
+    client-id: test-google-client-id
+    client-secret: test-google-client-secret
+    redirect-uri: http://localhost:8080/api/v1/auth/oauth2/callback/google
+
+# 앱 설정 (테스트 환경)
+app:
+  frontend-url: http://localhost:3000

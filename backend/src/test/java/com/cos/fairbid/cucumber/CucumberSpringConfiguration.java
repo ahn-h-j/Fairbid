@@ -1,8 +1,10 @@
 package com.cos.fairbid.cucumber;
 
+import com.cos.fairbid.cucumber.config.TestSecurityConfig;
 import com.redis.testcontainers.RedisContainer;
 import io.cucumber.spring.CucumberContextConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -15,6 +17,7 @@ import org.testcontainers.utility.DockerImageName;
  */
 @CucumberContextConfiguration
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestSecurityConfig.class)
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:tc:mysql:8.0:///testdb",
