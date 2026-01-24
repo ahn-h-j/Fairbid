@@ -1,14 +1,18 @@
+# Stage 1: 빌드
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# Stage 2: Nginx로 서빙
 FROM nginx:1.27-alpine
 
-# nginx 설정 복사
 COPY nginx.conf /etc/nginx/nginx.conf
-
-# 정적 파일 복사
-COPY index.html /usr/share/nginx/html/
-COPY detail.html /usr/share/nginx/html/
-COPY create.html /usr/share/nginx/html/
-COPY css/ /usr/share/nginx/html/css/
-COPY js/ /usr/share/nginx/html/js/
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 

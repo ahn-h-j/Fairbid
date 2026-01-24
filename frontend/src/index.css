@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+/* ===== Base Styles ===== */
+
+/* PWA/앱 느낌을 위한 기본 설정 */
+html {
+  /* iOS 바운스 스크롤 방지 */
+  overscroll-behavior: none;
+  /* 부드러운 스크롤 */
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  /* 텍스트 선택 방지 (앱 느낌) - 입력 필드는 예외 */
+  -webkit-user-select: none;
+  user-select: none;
+  /* iOS에서 탭 하이라이트 제거 */
+  -webkit-tap-highlight-color: transparent;
+  /* Safe Area 하단 패딩 (노치 디바이스) */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 텍스트/입력 영역은 선택 가능하게 */
+input, textarea, p, h1, h2, h3, span[class*="text-"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 숫자 열 정렬을 위한 tabular-nums */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 스크롤바 커스터마이징 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ===== Animations ===== */
+
+/* 카운트다운 타이머 펄스 */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.01); }
+}
+.animate-pulse-subtle {
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+/* 페이드인 */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 슬라이드업 */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 스케일 팝 (성공 시) */
+@keyframes scale-pop {
+  0% { opacity: 0; transform: scale(0.9); }
+  50% { transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-scale-pop {
+  animation: scale-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 시머 (로딩 스켈레톤) */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* 라이브 뱃지 글로우 */
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+.animate-glow-green {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* ===== Utility Classes ===== */
+
+/* 카드 호버 효과 */
+.card-hover {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.1),
+              0 8px 16px -8px rgba(0, 0, 0, 0.06);
+}
+
+/* 그라데이션 텍스트 */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 글래스 모피즘 */
+.glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+/* 그라데이션 보더 */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* 인풋 포커스 효과 */
+.input-glow:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15),
+              0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* 버튼 프레스 효과 */
+.btn-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ===== 모션 감소 설정 존중 ===== */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-subtle,
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .card-hover:hover {
+    transform: none;
+  }
+}
