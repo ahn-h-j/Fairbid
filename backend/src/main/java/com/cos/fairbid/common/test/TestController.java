@@ -49,7 +49,7 @@ public class TestController {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
-        // 2. 종료 시간을 현재 + 5분으로 변경 (Redis 직접 업데이트)
+        // 2. 종료 시간을 현재 + 5분으로 변경 (Redis Hash + Sorted Set 업데이트)
         String key = AUCTION_KEY_PREFIX + auctionId;
         LocalDateTime newEndTime = LocalDateTime.now().plusMinutes(5);
         long newEndTimeMs = newEndTime.atZone(java.time.ZoneId.systemDefault())
@@ -58,6 +58,7 @@ public class TestController {
 
         redisTemplate.opsForHash().put(key, "scheduledEndTime", newEndTime.toString());
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(newEndTimeMs));
+        auctionCachePort.addToClosingQueue(auctionId, newEndTimeMs);
 
         log.info("[TEST] 경매 종료 시간 변경: auctionId={}, newEndTime={}", auctionId, newEndTime);
 
@@ -84,7 +85,7 @@ public class TestController {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
-        // 2. 종료 시간 변경 (Redis 직접 업데이트)
+        // 2. 종료 시간 변경 (Redis Hash + Sorted Set 업데이트)
         String key = AUCTION_KEY_PREFIX + auctionId;
         LocalDateTime newEndTime = LocalDateTime.now().plusSeconds(seconds);
         long newEndTimeMs = newEndTime.atZone(java.time.ZoneId.systemDefault())
@@ -93,6 +94,7 @@ public class TestController {
 
         redisTemplate.opsForHash().put(key, "scheduledEndTime", newEndTime.toString());
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(newEndTimeMs));
+        auctionCachePort.addToClosingQueue(auctionId, newEndTimeMs);
 
         log.info("[TEST] 경매 종료 시간 변경: auctionId={}, newEndTime={}, seconds={}", auctionId, newEndTime, seconds);
 
@@ -118,7 +120,7 @@ public class TestController {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
-        // 2. 종료 시간을 과거로 설정 (Redis)
+        // 2. 종료 시간을 과거로 설정 (Redis Hash + Sorted Set 업데이트)
         String key = AUCTION_KEY_PREFIX + auctionId;
         LocalDateTime pastTime = LocalDateTime.now().minusMinutes(1);
         long pastTimeMs = pastTime.atZone(java.time.ZoneId.systemDefault())
@@ -127,6 +129,7 @@ public class TestController {
 
         redisTemplate.opsForHash().put(key, "scheduledEndTime", pastTime.toString());
         redisTemplate.opsForHash().put(key, "scheduledEndTimeMs", String.valueOf(pastTimeMs));
+        auctionCachePort.addToClosingQueue(auctionId, pastTimeMs);
 
         // 3. 스케줄러 즉시 실행
         closeAuctionUseCase.closeExpiredAuctions();

@@ -12,10 +12,8 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Redis 기반 경매 캐시 어댑터
@@ -27,6 +25,8 @@ import java.util.Optional;
 public class RedisAuctionCacheAdapter implements AuctionCachePort {
 
     private static final String AUCTION_KEY_PREFIX = "auction:";
+    /** 종료 대기 큐 키 (Sorted Set: score=종료시간ms, member=경매ID) */
+    public static final String CLOSING_QUEUE_KEY = "auction:closing";
 
     private final StringRedisTemplate redisTemplate;
 
@@ -57,6 +57,60 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
     public boolean existsInCache(Long auctionId) {
         String key = AUCTION_KEY_PREFIX + auctionId;
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    // ============================
+    // 종료 대기 큐 (Sorted Set) 구현
+    // ============================
+
+    @Override
+    public void addToClosingQueue(Long auctionId, long endTimeMs) {
+        redisTemplate.opsForZSet().add(CLOSING_QUEUE_KEY, String.valueOf(auctionId), endTimeMs);
+        log.debug("종료 대기 큐 추가: auctionId={}, endTimeMs={}", auctionId, endTimeMs);
+    }
+
+    @Override
+    public void removeFromClosingQueue(Long auctionId) {
+        redisTemplate.opsForZSet().remove(CLOSING_QUEUE_KEY, String.valueOf(auctionId));
+        log.debug("종료 대기 큐 제거: auctionId={}", auctionId);
+    }
+
+    @Override
+    public List<Long> findAuctionIdsToClose(long currentTimeMs) {
+        // score가 0 ~ currentTimeMs인 멤버 조회 (종료 시간이 지난 경매)
+        Set<String> members = redisTemplate.opsForZSet()
+                .rangeByScore(CLOSING_QUEUE_KEY, 0, currentTimeMs);
+
+        if (members == null || members.isEmpty()) {
+            return List.of();
+        }
+
+        return members.stream()
+                .map(member -> {
+                    try {
+                        return Long.parseLong(member);
+                    } catch (NumberFormatException e) {
+                        log.warn("종료 대기 큐에 잘못된 경매 ID 발견: member={}, key={}", member, CLOSING_QUEUE_KEY);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    // ============================
+    // 캐시 상태 업데이트 구현
+    // ============================
+
+    @Override
+    public void updateStatus(Long auctionId, AuctionStatus status) {
+        String key = AUCTION_KEY_PREFIX + auctionId;
+
+        // 캐시가 존재할 때만 상태 업데이트
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+            redisTemplate.opsForHash().put(key, "status", status.name());
+            log.debug("경매 캐시 상태 업데이트: auctionId={}, status={}", auctionId, status);
+        }
     }
 
     /**

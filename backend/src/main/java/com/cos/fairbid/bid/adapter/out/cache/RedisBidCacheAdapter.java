@@ -14,7 +14,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scripting.support.ResourceScriptSource;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -26,6 +26,7 @@ import java.util.List;
 public class RedisBidCacheAdapter implements BidCachePort {
 
     private static final String AUCTION_KEY_PREFIX = "auction:";
+    private static final String CLOSING_QUEUE_KEY = "auction:closing";
 
     private final StringRedisTemplate redisTemplate;
     private DefaultRedisScript<List> bidScript;
@@ -49,10 +50,10 @@ public class RedisBidCacheAdapter implements BidCachePort {
     public BidResult placeBidAtomic(Long auctionId, Long bidAmount, Long bidderId, String bidType, Long currentTimeMs) {
         String key = AUCTION_KEY_PREFIX + auctionId;
 
-        // Lua 스크립트 실행 (currentTimeMs 추가)
+        // Lua 스크립트 실행 (KEYS: 경매 해시 키 + 종료 대기 큐)
         List<Object> result = redisTemplate.execute(
                 bidScript,
-                Collections.singletonList(key),
+                Arrays.asList(key, CLOSING_QUEUE_KEY),
                 String.valueOf(bidAmount),
                 String.valueOf(bidderId),
                 bidType,

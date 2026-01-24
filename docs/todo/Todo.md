@@ -72,6 +72,12 @@
 - **내용**: Lettuce 커넥션 풀 설정 (max-active, max-idle, min-idle)
 - **조건**: 부하테스트 결과에 따라 튜닝 필요 시 (PR #30 리뷰 보류 항목)
 
+### 경매 종료 큐 Fallback 메커니즘
+- **파일**: `AuctionEventListener.java`, 신규 배치 클래스
+- **내용**: `addToClosingQueue()` 실패 시 스케줄러가 해당 경매를 종료하지 못하는 문제
+- **해결**: 주기적 보정 배치 (예: 10분마다 RDB의 BIDDING 상태 경매와 Sorted Set 비교, 누락 시 재등록)
+- **조건**: Redis 부분 장애 시나리오 대응 필요 시 (PR #37 리뷰 보류 항목)
+
 ---
 
 ## 진행 중

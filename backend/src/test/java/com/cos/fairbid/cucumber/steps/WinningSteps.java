@@ -2,6 +2,7 @@ package com.cos.fairbid.cucumber.steps;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepository;
+import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.bid.adapter.in.dto.PlaceBidRequest;
 import com.cos.fairbid.bid.domain.BidType;
@@ -16,7 +17,9 @@ import io.cucumber.java.ko.만약;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +38,9 @@ public class WinningSteps {
 
     @Autowired
     private JpaAuctionRepository jpaAuctionRepository;
+
+    @Autowired
+    private AuctionCachePort auctionCachePort;
 
     @Autowired
     private WinningRepositoryPort winningRepository;
@@ -78,7 +84,12 @@ public class WinningSteps {
         AuctionEntity auctionEntity = jpaAuctionRepository.findById(auctionId)
                 .orElseThrow(() -> new RuntimeException("경매를 찾을 수 없습니다."));
 
-        // 종료 시간을 1초 전으로 변경 (saveAndFlush로 즉시 커밋)
+        LocalDateTime pastTime = LocalDateTime.now().minusSeconds(1);
+        long pastTimeMs = pastTime.atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli();
+
+        // 종료 시간을 1초 전으로 변경 (RDB + Redis Sorted Set)
         jpaAuctionRepository.saveAndFlush(
                 AuctionEntity.builder()
                         .id(auctionEntity.getId())
@@ -90,7 +101,7 @@ public class WinningSteps {
                         .currentPrice(auctionEntity.getCurrentPrice())
                         .instantBuyPrice(auctionEntity.getInstantBuyPrice())
                         .bidIncrement(auctionEntity.getBidIncrement())
-                        .scheduledEndTime(LocalDateTime.now().minusSeconds(1))
+                        .scheduledEndTime(pastTime)
                         .actualEndTime(null)
                         .extensionCount(auctionEntity.getExtensionCount())
                         .totalBidCount(auctionEntity.getTotalBidCount())
@@ -100,6 +111,9 @@ public class WinningSteps {
                         .updatedAt(auctionEntity.getUpdatedAt())
                         .build()
         );
+
+        // Redis Sorted Set에도 과거 시간으로 등록 (스케줄러가 종료 대상으로 인식)
+        auctionCachePort.addToClosingQueue(auctionId, pastTimeMs);
 
         // 경매 종료 처리 실행
         closeAuctionUseCase.closeExpiredAuctions();

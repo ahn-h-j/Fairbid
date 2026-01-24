@@ -1,7 +1,9 @@
 package com.cos.fairbid.winning.application.service;
 
+import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
+import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
@@ -27,6 +29,7 @@ import java.util.List;
 public class AuctionClosingHelper {
 
     private final AuctionRepositoryPort auctionRepository;
+    private final AuctionCachePort auctionCachePort;
     private final BidRepositoryPort bidRepository;
     private final AuctionClosingProcessor closingProcessor;
     private final AuctionClosedEventPublisherPort eventPublisher;
@@ -43,6 +46,13 @@ public class AuctionClosingHelper {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
+        // 이미 종료된 경매는 스킵 (중복 처리 방지)
+        if (auction.getStatus() == AuctionStatus.ENDED || auction.getStatus() == AuctionStatus.FAILED) {
+            log.debug("이미 종료된 경매 스킵 - auctionId: {}, status: {}", auctionId, auction.getStatus());
+            auctionCachePort.removeFromClosingQueue(auctionId);
+            return;
+        }
+
         // 1. 상위 2개 입찰 조회
         List<Bid> topBids = bidRepository.findTop2ByAuctionId(auctionId);
 
@@ -50,6 +60,10 @@ public class AuctionClosingHelper {
         if (topBids.isEmpty()) {
             closingProcessor.processNoWinner(auction);
             auctionRepository.save(auction);
+
+            // Redis 캐시 상태 동기화 + 종료 대기 큐 제거
+            syncRedisAfterClosing(auctionId, AuctionStatus.FAILED);
+
             eventPublisher.publishAuctionClosed(auctionId);
             log.info("경매 유찰 완료 - auctionId: {}", auctionId);
             return;
@@ -64,10 +78,33 @@ public class AuctionClosingHelper {
             closingProcessor.saveSecondRankCandidate(auction, topBids.get(1));
         }
 
-        // 5. 경매 저장 및 종료 이벤트 발행
+        // 5. 경매 저장
         auctionRepository.save(auction);
+
+        // 6. Redis 캐시 상태 동기화 + 종료 대기 큐 제거
+        syncRedisAfterClosing(auctionId, AuctionStatus.ENDED);
+
+        // 7. 종료 이벤트 발행
         eventPublisher.publishAuctionClosed(auctionId);
 
         log.info("경매 종료 완료 - auctionId: {}, winnerId: {}", auctionId, firstBid.getBidderId());
+    }
+
+    /**
+     * 경매 종료 후 Redis 상태를 동기화한다
+     * - 캐시의 status 필드를 업데이트하여 조회 시 정확한 상태 반환
+     * - 종료 대기 큐(Sorted Set)에서 제거하여 중복 처리 방지
+     *
+     * @param auctionId 경매 ID
+     * @param status    종료 후 상태 (ENDED / FAILED)
+     */
+    private void syncRedisAfterClosing(Long auctionId, AuctionStatus status) {
+        try {
+            auctionCachePort.updateStatus(auctionId, status);
+            auctionCachePort.removeFromClosingQueue(auctionId);
+        } catch (Exception e) {
+            // Redis 동기화 실패는 로그만 남기고 진행 (RDB는 이미 업데이트됨)
+            log.warn("Redis 동기화 실패 - auctionId: {}, error: {}", auctionId, e.getMessage());
+        }
     }
 }

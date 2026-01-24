@@ -2,6 +2,7 @@
 -- 원자적으로 입찰 검증 + 현재가 갱신 + 경매 연장 + 즉시 구매 수행
 --
 -- KEYS[1]: auction:{auctionId} (경매 해시 키)
+-- KEYS[2]: auction:closing (종료 대기 큐 Sorted Set)
 -- ARGV[1]: bidAmount (입찰 금액, ONE_TOUCH면 0)
 -- ARGV[2]: bidderId (입찰자 ID)
 -- ARGV[3]: bidType (ONE_TOUCH / DIRECT / INSTANT_BUY)
@@ -14,6 +15,10 @@
 --                "INSTANT_BUY_NOT_AVAILABLE", "INSTANT_BUY_DISABLED", "INSTANT_BUY_ALREADY_ACTIVATED"
 
 local auctionKey = KEYS[1]
+local closingQueueKey = KEYS[2]
+-- 경매 ID 추출 (콜론 위치 기반, 키 포맷 변경에도 안전)
+local colonIndex = string.find(auctionKey, ":", 1, true)
+local auctionId = string.sub(auctionKey, colonIndex + 1)
 local requestedAmount = tonumber(ARGV[1])
 local bidderId = ARGV[2]
 local bidType = ARGV[3]
@@ -88,6 +93,9 @@ if bidType == 'INSTANT_BUY' then
     redis.call('HSET', auctionKey, 'scheduledEndTime', tostring(newEndTimeMs))
     scheduledEndTimeMs = newEndTimeMs
 
+    -- 5-5-1. 종료 대기 큐 score 갱신
+    redis.call('ZADD', closingQueueKey, newEndTimeMs, auctionId)
+
     -- 5-6. 현재가를 즉시 구매가로 갱신
     redis.call('HSET', auctionKey, 'currentPrice', instantBuyPrice)
     local newTotalBidCount = redis.call('HINCRBY', auctionKey, 'totalBidCount', 1)
@@ -152,6 +160,9 @@ if status == 'BIDDING' and scheduledEndTimeMs > 0 and currentTimeMs > 0 then
         redis.call('HSET', auctionKey, 'scheduledEndTime', tostring(newEndTimeMs))
         extensionCount = extensionCount + 1
         redis.call('HSET', auctionKey, 'extensionCount', extensionCount)
+
+        -- 종료 대기 큐 score 갱신
+        redis.call('ZADD', closingQueueKey, newEndTimeMs, auctionId)
     end
 end
 
