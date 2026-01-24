@@ -86,7 +86,15 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
         }
 
         return members.stream()
-                .map(Long::parseLong)
+                .map(member -> {
+                    try {
+                        return Long.parseLong(member);
+                    } catch (NumberFormatException e) {
+                        log.warn("종료 대기 큐에 잘못된 경매 ID 발견: member={}, key={}", member, CLOSING_QUEUE_KEY);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 

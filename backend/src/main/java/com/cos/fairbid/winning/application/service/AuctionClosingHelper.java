@@ -46,6 +46,13 @@ public class AuctionClosingHelper {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> AuctionNotFoundException.withId(auctionId));
 
+        // 이미 종료된 경매는 스킵 (중복 처리 방지)
+        if (auction.getStatus() == AuctionStatus.ENDED || auction.getStatus() == AuctionStatus.FAILED) {
+            log.debug("이미 종료된 경매 스킵 - auctionId: {}, status: {}", auctionId, auction.getStatus());
+            auctionCachePort.removeFromClosingQueue(auctionId);
+            return;
+        }
+
         // 1. 상위 2개 입찰 조회
         List<Bid> topBids = bidRepository.findTop2ByAuctionId(auctionId);
 

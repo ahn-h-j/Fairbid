@@ -16,8 +16,9 @@
 
 local auctionKey = KEYS[1]
 local closingQueueKey = KEYS[2]
--- 경매 ID 추출 (auction:{id} → {id})
-local auctionId = string.sub(auctionKey, 9)
+-- 경매 ID 추출 (콜론 위치 기반, 키 포맷 변경에도 안전)
+local colonIndex = string.find(auctionKey, ":", 1, true)
+local auctionId = string.sub(auctionKey, colonIndex + 1)
 local requestedAmount = tonumber(ARGV[1])
 local bidderId = ARGV[2]
 local bidType = ARGV[3]
