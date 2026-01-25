@@ -106,7 +106,7 @@ export default function OnboardingPage() {
         method: 'POST',
         body: JSON.stringify({
           nickname: nickname.trim(),
-          phoneNumber: phoneNumber.replace(/\D/g, ''),
+          phoneNumber: phoneNumber,
         }),
       });
 

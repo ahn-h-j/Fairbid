@@ -178,9 +178,8 @@ export default function LoginPage() {
           ))}
         </div>
 
-        {/* 개발용 게스트 로그인 (DEV 환경에서만 표시) */}
-        {import.meta.env.DEV && (
-          <div className="mt-8 pt-6 border-t border-gray-200">
+        {/* 개발용 게스트 로그인 */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
             <p className="text-xs text-gray-400 text-center mb-3 font-medium">개발용 테스트 로그인</p>
             <div className="space-y-2">
               {GUEST_USERS.map((guest) => (
@@ -198,8 +197,7 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

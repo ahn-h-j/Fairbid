@@ -369,7 +369,7 @@ export default function MyPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900 truncate">{item.title}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        내 입찰가: {formatPrice(item.myBidPrice || 0)}원
+                        내 입찰가: {formatPrice(item.myHighestBid || 0)}원
                       </p>
                     </div>
                     <div className="text-right ml-3 shrink-0">

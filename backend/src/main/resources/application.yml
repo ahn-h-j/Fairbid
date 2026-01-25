@@ -82,3 +82,5 @@ oauth2:
 # 앱 설정
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  cookie:
+    secure: ${COOKIE_SECURE:true}

@@ -6,6 +6,7 @@ import com.cos.fairbid.auth.application.port.in.OAuthLoginUseCase;
 import com.cos.fairbid.auth.application.port.in.RefreshTokenUseCase;
 import com.cos.fairbid.auth.infrastructure.security.CookieUtils;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
+import com.cos.fairbid.common.response.ApiResponse;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,9 +41,13 @@ public class AuthController {
     private final OAuthLoginUseCase oAuthLoginUseCase;
     private final RefreshTokenUseCase refreshTokenUseCase;
     private final LogoutUseCase logoutUseCase;
+    private final CookieUtils cookieUtils;
 
     @Value("${app.frontend-url:http://localhost:3000}")
     private String frontendUrl;
+
+    @Value("${app.cookie.secure:true}")
+    private boolean cookieSecure;
 
     @Value("${oauth2.kakao.client-id:}")
     private String kakaoClientId;
@@ -114,7 +119,7 @@ public class AuthController {
         OAuthLoginUseCase.LoginResult result = oAuthLoginUseCase.login(oAuthProvider, code);
 
         // Refresh Token을 HttpOnly 쿠키에 설정
-        CookieUtils.setRefreshTokenCookie(response, result.refreshToken());
+        cookieUtils.setRefreshTokenCookie(response, result.refreshToken());
 
         // 프론트엔드 콜백 페이지로 리다이렉트
         // 프론트에서 /auth/callback 로드 → POST /api/v1/auth/refresh 호출 → Access Token 수신
@@ -130,7 +135,7 @@ public class AuthController {
      * @param refreshToken 쿠키에서 전달된 Refresh Token
      */
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refresh(
+    public ResponseEntity<ApiResponse<TokenResponse>> refresh(
             @CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken,
             HttpServletResponse response) {
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -141,10 +146,10 @@ public class AuthController {
         RefreshTokenUseCase.TokenResult result = refreshTokenUseCase.refresh(refreshToken);
 
         // 새 Refresh Token 쿠키 설정
-        CookieUtils.setRefreshTokenCookie(response, result.newRefreshToken());
+        cookieUtils.setRefreshTokenCookie(response, result.newRefreshToken());
 
-        // Access Token + onboarded 정보 응답
-        return ResponseEntity.ok(new TokenResponse(result.accessToken(), result.onboarded()));
+        // Access Token + onboarded 정보 응답 (ApiResponse로 래핑)
+        return ResponseEntity.ok(ApiResponse.success(new TokenResponse(result.accessToken(), result.onboarded())));
     }
 
     /**
@@ -157,7 +162,7 @@ public class AuthController {
         logoutUseCase.logout(userId);
 
         // Refresh Token 쿠키 제거
-        CookieUtils.clearRefreshTokenCookie(response);
+        cookieUtils.clearRefreshTokenCookie(response);
 
         return ResponseEntity.ok().build();
     }
@@ -165,28 +170,35 @@ public class AuthController {
     /**
      * OAuth state를 HttpOnly 쿠키에 저장한다. (CSRF 방지)
      * 짧은 TTL(5분)로 설정하여 만료된 state를 자동 제거한다.
+     * Secure 플래그는 환경변수(app.cookie.secure)에 의해 제어된다.
      */
     private void setOAuthStateCookie(HttpServletResponse response, String state) {
-        response.addHeader("Set-Cookie",
-                OAUTH_STATE_COOKIE + "=" + state
-                        + "; Path=/api/v1/auth/oauth2"
-                        + "; Max-Age=" + OAUTH_STATE_MAX_AGE
-                        + "; HttpOnly"
-                        + "; Secure"
-                        + "; SameSite=Lax");
+        StringBuilder cookie = new StringBuilder();
+        cookie.append(OAUTH_STATE_COOKIE).append("=").append(state)
+                .append("; Path=/api/v1/auth/oauth2")
+                .append("; Max-Age=").append(OAUTH_STATE_MAX_AGE)
+                .append("; HttpOnly")
+                .append("; SameSite=Lax");
+        if (cookieSecure) {
+            cookie.append("; Secure");
+        }
+        response.addHeader("Set-Cookie", cookie.toString());
     }
 
     /**
      * OAuth state 쿠키를 제거한다.
      */
     private void clearOAuthStateCookie(HttpServletResponse response) {
-        response.addHeader("Set-Cookie",
-                OAUTH_STATE_COOKIE + "="
-                        + "; Path=/api/v1/auth/oauth2"
-                        + "; Max-Age=0"
-                        + "; HttpOnly"
-                        + "; Secure"
-                        + "; SameSite=Lax");
+        StringBuilder cookie = new StringBuilder();
+        cookie.append(OAUTH_STATE_COOKIE).append("=")
+                .append("; Path=/api/v1/auth/oauth2")
+                .append("; Max-Age=0")
+                .append("; HttpOnly")
+                .append("; SameSite=Lax");
+        if (cookieSecure) {
+            cookie.append("; Secure");
+        }
+        response.addHeader("Set-Cookie", cookie.toString());
     }
 
     /**

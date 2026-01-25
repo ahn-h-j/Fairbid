@@ -43,6 +43,7 @@ public class UserController {
     private final DeactivateAccountUseCase deactivateAccountUseCase;
     private final GetMyAuctionsUseCase getMyAuctionsUseCase;
     private final GetMyBidsUseCase getMyBidsUseCase;
+    private final CookieUtils cookieUtils;
 
     /**
      * 온보딩을 완료한다.
@@ -63,7 +64,7 @@ public class UserController {
                 userId, request.nickname(), request.phoneNumber());
 
         // Refresh Token을 HttpOnly 쿠키에 설정
-        CookieUtils.setRefreshTokenCookie(response, result.refreshToken());
+        cookieUtils.setRefreshTokenCookie(response, result.refreshToken());
 
         return ResponseEntity.ok(ApiResponse.success(new TokenReissueResponse(result.accessToken())));
     }
@@ -113,7 +114,7 @@ public class UserController {
         UpdateResult result = updateNicknameUseCase.updateNickname(userId, request.nickname());
 
         // Refresh Token을 HttpOnly 쿠키에 설정
-        CookieUtils.setRefreshTokenCookie(response, result.refreshToken());
+        cookieUtils.setRefreshTokenCookie(response, result.refreshToken());
 
         return ResponseEntity.ok(ApiResponse.success(new TokenReissueResponse(result.accessToken())));
     }
@@ -130,7 +131,7 @@ public class UserController {
         deactivateAccountUseCase.deactivate(userId);
 
         // Refresh Token 쿠키 제거
-        CookieUtils.clearRefreshTokenCookie(response);
+        cookieUtils.clearRefreshTokenCookie(response);
 
         return ResponseEntity.ok(ApiResponse.success());
     }
