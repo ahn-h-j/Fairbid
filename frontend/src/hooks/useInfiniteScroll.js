@@ -18,7 +18,7 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
    */
   const getKey = (pageIndex, previousPageData) => {
     // 이전 페이지가 비어있으면 더 이상 페이지 없음
-    if (previousPageData && previousPageData.content?.length === 0) return null;
+    if (previousPageData && previousPageData.items?.length === 0) return null;
 
     const searchParams = new URLSearchParams();
     searchParams.set('size', pageSize.toString());
@@ -31,8 +31,8 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
     });
 
     // 첫 페이지가 아니면 cursor 설정
-    if (pageIndex > 0 && previousPageData?.content?.length > 0) {
-      const lastItem = previousPageData.content[previousPageData.content.length - 1];
+    if (pageIndex > 0 && previousPageData?.items?.length > 0) {
+      const lastItem = previousPageData.items[previousPageData.items.length - 1];
       searchParams.set('cursor', lastItem.id || lastItem.auctionId);
     }
 
@@ -43,8 +43,8 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
     getKey,
     fetcher,
     {
-      revalidateFirstPage: false,
-      revalidateOnFocus: false,
+      revalidateFirstPage: true,
+      revalidateOnFocus: true,
     }
   );
 
@@ -60,10 +60,10 @@ export default function useInfiniteScroll(baseEndpoint, params = {}, pageSize = 
   }, [params, setSize]);
 
   // 전체 아이템 목록 평탄화
-  const items = data ? data.flatMap((page) => page.content || []) : [];
+  const items = data ? data.flatMap((page) => page.items || []) : [];
 
-  // 더 불러올 데이터가 있는지 확인
-  const hasMore = data ? data[data.length - 1]?.content?.length === pageSize : false;
+  // 더 불러올 데이터가 있는지 확인 (백엔드의 hasNext 필드 사용)
+  const hasMore = data ? data[data.length - 1]?.hasNext ?? false : false;
 
   // 추가 로딩 중 여부
   const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === 'undefined');
