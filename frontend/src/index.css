@@ -85,6 +85,17 @@ input, textarea, p, h1, h2, h3, span[class*="text-"] {
   animation: scale-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* 바운스인 (결제 완료 등 성공 피드백) */
+@keyframes bounce-in {
+  0% { opacity: 0; transform: scale(0.5); }
+  50% { transform: scale(1.1); }
+  70% { transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-bounce-in {
+  animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
 /* 시머 (로딩 스켈레톤) */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -165,7 +176,8 @@ input, textarea, p, h1, h2, h3, span[class*="text-"] {
   .animate-pulse-subtle,
   .animate-fade-in,
   .animate-slide-up,
-  .animate-scale-pop {
+  .animate-scale-pop,
+  .animate-bounce-in {
     animation: none;
     opacity: 1;
     transform: none;

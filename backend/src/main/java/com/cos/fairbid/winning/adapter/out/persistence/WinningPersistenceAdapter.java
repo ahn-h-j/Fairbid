@@ -61,4 +61,11 @@ public class WinningPersistenceAdapter implements WinningRepositoryPort {
         return jpaWinningRepository.findById(id)
                 .map(winningMapper::toDomain);
     }
+
+    @Override
+    public Optional<Winning> findPendingByAuctionIdAndBidderId(Long auctionId, Long bidderId) {
+        return jpaWinningRepository.findByAuctionIdAndBidderIdAndStatus(
+                        auctionId, bidderId, WinningStatus.PENDING_PAYMENT)
+                .map(winningMapper::toDomain);
+    }
 }

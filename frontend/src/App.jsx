@@ -8,6 +8,8 @@ import LoginPage from './pages/LoginPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MyPage from './pages/MyPage';
+import PaymentPage from './pages/PaymentPage';
+import PaymentCompletePage from './pages/PaymentCompletePage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 /**
@@ -35,6 +37,8 @@ export default function App() {
             {/* 온보딩 완료 필요 라우트 */}
             <Route element={<ProtectedRoute requireOnboarding />}>
               <Route path="/auctions/create" element={<AuctionCreatePage />} />
+              <Route path="/auctions/:auctionId/payment" element={<PaymentPage />} />
+              <Route path="/auctions/:auctionId/payment/complete" element={<PaymentCompletePage />} />
             </Route>
           </Route>
         </Routes>

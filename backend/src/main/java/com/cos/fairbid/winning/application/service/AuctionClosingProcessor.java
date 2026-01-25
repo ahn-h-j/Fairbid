@@ -3,6 +3,8 @@ package com.cos.fairbid.winning.application.service;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
+import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
+import com.cos.fairbid.transaction.domain.Transaction;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ public class AuctionClosingProcessor {
 
     private final WinningRepositoryPort winningRepository;
     private final PushNotificationPort pushNotificationPort;
+    private final TransactionRepositoryPort transactionRepositoryPort;
 
     /**
      * 입찰자가 없는 경우 유찰 처리한다
@@ -60,7 +63,19 @@ public class AuctionClosingProcessor {
         );
         winningRepository.save(firstWinning);
 
-        // 3. 1순위 낙찰자에게 Push 알림
+        // 3. Transaction 생성 (Orchestrator 패턴: Winning + Transaction을 같은 흐름에서 조합)
+        Transaction transaction = Transaction.create(
+                auction.getId(),
+                auction.getSellerId(),
+                firstBid.getBidderId(),
+                firstBid.getAmount(),
+                firstWinning.getPaymentDeadline()  // Winning과 동일한 결제 기한
+        );
+        transactionRepositoryPort.save(transaction);
+
+        log.debug("Transaction 생성 완료 - auctionId: {}, buyerId: {}", auction.getId(), firstBid.getBidderId());
+
+        // 4. 1순위 낙찰자에게 Push 알림
         pushNotificationPort.sendWinningNotification(
                 firstBid.getBidderId(),
                 auction.getId(),

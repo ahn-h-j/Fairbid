@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuction } from '../api/useAuction';
+import { useTransactionByAuctionId } from '../api/useTransaction';
 import { placeBid } from '../api/mutations';
 import { apiRequest } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import Timer from '../components/Timer';
 import StatusBadge from '../components/StatusBadge';
@@ -10,7 +12,7 @@ import CategoryBadge from '../components/CategoryBadge';
 import Alert from '../components/Alert';
 import Spinner from '../components/Spinner';
 import { BID_TYPES } from '../utils/constants';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatDate } from '../utils/formatters';
 
 /**
  * 경매 상세 페이지
@@ -19,7 +21,12 @@ import { formatPrice } from '../utils/formatters';
  */
 export default function AuctionDetailPage() {
   const { id: auctionId } = useParams();
+  const { user } = useAuth();
   const { auction, isLoading, error, mutate } = useAuction(auctionId);
+
+  // 경매가 종료된 경우에만 거래 정보 조회
+  const isAuctionEnded = auction && (auction.status === 'ENDED' || auction.status === 'CLOSED');
+  const { transaction } = useTransactionByAuctionId(isAuctionEnded ? auctionId : null);
 
   const [bidAmount, setBidAmount] = useState('');
   const [bidLoading, setBidLoading] = useState(false);
@@ -296,15 +303,13 @@ export default function AuctionDetailPage() {
           ) : null}
         </div>
       ) : (
-        /* 종료된 경매 */
-        <div className="bg-gray-50 rounded-2xl p-8 text-center ring-1 ring-black/[0.04] animate-fade-in">
-          <div className="w-14 h-14 mx-auto mb-3 bg-white rounded-2xl ring-1 ring-gray-200/60 flex items-center justify-center shadow-sm">
-            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-gray-600 font-semibold text-[15px]">이 경매는 종료되었습니다</p>
-        </div>
+        /* 종료된 경매 - 결제 관련 UI */
+        <EndedAuctionSection
+          auction={auction}
+          transaction={transaction}
+          user={user}
+          auctionId={auctionId}
+        />
       )}
       {/* 테스트 도구 */}
       <TestTools auctionId={auctionId} mutate={mutate} />
@@ -404,6 +409,184 @@ function InfoItem({ label, value }) {
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">{label}</span>
       <span className="text-[14px] font-bold text-gray-900 tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * 종료된 경매 섹션 컴포넌트
+ * 사용자 역할(판매자/낙찰자/기타)에 따라 다른 UI를 표시한다.
+ */
+function EndedAuctionSection({ auction, transaction, user, auctionId }) {
+  // 사용자 역할 판별
+  const isSeller = user?.userId && String(auction.sellerId) === String(user.userId);
+  const isWinner = user?.userId && transaction && String(transaction.buyerId) === String(user.userId);
+
+  // 거래 상태 판별
+  const isPaid = transaction?.status === 'PAID';
+  const isNoShow = transaction?.status === 'NO_SHOW';
+  const isAwaitingPayment = transaction?.status === 'AWAITING_PAYMENT';
+
+  // 결제 기한 만료 여부
+  const isPaymentExpired = transaction?.paymentDeadline &&
+    new Date(transaction.paymentDeadline) < new Date();
+
+  // 판매자 화면
+  if (isSeller) {
+    return (
+      <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+        <h2 className="text-[15px] font-bold text-gray-900 flex items-center gap-2 mb-4">
+          <div className="w-7 h-7 bg-violet-50 rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </div>
+          거래 상태
+        </h2>
+
+        {!transaction ? (
+          <div className="text-center py-6">
+            <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-sm text-gray-500">경매가 종료되었습니다</p>
+            <p className="text-[12px] text-gray-400 mt-1">낙찰자가 없거나 거래 정보가 아직 생성되지 않았습니다</p>
+          </div>
+        ) : isPaid ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 px-4 py-3 bg-green-50 rounded-xl">
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-green-800">결제 완료</p>
+                <p className="text-[11px] text-green-600">낙찰가: {formatPrice(transaction.finalPrice)}</p>
+              </div>
+            </div>
+          </div>
+        ) : isNoShow ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 px-4 py-3 bg-red-50 rounded-xl">
+              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-red-800">노쇼 처리됨</p>
+                <p className="text-[11px] text-red-600">낙찰자가 결제 기한 내 결제하지 않았습니다</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 px-4 py-3 bg-yellow-50 rounded-xl">
+              <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-yellow-800">결제 대기중</p>
+                <p className="text-[11px] text-yellow-600">
+                  낙찰가: {formatPrice(transaction.finalPrice)} / 기한: {formatDate(transaction.paymentDeadline)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 낙찰자 화면
+  if (isWinner) {
+    // 결제 완료
+    if (isPaid) {
+      return (
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+          <div className="text-center">
+            <div className="w-14 h-14 mx-auto mb-3 bg-green-50 rounded-2xl ring-1 ring-green-200/60 flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-[12px] font-bold ring-1 ring-green-200/60 mb-2">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              결제 완료
+            </span>
+            <p className="text-gray-600 font-medium text-[14px] mt-2">축하합니다! 결제가 완료되었습니다</p>
+            <p className="text-[12px] text-gray-400 mt-1">결제 금액: {formatPrice(transaction.finalPrice)}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // 노쇼 처리 또는 기한 만료
+    if (isNoShow || isPaymentExpired) {
+      return (
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+          <div className="text-center">
+            <div className="w-14 h-14 mx-auto mb-3 bg-red-50 rounded-2xl ring-1 ring-red-200/60 flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-gray-700 font-semibold text-[15px]">결제 기한이 만료되었습니다</p>
+            <p className="text-[12px] text-gray-400 mt-1">결제 기한 내 결제하지 않아 거래가 취소되었습니다</p>
+          </div>
+        </div>
+      );
+    }
+
+    // 결제 대기 중 - 결제하기 버튼 표시
+    if (isAwaitingPayment) {
+      return (
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in space-y-4">
+          <div className="text-center">
+            <div className="w-14 h-14 mx-auto mb-3 bg-blue-50 rounded-2xl ring-1 ring-blue-200/60 flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+            </div>
+            <p className="text-gray-700 font-bold text-[16px]">축하합니다! 낙찰되었습니다</p>
+            <p className="text-[13px] text-gray-500 mt-1">낙찰가: {formatPrice(transaction.finalPrice)}</p>
+          </div>
+
+          {/* 결제 기한 */}
+          <div className="flex justify-between items-center py-3 px-4 bg-yellow-50 rounded-xl">
+            <span className="text-[13px] text-yellow-700 font-medium">결제 기한</span>
+            <span className="text-[13px] font-bold text-yellow-800">{formatDate(transaction.paymentDeadline)}</span>
+          </div>
+
+          {/* 결제하기 버튼 */}
+          <Link
+            to={`/auctions/${auctionId}/payment`}
+            className="block w-full py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-center text-[14px] font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 btn-press"
+          >
+            결제하기
+          </Link>
+        </div>
+      );
+    }
+  }
+
+  // 기타 사용자 (비회원 또는 입찰 미참여자)
+  return (
+    <div className="bg-gray-50 rounded-2xl p-8 text-center ring-1 ring-black/[0.04] animate-fade-in">
+      <div className="w-14 h-14 mx-auto mb-3 bg-white rounded-2xl ring-1 ring-gray-200/60 flex items-center justify-center shadow-sm">
+        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <p className="text-gray-600 font-semibold text-[15px]">이 경매는 종료되었습니다</p>
+      {transaction && (
+        <p className="text-[12px] text-gray-400 mt-1">최종 낙찰가: {formatPrice(transaction.finalPrice)}</p>
+      )}
     </div>
   );
 }

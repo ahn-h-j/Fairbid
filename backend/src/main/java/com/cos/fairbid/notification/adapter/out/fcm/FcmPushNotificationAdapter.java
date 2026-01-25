@@ -33,4 +33,16 @@ public class FcmPushNotificationAdapter implements PushNotificationPort {
         NotificationType type = NotificationType.FAILED;
         fcmClient.send(sellerId, type.getTitle(), type.formatBody(auctionTitle, null), type, auctionId);
     }
+
+    @Override
+    public void sendPaymentCompletedNotification(Long userId, Long auctionId, Long amount) {
+        NotificationType type = NotificationType.PAYMENT_COMPLETED;
+        fcmClient.send(userId, type.getTitle(), type.formatBody(null, amount), type, auctionId);
+    }
+
+    @Override
+    public void sendPaymentReminderNotification(Long buyerId, Long auctionId, String auctionTitle, Long amount) {
+        NotificationType type = NotificationType.PAYMENT_REMINDER;
+        fcmClient.send(buyerId, type.getTitle(), type.formatBody(auctionTitle, amount), type, auctionId);
+    }
 }

@@ -1,4 +1,4 @@
-import { CATEGORIES, STATUSES } from './constants';
+import { CATEGORIES, STATUSES, TRANSACTION_STATUSES } from './constants';
 
 /**
  * 가격을 한국어 원화 형식으로 포맷
@@ -62,4 +62,13 @@ export function formatDate(dateStr) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(dateStr));
+}
+
+/**
+ * 거래 상태 코드를 한글 라벨로 변환
+ * @param {string} status - 거래 상태 코드
+ * @returns {string} 한글 상태명
+ */
+export function formatTransactionStatus(status) {
+  return TRANSACTION_STATUSES[status]?.label || status;
 }
