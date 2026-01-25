@@ -15,7 +15,12 @@ import com.cos.fairbid.user.application.port.in.UpdateNicknameUseCase.UpdateResu
 import com.cos.fairbid.user.domain.User;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +39,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
+@Validated
 public class UserController {
 
     private final CompleteOnboardingUseCase completeOnboardingUseCase;
@@ -78,7 +84,7 @@ public class UserController {
      */
     @GetMapping("/check-nickname")
     public ResponseEntity<ApiResponse<NicknameCheckResponse>> checkNickname(
-            @RequestParam String nickname) {
+            @RequestParam @NotBlank @Size(min = 2, max = 20) String nickname) {
 
         boolean available = checkNicknameUseCase.isAvailable(nickname);
         return ResponseEntity.ok(ApiResponse.success(new NicknameCheckResponse(available)));
@@ -149,7 +155,7 @@ public class UserController {
     public ResponseEntity<ApiResponse<CursorPageResponse<MyAuctionResponse>>> getMyAuctions(
             @RequestParam(required = false) AuctionStatus status,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
 
         Long userId = SecurityUtils.getCurrentUserId();
         CursorPage<MyAuctionItem> page = getMyAuctionsUseCase.getMyAuctions(userId, status, cursor, size);
@@ -170,7 +176,7 @@ public class UserController {
     @RequireOnboarding
     public ResponseEntity<ApiResponse<CursorPageResponse<MyBidResponse>>> getMyBids(
             @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
 
         Long userId = SecurityUtils.getCurrentUserId();
         CursorPage<MyBidItem> page = getMyBidsUseCase.getMyBids(userId, cursor, size);
