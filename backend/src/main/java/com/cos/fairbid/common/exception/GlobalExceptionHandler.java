@@ -8,6 +8,7 @@ import com.cos.fairbid.common.response.ApiResponse;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -149,6 +150,36 @@ public class GlobalExceptionHandler {
 
         log.warn("MethodArgumentTypeMismatchException: param={}, value={}", paramName, sanitizeLogValue(e.getValue()));
         return errorResponse(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", message);
+    }
+
+    // =====================================================
+    // 데이터 무결성 예외 처리
+    // =====================================================
+
+    /**
+     * DB 무결성 제약조건 위반 예외 처리 (UNIQUE 제약 등)
+     * 동시 요청으로 인한 Race Condition 시 발생할 수 있음.
+     * HTTP 409 Conflict
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolationException(
+            DataIntegrityViolationException e) {
+        String message = "데이터 무결성 위반이 발생했습니다.";
+
+        // 예외 메시지에서 중복 필드 추출 시도
+        String exceptionMessage = e.getMostSpecificCause().getMessage();
+        if (exceptionMessage != null) {
+            if (exceptionMessage.contains("nickname")) {
+                message = "이미 사용 중인 닉네임입니다.";
+            } else if (exceptionMessage.contains("phone_number")) {
+                message = "이미 등록된 전화번호입니다.";
+            } else if (exceptionMessage.contains("Duplicate entry")) {
+                message = "중복된 데이터가 존재합니다.";
+            }
+        }
+
+        log.warn("DataIntegrityViolationException: {}", exceptionMessage);
+        return errorResponse(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION", message);
     }
 
     // =====================================================

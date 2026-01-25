@@ -8,6 +8,8 @@ import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
+import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,16 +35,17 @@ public class AuctionController {
 
     /**
      * 경매 등록 API
+     * 온보딩 완료한 사용자만 경매를 등록할 수 있다.
      *
      * @param request 경매 생성 요청
      * @return 생성된 경매 정보
      */
     @PostMapping
+    @RequireOnboarding
     public ResponseEntity<ApiResponse<AuctionResponse>> createAuction(
             @Valid @RequestBody CreateAuctionRequest request
     ) {
-        // TODO: 인증 구현 후 실제 사용자 ID로 변경
-        Long sellerId = 1L;  // 모킹된 판매자 ID
+        Long sellerId = SecurityUtils.getCurrentUserId();
 
         Auction auction = createAuctionUseCase.createAuction(request.toCommand(sellerId));
         AuctionResponse response = AuctionResponse.from(auction);

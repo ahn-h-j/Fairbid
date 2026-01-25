@@ -6,10 +6,12 @@ COPY gradle gradle
 RUN sed -i 's/\r$//' ./gradlew && chmod +x ./gradlew
 
 COPY build.gradle settings.gradle ./
-RUN ./gradlew dependencies --no-daemon
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew dependencies --no-daemon
 
 COPY src src
-RUN ./gradlew bootJar --no-daemon
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew bootJar --no-daemon
 
 RUN java -Djarmode=layertools -jar build/libs/*.jar extract
 

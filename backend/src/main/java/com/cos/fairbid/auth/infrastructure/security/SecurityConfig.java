@@ -61,6 +61,9 @@ public class SecurityConfig {
                         // 인증 관련 엔드포인트
                         .requestMatchers("/api/v1/auth/**").permitAll()
 
+                        // 닉네임 중복 확인 (비인증 허용)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/check-nickname").permitAll()
+
                         // 경매 조회 (GET만 비로그인 허용)
                         .requestMatchers(HttpMethod.GET, "/api/v1/auctions/**").permitAll()
 
