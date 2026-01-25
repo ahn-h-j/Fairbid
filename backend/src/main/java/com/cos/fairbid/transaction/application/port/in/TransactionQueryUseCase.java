@@ -26,4 +26,12 @@ public interface TransactionQueryUseCase {
      * @return 판매 내역 요약 목록
      */
     List<TransactionSummaryResponse> getMySales(Long sellerId);
+
+    /**
+     * 경매 ID로 거래 정보를 조회한다
+     *
+     * @param auctionId 경매 ID
+     * @return 거래 상세 응답 (없으면 null)
+     */
+    TransactionDetailResponse getTransactionByAuctionId(Long auctionId);
 }

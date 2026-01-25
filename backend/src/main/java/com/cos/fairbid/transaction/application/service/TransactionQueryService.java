@@ -57,4 +57,19 @@ public class TransactionQueryService implements TransactionQueryUseCase {
                 .map(TransactionSummaryResponse::from)
                 .toList();
     }
+
+    /**
+     * 경매 ID로 거래 정보를 조회한다
+     *
+     * @param auctionId 경매 ID
+     * @return 거래 상세 응답 (없으면 null)
+     */
+    @Override
+    public TransactionDetailResponse getTransactionByAuctionId(Long auctionId) {
+        log.debug("경매 ID로 거래 조회 - 경매 ID: {}", auctionId);
+
+        return transactionRepositoryPort.findByAuctionId(auctionId)
+                .map(TransactionDetailResponse::from)
+                .orElse(null);
+    }
 }

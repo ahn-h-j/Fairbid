@@ -73,4 +73,19 @@ public class TransactionController {
         List<TransactionSummaryResponse> response = transactionQueryUseCase.getMySales(userId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    /**
+     * 경매 ID로 거래 정보를 조회한다
+     * 경매 상세 페이지에서 결제 버튼 표시 여부를 판단하기 위해 사용된다
+     *
+     * @param auctionId 경매 ID
+     * @return 거래 상세 정보 (거래가 없으면 null 데이터 반환)
+     */
+    @GetMapping("/auction/{auctionId}")
+    public ResponseEntity<ApiResponse<TransactionDetailResponse>> getTransactionByAuctionId(
+            @PathVariable Long auctionId
+    ) {
+        TransactionDetailResponse response = transactionQueryUseCase.getTransactionByAuctionId(auctionId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }
