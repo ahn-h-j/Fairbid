@@ -160,13 +160,28 @@ public class GlobalExceptionHandler {
      * DB 무결성 제약조건 위반 예외 처리 (UNIQUE 제약 등)
      * 동시 요청으로 인한 Race Condition 시 발생할 수 있음.
      * HTTP 409 Conflict
+     *
+     * 우선순위:
+     * 1. Hibernate ConstraintViolationException의 constraintName 활용 (안정적)
+     * 2. 예외 메시지 substring 파싱 (fallback)
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolationException(
             DataIntegrityViolationException e) {
         String message = "데이터 무결성 위반이 발생했습니다.";
 
-        // 예외 메시지에서 중복 필드 추출 시도
+        // 1. Hibernate ConstraintViolationException에서 constraintName 추출 시도
+        Throwable cause = e.getCause();
+        if (cause instanceof org.hibernate.exception.ConstraintViolationException hibernateEx) {
+            String constraintName = hibernateEx.getConstraintName();
+            if (constraintName != null) {
+                message = mapConstraintNameToMessage(constraintName);
+                log.warn("DataIntegrityViolationException: constraint={}", constraintName);
+                return errorResponse(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION", message);
+            }
+        }
+
+        // 2. Fallback: 예외 메시지에서 중복 필드 추출 시도
         String exceptionMessage = e.getMostSpecificCause().getMessage();
         if (exceptionMessage != null) {
             if (exceptionMessage.contains("nickname")) {
@@ -180,6 +195,29 @@ public class GlobalExceptionHandler {
 
         log.warn("DataIntegrityViolationException: {}", exceptionMessage);
         return errorResponse(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION", message);
+    }
+
+    /**
+     * DB 제약조건 이름을 사용자 친화적 메시지로 변환한다.
+     *
+     * @param constraintName DB 제약조건 이름 (예: uk_users_nickname)
+     * @return 사용자 친화적 에러 메시지
+     */
+    private String mapConstraintNameToMessage(String constraintName) {
+        if (constraintName == null) {
+            return "데이터 무결성 위반이 발생했습니다.";
+        }
+
+        String lowerName = constraintName.toLowerCase();
+        if (lowerName.contains("nickname")) {
+            return "이미 사용 중인 닉네임입니다.";
+        } else if (lowerName.contains("phone")) {
+            return "이미 등록된 전화번호입니다.";
+        } else if (lowerName.contains("email")) {
+            return "이미 등록된 이메일입니다.";
+        }
+
+        return "중복된 데이터가 존재합니다.";
     }
 
     // =====================================================
