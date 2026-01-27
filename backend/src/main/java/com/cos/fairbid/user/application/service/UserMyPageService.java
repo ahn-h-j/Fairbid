@@ -1,6 +1,7 @@
 package com.cos.fairbid.user.application.service;
 
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.common.pagination.CursorPage;
 import com.cos.fairbid.user.application.port.in.GetMyAuctionsUseCase;
 import com.cos.fairbid.user.application.port.in.GetMyBidsUseCase;
 import com.cos.fairbid.user.application.port.out.LoadUserAuctionsPort;

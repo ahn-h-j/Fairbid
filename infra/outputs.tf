@@ -1,6 +1,6 @@
 output "ec2_public_ip" {
-  description = "EC2 인스턴스 Public IP"
-  value       = aws_instance.fairbid.public_ip
+  description = "EC2 Elastic IP (고정)"
+  value       = aws_eip.fairbid.public_ip
 }
 
 output "ec2_instance_id" {

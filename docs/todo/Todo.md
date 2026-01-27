@@ -111,6 +111,23 @@
 - **해결**: 도메인 모델의 날짜 필드를 `Instant`로 전환하거나 커스텀 Serializer 추가
 - **조건**: 현재 프론트엔드 parseServerDate()로 동작하나 장기적으로 전환 권장 (PR #48 리뷰 보류 항목)
 
+### HTTPS 설정 (SSL 인증서)
+- **파일**: `nginx.conf`, `docker-compose.yml`
+- **내용**: 현재 HTTP만 지원 (포트 80). HTTPS 미설정 상태
+- **해결**:
+  1. EC2에서 certbot으로 Let's Encrypt SSL 인증서 발급
+  2. nginx 443 포트 + SSL 설정 추가
+  3. HTTP→HTTPS 리다이렉트 설정
+  4. docker-compose에서 443 포트 노출
+  5. `COOKIE_SECURE: "true"` 설정 (운영)
+- **조건**: 프로덕션 보안 강화 시
+
+### Terraform EIP를 aws_eip_association으로 분리
+- **파일**: `infra/main.tf:106-116`
+- **내용**: `aws_eip`에 `instance`를 직접 연결하면 인스턴스 교체 시 ForceNew로 재생성됨
+- **해결**: `aws_eip_association`으로 EIP 할당과 연결을 분리
+- **조건**: 인프라 확장 또는 인스턴스 교체 계획 시 (PR #47 리뷰 보류 항목)
+
 ---
 
 ## 진행 중

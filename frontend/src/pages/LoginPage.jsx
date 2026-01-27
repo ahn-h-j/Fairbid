@@ -1,42 +1,6 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth, AUTH_STATE } from '../contexts/AuthContext';
-import { setDevUserId } from '../api/client';
-
-/**
- * 개발용 게스트 사용자 목록
- * 백엔드 없이 인증 플로우를 테스트할 수 있다.
- */
-const GUEST_USERS = [
-  { id: 1, nickname: '게스트A', onboarded: true, color: 'from-emerald-400 to-teal-500' },
-  { id: 2, nickname: '게스트B', onboarded: true, color: 'from-orange-400 to-pink-500' },
-  { id: 3, nickname: null, onboarded: false, color: 'from-gray-400 to-gray-500', label: '게스트C (온보딩 미완료)' },
-];
-
-/**
- * 개발용 가짜 JWT 생성
- * 실제 서명은 하지 않으며, 프론트엔드 디코딩용 payload만 유효하다.
- * @param {object} user - 게스트 사용자 정보
- * @returns {string} 가짜 JWT 문자열
- */
-function createFakeJwt(user) {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const payload = {
-    sub: String(user.id),
-    nickname: user.nickname,
-    onboarded: user.onboarded,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 1800, // 30분
-  };
-  // 유니코드(한글) 지원을 위해 TextEncoder 사용
-  const encode = (obj) => {
-    const bytes = new TextEncoder().encode(JSON.stringify(obj));
-    let binary = '';
-    bytes.forEach((b) => { binary += String.fromCharCode(b); });
-    return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  };
-  return `${encode(header)}.${encode(payload)}.fake-signature`;
-}
 
 /** OAuth Provider별 브랜드 설정 */
 const PROVIDERS = [
@@ -93,7 +57,7 @@ const ERROR_MESSAGES = {
  * OAuth Provider 선택 화면을 제공한다.
  */
 export default function LoginPage() {
-  const { authState, updateAuthFromToken } = useAuth();
+  const { authState } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -118,24 +82,6 @@ export default function LoginPage() {
     localStorage.setItem('redirectAfterLogin', redirectPath);
     window.location.href = `/api/v1/auth/oauth2/${providerId}`;
   };
-
-  /**
-   * 개발용 게스트 로그인
-   * 가짜 JWT를 생성하여 인증 상태를 설정하고, 온보딩 상태에 따라 분기한다.
-   */
-  const handleGuestLogin = useCallback((guestUser) => {
-    const token = createFakeJwt(guestUser);
-    updateAuthFromToken(token);
-    setDevUserId(guestUser.id);
-
-    if (!guestUser.onboarded) {
-      navigate('/onboarding', { replace: true });
-    } else {
-      const redirectPath = localStorage.getItem('redirectAfterLogin') || '/';
-      localStorage.removeItem('redirectAfterLogin');
-      navigate(redirectPath, { replace: true });
-    }
-  }, [updateAuthFromToken, navigate]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
@@ -176,27 +122,6 @@ export default function LoginPage() {
               <span>{provider.name}로 로그인</span>
             </button>
           ))}
-        </div>
-
-        {/* 개발용 게스트 로그인 */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-400 text-center mb-3 font-medium">개발용 테스트 로그인</p>
-            <div className="space-y-2">
-              {GUEST_USERS.map((guest) => (
-                <button
-                  key={guest.id}
-                  type="button"
-                  onClick={() => handleGuestLogin(guest)}
-                  className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-gradient-to-r ${guest.color} hover:opacity-90 transition-opacity duration-200`}
-                  aria-label={`${guest.label || guest.nickname}로 테스트 로그인`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  <span>{guest.label || guest.nickname}</span>
-                </button>
-              ))}
-            </div>
         </div>
       </div>
     </div>
