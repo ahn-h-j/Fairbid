@@ -6,7 +6,7 @@ import { processPayment } from '../api/mutations';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
 import Alert from '../components/Alert';
-import { formatPrice, formatDate } from '../utils/formatters';
+import { formatPrice, formatDate, parseServerDate } from '../utils/formatters';
 
 /**
  * 결제 확인 페이지
@@ -31,13 +31,13 @@ export default function PaymentPage() {
    * 결제 API 호출 후 완료 페이지로 이동한다.
    */
   const handlePayment = async () => {
-    if (!transaction?.id) return;
+    if (!transaction?.transactionId) return;
 
     setIsProcessing(true);
     setErrorMessage(null);
 
     try {
-      await processPayment(transaction.id);
+      await processPayment(transaction.transactionId);
       navigate(`/auctions/${auctionId}/payment/complete`);
     } catch (err) {
       setErrorMessage(err.message || '결제 처리에 실패했습니다.');
@@ -117,9 +117,9 @@ export default function PaymentPage() {
     );
   }
 
-  // 결제 기한 만료 또는 노쇼 처리된 경우
+  // 결제 기한 만료 또는 노쇼 처리된 경우 (서버 시간은 UTC로 해석)
   const isExpired = transaction.status === 'NO_SHOW' ||
-    (transaction.paymentDeadline && new Date(transaction.paymentDeadline) < new Date());
+    (transaction.paymentDeadline && parseServerDate(transaction.paymentDeadline) < new Date());
 
   if (isExpired || transaction.status === 'NO_SHOW') {
     return (

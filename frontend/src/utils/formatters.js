@@ -72,3 +72,16 @@ export function formatDate(dateStr) {
 export function formatTransactionStatus(status) {
   return TRANSACTION_STATUSES[status]?.label || status;
 }
+
+/**
+ * 서버에서 반환한 날짜 문자열을 UTC Date 객체로 변환
+ * 서버는 LocalDateTime을 타임존 없이 반환하므로, UTC로 해석한다.
+ * @param {string} dateStr - 서버에서 반환한 날짜 문자열 (예: "2026-01-25T04:51:56")
+ * @returns {Date|null} UTC로 해석된 Date 객체
+ */
+export function parseServerDate(dateStr) {
+  if (!dateStr) return null;
+  // 타임존 정보가 없으면 'Z'를 추가하여 UTC로 해석
+  const normalized = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+  return new Date(normalized);
+}
