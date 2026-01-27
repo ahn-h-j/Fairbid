@@ -1,6 +1,6 @@
 package com.cos.fairbid.user.adapter.in.dto;
 
-import com.cos.fairbid.user.application.port.in.GetMyAuctionsUseCase.CursorPage;
+import com.cos.fairbid.common.pagination.CursorPage;
 
 import java.util.List;
 import java.util.function.Function;

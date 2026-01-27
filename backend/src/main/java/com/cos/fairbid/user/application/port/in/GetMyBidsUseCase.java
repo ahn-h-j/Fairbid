@@ -1,7 +1,7 @@
 package com.cos.fairbid.user.application.port.in;
 
 import com.cos.fairbid.auction.domain.AuctionStatus;
-import com.cos.fairbid.user.application.port.in.GetMyAuctionsUseCase.CursorPage;
+import com.cos.fairbid.common.pagination.CursorPage;
 
 import java.time.LocalDateTime;
 

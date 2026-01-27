@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { setAccessToken, setAuthStateListener, decodeJwtPayload, setDevUserId } from '../api/client';
+import { setAccessToken, setAuthStateListener, decodeJwtPayload } from '../api/client';
 
 /**
  * 인증 상태 상수
@@ -108,7 +108,6 @@ export function AuthProvider({ children }) {
       // 로그아웃 요청 실패해도 클라이언트는 초기화
     }
     setAccessToken(null);
-    setDevUserId(null);
     setUser(null);
     setAuthState(AUTH_STATE.UNAUTHENTICATED);
   }, []);

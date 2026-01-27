@@ -1,9 +1,9 @@
 package com.cos.fairbid.user.application.port.in;
 
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.common.pagination.CursorPage;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 내 판매 경매 목록 조회 유스케이스
@@ -31,20 +31,6 @@ public interface GetMyAuctionsUseCase {
             Long currentPrice,
             AuctionStatus status,
             LocalDateTime createdAt
-    ) {
-    }
-
-    /**
-     * 커서 기반 페이지 결과
-     *
-     * @param items      현재 페이지 항목들
-     * @param nextCursor 다음 페이지 커서 (null이면 마지막 페이지)
-     * @param hasNext    다음 페이지 존재 여부
-     */
-    record CursorPage<T>(
-            List<T> items,
-            Long nextCursor,
-            boolean hasNext
     ) {
     }
 }
