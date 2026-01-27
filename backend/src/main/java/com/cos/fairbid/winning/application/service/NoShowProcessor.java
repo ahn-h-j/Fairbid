@@ -3,6 +3,11 @@ package com.cos.fairbid.winning.application.service;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
+import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
+import com.cos.fairbid.transaction.domain.Transaction;
+import com.cos.fairbid.user.application.port.out.LoadUserPort;
+import com.cos.fairbid.user.application.port.out.SaveUserPort;
+import com.cos.fairbid.user.domain.User;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +30,9 @@ public class NoShowProcessor {
     private final WinningRepositoryPort winningRepository;
     private final AuctionRepositoryPort auctionRepository;
     private final PushNotificationPort pushNotificationPort;
+    private final TransactionRepositoryPort transactionRepositoryPort;
+    private final LoadUserPort loadUserPort;
+    private final SaveUserPort saveUserPort;
 
     /**
      * 1순위 노쇼를 처리한다
@@ -40,9 +48,14 @@ public class NoShowProcessor {
         firstWinning.markAsNoShow();
         winningRepository.save(firstWinning);
 
-        // 2. 경고 부여 (TODO: User 도메인 구현 후)
-        // userRepository.addWarning(firstWinning.getBidderId());
-        log.info("1순위 노쇼 처리 - auctionId: {}, bidderId: {}", auctionId, firstWinning.getBidderId());
+        // 2. 경고 부여
+        Long bidderId = firstWinning.getBidderId();
+        loadUserPort.findById(bidderId).ifPresent(user -> {
+            user.addWarning();
+            saveUserPort.save(user);
+            log.info("노쇼 경고 부여 - userId: {}, 현재 경고 횟수: {}", bidderId, user.getWarningCount());
+        });
+        log.info("1순위 노쇼 처리 - auctionId: {}, bidderId: {}", auctionId, bidderId);
 
         // 3. 2순위 승계 여부 확인
         Optional<Winning> secondWinningOpt = winningRepository.findByAuctionIdAndRank(auctionId, 2);
@@ -50,14 +63,21 @@ public class NoShowProcessor {
         if (secondWinningOpt.isPresent()) {
             Winning secondWinning = secondWinningOpt.get();
 
-            // 2순위가 90% 이상이면 자동 승계
+            // 2순위가 90% 이상이면 자동 승계 (Transaction은 transferToSecondRank에서 갱신)
             if (secondWinning.isEligibleForAutoTransfer(firstWinning.getBidAmount())) {
                 transferToSecondRank(secondWinning, auction);
                 return;
             }
         }
 
-        // 4. 승계 불가 → 유찰 처리
+        // 4. 승계 불가 → Transaction 취소 후 유찰 처리
+        Optional<Transaction> transactionOpt = transactionRepositoryPort.findByAuctionId(auctionId);
+        transactionOpt.ifPresent(transaction -> {
+            transaction.cancel();
+            transactionRepositoryPort.save(transaction);
+            log.debug("Transaction 취소 (1순위 노쇼, 승계 불가) - auctionId: {}", auctionId);
+        });
+
         failAuction(auction);
     }
 
@@ -76,7 +96,19 @@ public class NoShowProcessor {
         auction.transferWinner(secondWinning.getBidderId());
         auctionRepository.save(auction);
 
-        // 3. 2순위에게 승계 알림
+        // 3. Transaction 2순위 승계 처리
+        Optional<Transaction> transactionOpt = transactionRepositoryPort.findByAuctionId(auction.getId());
+        transactionOpt.ifPresent(transaction -> {
+            transaction.transferToSecondRank(
+                    secondWinning.getBidderId(),
+                    secondWinning.getBidAmount(),
+                    secondWinning.getPaymentDeadline()
+            );
+            transactionRepositoryPort.save(transaction);
+            log.debug("Transaction 2순위 승계 - auctionId: {}, newBuyerId: {}", auction.getId(), secondWinning.getBidderId());
+        });
+
+        // 4. 2순위에게 승계 알림
         pushNotificationPort.sendTransferNotification(
                 secondWinning.getBidderId(),
                 auction.getId(),
@@ -99,6 +131,14 @@ public class NoShowProcessor {
         secondWinning.markAsFailed();
         winningRepository.save(secondWinning);
 
+        // Transaction 취소 처리
+        Optional<Transaction> transactionOpt = transactionRepositoryPort.findByAuctionId(auction.getId());
+        transactionOpt.ifPresent(transaction -> {
+            transaction.cancel();
+            transactionRepositoryPort.save(transaction);
+            log.debug("Transaction 취소 (2순위 만료) - auctionId: {}", auction.getId());
+        });
+
         // 경매 유찰 처리
         failAuction(auction);
 
@@ -107,12 +147,23 @@ public class NoShowProcessor {
 
     /**
      * 경매를 유찰 처리한다
+     * Transaction이 존재하고 결제 대기 상태인 경우 취소 처리한다
      *
      * @param auction 유찰 처리할 경매
      */
     public void failAuction(Auction auction) {
         auction.fail();
         auctionRepository.save(auction);
+
+        // Transaction이 존재하고 아직 결제 대기 상태라면 취소 처리
+        Optional<Transaction> transactionOpt = transactionRepositoryPort.findByAuctionId(auction.getId());
+        transactionOpt.ifPresent(transaction -> {
+            if (transaction.isAwaitingPayment()) {
+                transaction.cancel();
+                transactionRepositoryPort.save(transaction);
+                log.debug("Transaction 취소 (유찰) - auctionId: {}", auction.getId());
+            }
+        });
 
         // 판매자에게 유찰 알림
         pushNotificationPort.sendFailedAuctionNotification(

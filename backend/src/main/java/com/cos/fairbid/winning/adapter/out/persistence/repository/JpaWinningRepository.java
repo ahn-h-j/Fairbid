@@ -36,4 +36,18 @@ public interface JpaWinningRepository extends JpaRepository<WinningEntity, Long>
             @Param("status") WinningStatus status,
             @Param("now") LocalDateTime now
     );
+
+    /**
+     * 경매 ID와 입찰자 ID로 결제 대기 중인 낙찰 정보를 조회한다
+     * 결제 처리 시 현재 구매자에 해당하는 PENDING_PAYMENT 상태의 Winning을 찾는다
+     */
+    @Query("SELECT w FROM WinningEntity w " +
+            "WHERE w.auctionId = :auctionId " +
+            "AND w.bidderId = :bidderId " +
+            "AND w.status = :status")
+    Optional<WinningEntity> findByAuctionIdAndBidderIdAndStatus(
+            @Param("auctionId") Long auctionId,
+            @Param("bidderId") Long bidderId,
+            @Param("status") WinningStatus status
+    );
 }

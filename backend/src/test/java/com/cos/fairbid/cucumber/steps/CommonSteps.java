@@ -7,7 +7,9 @@ import io.cucumber.java.ko.그러면;
 import io.cucumber.java.ko.그리고;
 import io.cucumber.java.ko.만약;
 import io.cucumber.java.ko.조건;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,9 @@ public class CommonSteps {
     private final TestAdapter testAdapter;
     private final TestContext testContext;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     public CommonSteps(TestAdapter testAdapter, TestContext testContext) {
         this.testAdapter = testAdapter;
         this.testContext = testContext;
@@ -31,6 +36,13 @@ public class CommonSteps {
     public void setUp() {
         // Given: 각 시나리오 시작 전 컨텍스트 초기화
         testContext.reset();
+
+        // DB 데이터 정리 (각 시나리오 독립성 보장)
+        // 외래키 제약조건을 고려하여 순서대로 삭제
+        jdbcTemplate.execute("DELETE FROM transaction");
+        jdbcTemplate.execute("DELETE FROM winning");
+        jdbcTemplate.execute("DELETE FROM bid");
+        jdbcTemplate.execute("DELETE FROM auction");
     }
 
     @조건("서버가 실행중이다")

@@ -110,4 +110,13 @@ public class User {
     public void deactivate() {
         this.isActive = false;
     }
+
+    /**
+     * 경고를 부여한다.
+     * 노쇼(결제 미이행) 시 호출된다.
+     * 3회 이상 경고 시 isBlocked() = true가 된다.
+     */
+    public void addWarning() {
+        this.warningCount++;
+    }
 }

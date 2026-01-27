@@ -99,6 +99,18 @@
 - **해결**: 프로파일별 분리 또는 IP 제한 설정
 - **조건**: 프로덕션 배포 시 (PR #44 리뷰 보류 항목)
 
+### TransactionController 권한 체크
+- **파일**: `TransactionController.java`
+- **내용**: `getTransaction`, `getTransactionByAuctionId` API에서 buyer/seller 권한 검증 없음
+- **해결**: SecurityUtils.getCurrentUserId()로 현재 사용자 확인 후 isBuyer/isSeller 검증
+- **조건**: 민감 정보 노출 우려 시 (PR #48 리뷰 보류 항목)
+
+### LocalDateTime → Instant 전환
+- **파일**: `Transaction.java`, `Winning.java` 등 도메인 모델
+- **내용**: `LocalDateTime`은 타임존 정보가 없어 `ObjectMapper.setTimeZone(UTC)` 설정이 무시됨
+- **해결**: 도메인 모델의 날짜 필드를 `Instant`로 전환하거나 커스텀 Serializer 추가
+- **조건**: 현재 프론트엔드 parseServerDate()로 동작하나 장기적으로 전환 권장 (PR #48 리뷰 보류 항목)
+
 ### HTTPS 설정 (SSL 인증서)
 - **파일**: `nginx.conf`, `docker-compose.yml`
 - **내용**: 현재 HTTP만 지원 (포트 80). HTTPS 미설정 상태

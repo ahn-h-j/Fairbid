@@ -50,4 +50,14 @@ public interface WinningRepositoryPort {
      * @return 낙찰 도메인 객체 (Optional)
      */
     Optional<Winning> findById(Long id);
+
+    /**
+     * 경매 ID와 입찰자 ID로 결제 대기 중인 낙찰 정보를 조회한다
+     * 결제 처리 시 현재 Transaction의 구매자에 해당하는 PENDING_PAYMENT 상태의 Winning을 찾을 때 사용
+     *
+     * @param auctionId 경매 ID
+     * @param bidderId  입찰자 ID
+     * @return 낙찰 도메인 객체 (Optional)
+     */
+    Optional<Winning> findPendingByAuctionIdAndBidderId(Long auctionId, Long bidderId);
 }
