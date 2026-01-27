@@ -104,6 +104,18 @@ resource "aws_instance" "fairbid" {
 }
 
 # =============================================================================
+# Elastic IP (재시작 시 IP 변경 방지)
+# =============================================================================
+resource "aws_eip" "fairbid" {
+  instance = aws_instance.fairbid.id
+  domain   = "vpc"
+
+  tags = {
+    Name = "fairbid-eip"
+  }
+}
+
+# =============================================================================
 # Route 53 Hosted Zone
 # =============================================================================
 resource "aws_route53_zone" "fairbid" {
@@ -119,29 +131,29 @@ resource "aws_route53_zone" "fairbid" {
   }
 }
 
-# 루트 도메인 → EC2
+# 루트 도메인 → Elastic IP
 resource "aws_route53_record" "root" {
   zone_id = aws_route53_zone.fairbid.zone_id
   name    = var.domain_name
   type    = "A"
   ttl     = 300
-  records = [aws_instance.fairbid.public_ip]
+  records = [aws_eip.fairbid.public_ip]
 }
 
-# www 서브도메인 → EC2
+# www 서브도메인 → Elastic IP
 resource "aws_route53_record" "www" {
   zone_id = aws_route53_zone.fairbid.zone_id
   name    = "www.${var.domain_name}"
   type    = "A"
   ttl     = 300
-  records = [aws_instance.fairbid.public_ip]
+  records = [aws_eip.fairbid.public_ip]
 }
 
-# api 서브도메인 → EC2 (선택)
+# api 서브도메인 → Elastic IP
 resource "aws_route53_record" "api" {
   zone_id = aws_route53_zone.fairbid.zone_id
   name    = "api.${var.domain_name}"
   type    = "A"
   ttl     = 300
-  records = [aws_instance.fairbid.public_ip]
+  records = [aws_eip.fairbid.public_ip]
 }
