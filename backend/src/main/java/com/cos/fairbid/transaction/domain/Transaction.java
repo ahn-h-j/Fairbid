@@ -106,13 +106,13 @@ public class Transaction {
      * @param newBuyerId         2순위 입찰자 ID
      * @param newFinalPrice      2순위 입찰 금액
      * @param newPaymentDeadline 새 결제 마감일시 (1시간)
-     * @throws IllegalStateException 취소된 상태가 아닌 경우
+     * @throws IllegalStateException 결제 대기 상태가 아닌 경우
      */
     public void transferToSecondRank(Long newBuyerId, Long newFinalPrice,
                                      LocalDateTime newPaymentDeadline) {
-        if (this.status != TransactionStatus.CANCELLED) {
+        if (this.status != TransactionStatus.AWAITING_PAYMENT) {
             throw new IllegalStateException(
-                    "취소 상태에서만 2순위 승계가 가능합니다. 현재 상태: " + this.status);
+                    "결제 대기 상태에서만 2순위 승계가 가능합니다. 현재 상태: " + this.status);
         }
         validateNotNull(newBuyerId, "2순위 구매자 ID");
         validateNotNull(newFinalPrice, "2순위 낙찰가");
