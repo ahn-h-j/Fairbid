@@ -9,9 +9,6 @@ let serverTimeOffset = 0;
 /** Access Token (메모리 저장) */
 let accessToken = null;
 
-/** 개발용 사용자 ID (기존 백엔드 X-User-Id 호환) */
-let devUserId = null;
-
 /** 토큰 갱신 진행 중인 Promise (중복 갱신 방지) */
 let refreshPromise = null;
 
@@ -40,15 +37,6 @@ export function setAccessToken(token) {
  */
 export function getAccessToken() {
   return accessToken;
-}
-
-/**
- * 개발용 사용자 ID 설정 (기존 백엔드 X-User-Id 호환)
- * 게스트 로그인 시 호출되어 백엔드가 사용자를 식별할 수 있게 한다.
- * @param {number|null} userId
- */
-export function setDevUserId(userId) {
-  devUserId = userId;
 }
 
 /**
@@ -164,7 +152,6 @@ export async function apiRequest(endpoint, options = {}) {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(devUserId ? { 'X-User-Id': String(devUserId) } : {}),
       ...options.headers,
     },
   });
