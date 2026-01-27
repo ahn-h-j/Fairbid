@@ -178,4 +178,16 @@ public class Winning {
     public boolean isPendingPayment() {
         return this.status == WinningStatus.PENDING_PAYMENT;
     }
+
+    // =====================================================
+    // 테스트 전용 메서드
+    // =====================================================
+
+    /**
+     * [테스트 전용] 결제 기한을 강제로 만료시킨다.
+     * 노쇼 처리 테스트를 위해 deadline을 과거로 설정한다.
+     */
+    public void expirePaymentDeadlineForTest() {
+        this.paymentDeadline = LocalDateTime.now().minusHours(1);
+    }
 }

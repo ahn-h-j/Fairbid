@@ -5,15 +5,18 @@ import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.common.response.ApiResponse;
+import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
 import com.cos.fairbid.winning.application.port.in.CloseAuctionUseCase;
+import com.cos.fairbid.winning.application.port.in.ProcessNoShowUseCase;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -34,6 +37,10 @@ public class TestController {
     private final AuctionCachePort auctionCachePort;
     private final CloseAuctionUseCase closeAuctionUseCase;
     private final StringRedisTemplate redisTemplate;
+    private final WinningRepositoryPort winningRepositoryPort;
+    private final TransactionRepositoryPort transactionRepositoryPort;
+    private final ProcessNoShowUseCase processNoShowUseCase;
+    private final TestNoShowHelper testNoShowHelper;
 
     /**
      * 경매 종료 시간을 현재로부터 5분 후로 설정 (연장 테스트용)
@@ -177,5 +184,112 @@ public class TestController {
                 "auctionId", auctionId,
                 "message", "캐시가 새로고침되었습니다."
         )));
+    }
+
+    // =====================================================
+    // 노쇼 테스트 관련 API
+    // =====================================================
+
+    /**
+     * 특정 경매의 결제 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
+     *
+     * 처리 순서:
+     * 1. 해당 경매의 1순위 Winning의 paymentDeadline을 과거로 변경 (별도 트랜잭션)
+     * 2. 해당 경매의 Transaction의 paymentDeadline을 과거로 변경 (별도 트랜잭션)
+     * 3. 노쇼 처리 스케줄러 로직 즉시 실행
+     *
+     * @param auctionId 경매 ID
+     * @return 처리 결과 (노쇼 처리 전/후 상태)
+     */
+    @PostMapping("/auctions/{auctionId}/force-noshow")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> forceNoShow(
+            @PathVariable Long auctionId
+    ) {
+        log.info("[TEST] 노쇼 강제 처리 시작 - auctionId: {}", auctionId);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("auctionId", auctionId);
+
+        // 1. deadline 만료 처리 (별도 트랜잭션으로 즉시 커밋)
+        Map<String, Object> expireResult = testNoShowHelper.expireDeadlineForTest(auctionId);
+        result.putAll(expireResult);
+
+        log.info("[TEST] deadline 변경 완료, 노쇼 처리 실행");
+
+        // 2. 노쇼 처리 즉시 실행 (변경사항이 커밋된 후 실행)
+        processNoShowUseCase.processExpiredPayments();
+
+        // 3. 처리 후 상태 조회
+        winningRepositoryPort.findByAuctionIdAndRank(auctionId, 1).ifPresent(winning -> {
+            result.put("afterFirstWinningStatus", winning.getStatus().name());
+        });
+
+        winningRepositoryPort.findByAuctionIdAndRank(auctionId, 2).ifPresent(secondWinning -> {
+            result.put("afterSecondWinningStatus", secondWinning.getStatus().name());
+            if (secondWinning.getPaymentDeadline() != null) {
+                result.put("secondWinningNewDeadline", secondWinning.getPaymentDeadline().toString());
+            }
+        });
+
+        transactionRepositoryPort.findByAuctionId(auctionId).ifPresent(transaction -> {
+            result.put("afterTransactionStatus", transaction.getStatus().name());
+            result.put("afterTransactionBuyerId", transaction.getBuyerId());
+        });
+
+        log.info("[TEST] 노쇼 강제 처리 완료 - result: {}", result);
+
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    /**
+     * 현재 경매의 낙찰/거래 상태를 조회한다.
+     *
+     * @param auctionId 경매 ID
+     * @return 낙찰 및 거래 상태 정보
+     */
+    @GetMapping("/auctions/{auctionId}/winning-status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getWinningStatus(
+            @PathVariable Long auctionId
+    ) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("auctionId", auctionId);
+
+        // 1순위 정보
+        winningRepositoryPort.findByAuctionIdAndRank(auctionId, 1).ifPresent(winning -> {
+            result.put("firstWinning", Map.of(
+                    "id", winning.getId(),
+                    "bidderId", winning.getBidderId(),
+                    "bidAmount", winning.getBidAmount(),
+                    "status", winning.getStatus().name(),
+                    "paymentDeadline", winning.getPaymentDeadline() != null
+                            ? winning.getPaymentDeadline().toString() : "null"
+            ));
+        });
+
+        // 2순위 정보
+        winningRepositoryPort.findByAuctionIdAndRank(auctionId, 2).ifPresent(winning -> {
+            result.put("secondWinning", Map.of(
+                    "id", winning.getId(),
+                    "bidderId", winning.getBidderId(),
+                    "bidAmount", winning.getBidAmount(),
+                    "status", winning.getStatus().name(),
+                    "paymentDeadline", winning.getPaymentDeadline() != null
+                            ? winning.getPaymentDeadline().toString() : "null"
+            ));
+        });
+
+        // Transaction 정보
+        transactionRepositoryPort.findByAuctionId(auctionId).ifPresent(transaction -> {
+            result.put("transaction", Map.of(
+                    "id", transaction.getId(),
+                    "buyerId", transaction.getBuyerId(),
+                    "finalPrice", transaction.getFinalPrice(),
+                    "status", transaction.getStatus().name(),
+                    "paymentDeadline", transaction.getPaymentDeadline() != null
+                            ? transaction.getPaymentDeadline().toString() : "null"
+            ));
+        });
+
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 }

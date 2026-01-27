@@ -12,7 +12,7 @@ import CategoryBadge from '../components/CategoryBadge';
 import Alert from '../components/Alert';
 import Spinner from '../components/Spinner';
 import { BID_TYPES } from '../utils/constants';
-import { formatPrice, formatDate } from '../utils/formatters';
+import { formatPrice, formatDate, parseServerDate } from '../utils/formatters';
 
 /**
  * 경매 상세 페이지
@@ -414,6 +414,80 @@ function InfoItem({ label, value }) {
 }
 
 /**
+ * 테스트용 노쇼 처리 버튼 컴포넌트
+ * 결제 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
+ */
+function TestNoShowButton({ auctionId }) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleForceNoShow = async () => {
+    if (!confirm('노쇼 처리를 실행하시겠습니까?\n\n1순위 낙찰자의 결제 기한이 만료 처리되고,\n2순위가 90% 이상이면 자동으로 승계됩니다.')) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/v1/test/auctions/${auctionId}/force-noshow`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setResult({
+          type: 'success',
+          message: '노쇼 처리 완료',
+          details: data.data
+        });
+        // 페이지 새로고침하여 변경사항 반영
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setResult({
+          type: 'error',
+          message: data.error?.message || '처리 실패'
+        });
+      }
+    } catch (err) {
+      setResult({
+        type: 'error',
+        message: err.message || '네트워크 오류'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="pt-3 border-t border-gray-100">
+      <p className="text-[11px] text-gray-400 mb-2 text-center">테스트 도구</p>
+      <button
+        type="button"
+        onClick={handleForceNoShow}
+        disabled={isProcessing}
+        className="w-full py-2.5 bg-red-500 text-white text-[13px] font-semibold rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {isProcessing ? '처리중...' : '노쇼 강제 처리 (테스트)'}
+      </button>
+      {result && (
+        <div className={`mt-2 p-2 rounded-lg text-[11px] ${
+          result.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        }`}>
+          <p className="font-semibold">{result.message}</p>
+          {result.details && (
+            <p className="mt-1 text-[10px] opacity-80">
+              1순위: {result.details.afterFirstWinningStatus}
+              {result.details.afterSecondWinningStatus && ` / 2순위: ${result.details.afterSecondWinningStatus}`}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * 종료된 경매 섹션 컴포넌트
  * 사용자 역할(판매자/낙찰자/기타)에 따라 다른 UI를 표시한다.
  */
@@ -427,9 +501,9 @@ function EndedAuctionSection({ auction, transaction, user, auctionId }) {
   const isNoShow = transaction?.status === 'NO_SHOW';
   const isAwaitingPayment = transaction?.status === 'AWAITING_PAYMENT';
 
-  // 결제 기한 만료 여부
+  // 결제 기한 만료 여부 (서버 시간은 UTC로 해석)
   const isPaymentExpired = transaction?.paymentDeadline &&
-    new Date(transaction.paymentDeadline) < new Date();
+    parseServerDate(transaction.paymentDeadline) < new Date();
 
   // 판매자 화면
   if (isSeller) {
@@ -497,6 +571,9 @@ function EndedAuctionSection({ auction, transaction, user, auctionId }) {
                 </p>
               </div>
             </div>
+
+            {/* 테스트용 노쇼 처리 버튼 */}
+            <TestNoShowButton auctionId={auctionId} />
           </div>
         )}
       </div>
