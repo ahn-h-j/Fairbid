@@ -6,6 +6,7 @@ import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -31,7 +32,7 @@ public class TestNoShowHelper {
      * @param auctionId 경매 ID
      * @return 처리 결과 정보
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Map<String, Object> expireDeadlineForTest(Long auctionId) {
         Map<String, Object> result = new HashMap<>();
 

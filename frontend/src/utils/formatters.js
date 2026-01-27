@@ -81,7 +81,9 @@ export function formatTransactionStatus(status) {
  */
 export function parseServerDate(dateStr) {
   if (!dateStr) return null;
+  // 타임존 정보(Z 또는 +09:00 등)가 있는지 확인
+  const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(dateStr);
   // 타임존 정보가 없으면 'Z'를 추가하여 UTC로 해석
-  const normalized = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+  const normalized = hasTimezone ? dateStr : `${dateStr}Z`;
   return new Date(normalized);
 }

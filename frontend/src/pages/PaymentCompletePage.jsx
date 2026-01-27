@@ -81,7 +81,7 @@ export default function PaymentCompletePage() {
         {/* 거래 번호 */}
         <div className="flex justify-between items-center">
           <span className="text-[13px] text-gray-500 font-medium">거래 번호</span>
-          <span className="text-[14px] font-mono text-gray-700">#{transaction.id}</span>
+          <span className="text-[14px] font-mono text-gray-700">#{transaction.transactionId}</span>
         </div>
 
         {/* 결제 상태 뱃지 */}

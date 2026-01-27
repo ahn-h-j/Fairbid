@@ -110,6 +110,10 @@ public class Transaction {
      */
     public void transferToSecondRank(Long newBuyerId, Long newFinalPrice,
                                      LocalDateTime newPaymentDeadline) {
+        if (this.status != TransactionStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "취소 상태에서만 2순위 승계가 가능합니다. 현재 상태: " + this.status);
+        }
         validateNotNull(newBuyerId, "2순위 구매자 ID");
         validateNotNull(newFinalPrice, "2순위 낙찰가");
         validateNotNull(newPaymentDeadline, "새 결제 마감일시");
@@ -158,8 +162,10 @@ public class Transaction {
         if (this.paymentDeadline == null) {
             return false;
         }
+        LocalDateTime now = LocalDateTime.now();
         LocalDateTime reminderThreshold = this.paymentDeadline.minusHours(1);
-        return LocalDateTime.now().isAfter(reminderThreshold);
+        // 마감 1시간 전 ~ 마감 전 사이에만 리마인더 발송
+        return now.isAfter(reminderThreshold) && now.isBefore(this.paymentDeadline);
     }
 
     /**
