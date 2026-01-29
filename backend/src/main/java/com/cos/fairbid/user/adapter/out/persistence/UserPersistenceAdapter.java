@@ -11,7 +11,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * User 영속성 어댑터
@@ -28,6 +30,16 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     public Optional<User> findById(Long userId) {
         return userJpaRepository.findById(userId)
                 .map(userMapper::toDomain);
+    }
+
+    @Override
+    public List<User> findAllByIds(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return userJpaRepository.findAllById(ids).stream()
+                .map(userMapper::toDomain)
+                .toList();
     }
 
     @Override

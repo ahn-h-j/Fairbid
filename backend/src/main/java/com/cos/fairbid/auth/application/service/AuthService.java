@@ -66,13 +66,16 @@ public class AuthService implements OAuthLoginUseCase, RefreshTokenUseCase, Logo
     /**
      * 이메일 기반으로 사용자 역할을 결정한다.
      * ADMIN_EMAILS 환경변수에 포함된 이메일이면 ADMIN, 아니면 USER.
+     * 이메일 비교는 대소문자를 무시한다. (RFC 5321 권장)
      *
      * @param email 사용자 이메일
      * @return UserRole (ADMIN 또는 USER)
      */
     private UserRole determineRole(String email) {
         List<String> adminEmails = getAdminEmails();
-        return adminEmails.contains(email) ? UserRole.ADMIN : UserRole.USER;
+        boolean isAdmin = adminEmails.stream()
+                .anyMatch(adminEmail -> adminEmail.equalsIgnoreCase(email));
+        return isAdmin ? UserRole.ADMIN : UserRole.USER;
     }
 
     /**

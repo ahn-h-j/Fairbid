@@ -1,6 +1,6 @@
 package com.cos.fairbid.admin.application.service;
 
-import com.cos.fairbid.admin.adapter.in.dto.AdminUserResponse;
+import com.cos.fairbid.admin.application.dto.AdminUserResult;
 import com.cos.fairbid.admin.application.port.in.ManageUserUseCase;
 import com.cos.fairbid.user.application.port.out.LoadUserPort;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +21,8 @@ public class AdminUserService implements ManageUserUseCase {
     private final LoadUserPort loadUserPort;
 
     @Override
-    public Page<AdminUserResponse> getUserList(String keyword, Pageable pageable) {
+    public Page<AdminUserResult> getUserList(String keyword, Pageable pageable) {
         return loadUserPort.findAll(keyword, pageable)
-                .map(AdminUserResponse::from);
+                .map(AdminUserResult::from);
     }
 }

@@ -1,6 +1,6 @@
 package com.cos.fairbid.admin.application.port.in;
 
-import com.cos.fairbid.admin.adapter.in.dto.AdminUserResponse;
+import com.cos.fairbid.admin.application.dto.AdminUserResult;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -17,5 +17,5 @@ public interface ManageUserUseCase {
      * @param pageable 페이지 정보
      * @return 유저 목록
      */
-    Page<AdminUserResponse> getUserList(String keyword, Pageable pageable);
+    Page<AdminUserResult> getUserList(String keyword, Pageable pageable);
 }

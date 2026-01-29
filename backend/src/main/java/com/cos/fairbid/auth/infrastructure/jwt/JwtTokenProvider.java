@@ -4,6 +4,7 @@ import com.cos.fairbid.auth.application.port.out.TokenProviderPort;
 import com.cos.fairbid.auth.domain.exception.TokenExpiredException;
 import com.cos.fairbid.auth.domain.exception.TokenInvalidException;
 import com.cos.fairbid.user.domain.User;
+import com.cos.fairbid.user.domain.UserRole;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
@@ -58,11 +59,14 @@ public class JwtTokenProvider implements TokenProviderPort {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + jwtProperties.getAccessExpiration());
 
+        // role이 null인 경우 기본값 USER 사용 (방어적 코딩)
+        UserRole role = user.getRole() != null ? user.getRole() : UserRole.USER;
+
         return Jwts.builder()
                 .subject(String.valueOf(user.getId()))
                 .claim("nickname", user.getNickname())
                 .claim("onboarded", user.isOnboarded())
-                .claim("role", user.getRole().name())
+                .claim("role", role.name())
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(secretKey)

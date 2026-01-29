@@ -36,8 +36,8 @@ spring.web.resources:
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    com.cos.fairbid.admin: DEBUG
+    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:DEBUG}
+    com.cos.fairbid.admin: ${LOG_LEVEL_ADMIN:INFO}
 
 # Actuator & Prometheus
 management:

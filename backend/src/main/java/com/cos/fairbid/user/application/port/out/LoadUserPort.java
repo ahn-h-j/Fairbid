@@ -5,7 +5,9 @@ import com.cos.fairbid.user.domain.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 사용자 조회 아웃바운드 포트
@@ -17,6 +19,12 @@ public interface LoadUserPort {
      * ID로 사용자를 조회한다.
      */
     Optional<User> findById(Long userId);
+
+    /**
+     * 여러 ID로 사용자를 일괄 조회한다.
+     * N+1 문제 방지를 위해 사용한다.
+     */
+    List<User> findAllByIds(Set<Long> ids);
 
     /**
      * OAuth Provider와 Provider ID로 사용자를 조회한다.

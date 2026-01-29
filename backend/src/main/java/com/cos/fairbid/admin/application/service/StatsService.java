@@ -1,8 +1,8 @@
 package com.cos.fairbid.admin.application.service;
 
-import com.cos.fairbid.admin.adapter.in.dto.DailyAuctionStatsResponse;
-import com.cos.fairbid.admin.adapter.in.dto.StatsOverviewResponse;
-import com.cos.fairbid.admin.adapter.in.dto.TimePatternResponse;
+import com.cos.fairbid.admin.application.dto.DailyAuctionStatsResult;
+import com.cos.fairbid.admin.application.dto.StatsOverviewResult;
+import com.cos.fairbid.admin.application.dto.TimePatternResult;
 import com.cos.fairbid.admin.application.port.in.GetStatsUseCase;
 import com.cos.fairbid.admin.application.port.out.LoadStatsPort;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class StatsService implements GetStatsUseCase {
     private final LoadStatsPort loadStatsPort;
 
     @Override
-    public StatsOverviewResponse getOverview(Integer days) {
+    public StatsOverviewResult getOverview(Integer days) {
         LocalDateTime from = calculateFromDate(days);
 
         long totalAuctions = loadStatsPort.countTotalAuctions(from);
@@ -45,7 +45,7 @@ public class StatsService implements GetStatsUseCase {
                 ? (double) extendedAuctions / totalAuctions * 100
                 : 0;
 
-        return new StatsOverviewResponse(
+        return new StatsOverviewResult(
                 totalAuctions,
                 Math.round(completedRate * 10) / 10.0,
                 Math.round(avgBidCount * 10) / 10.0,
@@ -55,7 +55,7 @@ public class StatsService implements GetStatsUseCase {
     }
 
     @Override
-    public DailyAuctionStatsResponse getDailyStats(Integer days) {
+    public DailyAuctionStatsResult getDailyStats(Integer days) {
         LocalDateTime from = calculateFromDate(days);
 
         // 일별 데이터 조회
@@ -63,13 +63,13 @@ public class StatsService implements GetStatsUseCase {
         List<LoadStatsPort.DailyCount> completedAuctions = loadStatsPort.getDailyCompletedAuctions(from);
         List<LoadStatsPort.DailyCount> bids = loadStatsPort.getDailyBids(from);
 
-        // Map으로 변환
+        // Map으로 변환 (중복 키 발생 시 합산)
         Map<LocalDate, Long> newMap = newAuctions.stream()
-                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count));
+                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count, Long::sum));
         Map<LocalDate, Long> completedMap = completedAuctions.stream()
-                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count));
+                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count, Long::sum));
         Map<LocalDate, Long> bidMap = bids.stream()
-                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count));
+                .collect(Collectors.toMap(LoadStatsPort.DailyCount::date, LoadStatsPort.DailyCount::count, Long::sum));
 
         // 모든 날짜 수집 및 정렬
         Set<LocalDate> allDates = new TreeSet<>();
@@ -78,8 +78,8 @@ public class StatsService implements GetStatsUseCase {
         allDates.addAll(bidMap.keySet());
 
         // 결과 생성
-        List<DailyAuctionStatsResponse.DailyStat> dailyStats = allDates.stream()
-                .map(date -> new DailyAuctionStatsResponse.DailyStat(
+        List<DailyAuctionStatsResult.DailyStat> dailyStats = allDates.stream()
+                .map(date -> new DailyAuctionStatsResult.DailyStat(
                         date,
                         newMap.getOrDefault(date, 0L),
                         completedMap.getOrDefault(date, 0L),
@@ -87,33 +87,33 @@ public class StatsService implements GetStatsUseCase {
                 ))
                 .toList();
 
-        return new DailyAuctionStatsResponse(dailyStats);
+        return new DailyAuctionStatsResult(dailyStats);
     }
 
     @Override
-    public TimePatternResponse getTimePattern(Integer days) {
+    public TimePatternResult getTimePattern(Integer days) {
         LocalDateTime from = calculateFromDate(days);
 
         List<LoadStatsPort.HourlyBidCount> hourlyBids = loadStatsPort.getHourlyBidCounts(from);
 
-        // 0~23시 모든 시간대 포함하도록 보정
+        // 0~23시 모든 시간대 포함하도록 보정 (중복 시간대 발생 시 합산)
         Map<Integer, Long> hourMap = hourlyBids.stream()
-                .collect(Collectors.toMap(LoadStatsPort.HourlyBidCount::hour, LoadStatsPort.HourlyBidCount::count));
+                .collect(Collectors.toMap(LoadStatsPort.HourlyBidCount::hour, LoadStatsPort.HourlyBidCount::count, Long::sum));
 
-        List<TimePatternResponse.HourlyBidCount> result = new ArrayList<>();
+        List<TimePatternResult.HourlyBidCount> result = new ArrayList<>();
         int peakHour = 0;
         long peakCount = 0;
 
         for (int hour = 0; hour < 24; hour++) {
             long count = hourMap.getOrDefault(hour, 0L);
-            result.add(new TimePatternResponse.HourlyBidCount(hour, count));
+            result.add(new TimePatternResult.HourlyBidCount(hour, count));
             if (count > peakCount) {
                 peakCount = count;
                 peakHour = hour;
             }
         }
 
-        return new TimePatternResponse(result, peakHour, peakCount);
+        return new TimePatternResult(result, peakHour, peakCount);
     }
 
     /**

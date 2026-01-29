@@ -22,7 +22,7 @@ services:
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       COOKIE_SECURE: "false"
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}
 
   # 프론트엔드 (nginx)
   frontend:

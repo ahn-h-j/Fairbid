@@ -1,10 +1,10 @@
 package com.cos.fairbid.admin.adapter.in.controller;
 
-import com.cos.fairbid.admin.adapter.in.dto.AdminAuctionResponse;
-import com.cos.fairbid.admin.adapter.in.dto.AdminUserResponse;
-import com.cos.fairbid.admin.adapter.in.dto.DailyAuctionStatsResponse;
-import com.cos.fairbid.admin.adapter.in.dto.StatsOverviewResponse;
-import com.cos.fairbid.admin.adapter.in.dto.TimePatternResponse;
+import com.cos.fairbid.admin.application.dto.AdminAuctionResult;
+import com.cos.fairbid.admin.application.dto.AdminUserResult;
+import com.cos.fairbid.admin.application.dto.DailyAuctionStatsResult;
+import com.cos.fairbid.admin.application.dto.StatsOverviewResult;
+import com.cos.fairbid.admin.application.dto.TimePatternResult;
 import com.cos.fairbid.admin.application.port.in.GetStatsUseCase;
 import com.cos.fairbid.admin.application.port.in.ManageAuctionUseCase;
 import com.cos.fairbid.admin.application.port.in.ManageUserUseCase;
@@ -13,6 +13,8 @@ import com.cos.fairbid.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+
+import java.util.Set;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -37,6 +39,11 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
+    /**
+     * 허용되는 days 파라미터 값
+     */
+    private static final Set<Integer> ALLOWED_DAYS = Set.of(7, 30);
+
     private final GetStatsUseCase getStatsUseCase;
     private final ManageAuctionUseCase manageAuctionUseCase;
     private final ManageUserUseCase manageUserUseCase;
@@ -60,10 +67,11 @@ public class AdminController {
      * @param days 조회 기간 (일) - 7, 30 또는 null(전체)
      */
     @GetMapping("/stats/overview")
-    public ResponseEntity<ApiResponse<StatsOverviewResponse>> getStatsOverview(
+    public ResponseEntity<ApiResponse<StatsOverviewResult>> getStatsOverview(
             @RequestParam(required = false) Integer days) {
-        log.debug("통계 개요 조회: days={}", days);
-        StatsOverviewResponse response = getStatsUseCase.getOverview(days);
+        Integer validDays = validateDays(days);
+        log.debug("통계 개요 조회: days={}", validDays);
+        StatsOverviewResult response = getStatsUseCase.getOverview(validDays);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -74,10 +82,11 @@ public class AdminController {
      * @param days 조회 기간 (일) - 7, 30 또는 null(전체)
      */
     @GetMapping("/stats/auctions")
-    public ResponseEntity<ApiResponse<DailyAuctionStatsResponse>> getDailyAuctionStats(
+    public ResponseEntity<ApiResponse<DailyAuctionStatsResult>> getDailyAuctionStats(
             @RequestParam(required = false) Integer days) {
-        log.debug("일별 경매 통계 조회: days={}", days);
-        DailyAuctionStatsResponse response = getStatsUseCase.getDailyStats(days);
+        Integer validDays = validateDays(days);
+        log.debug("일별 경매 통계 조회: days={}", validDays);
+        DailyAuctionStatsResult response = getStatsUseCase.getDailyStats(validDays);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -88,10 +97,11 @@ public class AdminController {
      * @param days 조회 기간 (일) - 7, 30 또는 null(전체)
      */
     @GetMapping("/stats/time-pattern")
-    public ResponseEntity<ApiResponse<TimePatternResponse>> getTimePattern(
+    public ResponseEntity<ApiResponse<TimePatternResult>> getTimePattern(
             @RequestParam(required = false) Integer days) {
-        log.debug("시간대별 입찰 패턴 조회: days={}", days);
-        TimePatternResponse response = getStatsUseCase.getTimePattern(days);
+        Integer validDays = validateDays(days);
+        log.debug("시간대별 입찰 패턴 조회: days={}", validDays);
+        TimePatternResult response = getStatsUseCase.getTimePattern(validDays);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -107,13 +117,13 @@ public class AdminController {
      * @return 경매 목록 (페이지)
      */
     @GetMapping("/auctions")
-    public ResponseEntity<ApiResponse<Page<AdminAuctionResponse>>> getAuctionList(
+    public ResponseEntity<ApiResponse<Page<AdminAuctionResult>>> getAuctionList(
             @RequestParam(required = false) AuctionStatus status,
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         log.debug("관리자 경매 목록 조회: status={}, keyword={}", status, keyword);
-        Page<AdminAuctionResponse> response = manageAuctionUseCase.getAuctionList(status, keyword, pageable);
+        Page<AdminAuctionResult> response = manageAuctionUseCase.getAuctionList(status, keyword, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -127,12 +137,28 @@ public class AdminController {
      * @return 유저 목록 (페이지)
      */
     @GetMapping("/users")
-    public ResponseEntity<ApiResponse<Page<AdminUserResponse>>> getUserList(
+    public ResponseEntity<ApiResponse<Page<AdminUserResult>>> getUserList(
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         log.debug("관리자 유저 목록 조회: keyword={}", keyword);
-        Page<AdminUserResponse> response = manageUserUseCase.getUserList(keyword, pageable);
+        Page<AdminUserResult> response = manageUserUseCase.getUserList(keyword, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * days 파라미터를 검증한다.
+     * 허용된 값: 7, 30, null
+     * 허용되지 않은 값은 null(전체 조회)로 처리하고 경고 로그를 남긴다.
+     */
+    private Integer validateDays(Integer days) {
+        if (days == null) {
+            return null;
+        }
+        if (!ALLOWED_DAYS.contains(days)) {
+            log.warn("유효하지 않은 days 파라미터: {}. 전체 조회로 처리합니다. 허용값: {}", days, ALLOWED_DAYS);
+            return null;
+        }
+        return days;
     }
 }

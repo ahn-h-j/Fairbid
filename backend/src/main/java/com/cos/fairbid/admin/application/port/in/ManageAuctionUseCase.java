@@ -1,6 +1,6 @@
 package com.cos.fairbid.admin.application.port.in;
 
-import com.cos.fairbid.admin.adapter.in.dto.AdminAuctionResponse;
+import com.cos.fairbid.admin.application.dto.AdminAuctionResult;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,5 +20,5 @@ public interface ManageAuctionUseCase {
      * @param pageable 페이지 정보
      * @return 경매 목록
      */
-    Page<AdminAuctionResponse> getAuctionList(AuctionStatus status, String keyword, Pageable pageable);
+    Page<AdminAuctionResult> getAuctionList(AuctionStatus status, String keyword, Pageable pageable);
 }

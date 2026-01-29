@@ -30,7 +30,7 @@ import java.util.List;
  *   - /api/v1/auth/** → 비로그인 허용 (인증 관련)
  *   - /ws/** → 비로그인 허용 (WebSocket)
  *   - /health, /actuator/** → 비로그인 허용 (모니터링)
- *   - /api/v1/test/** → 비로그인 허용 (개발용 테스트)
+ *   - /api/v1/test/** → ADMIN만 허용 (개발용 테스트)
  *   - 그 외 → 인증 필요
  */
 @Configuration
@@ -76,8 +76,8 @@ public class SecurityConfig {
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 
-                        // 개발용 테스트 엔드포인트
-                        .requestMatchers("/api/v1/test/**").permitAll()
+                        // 개발용 테스트 엔드포인트 (ADMIN 역할 필요)
+                        .requestMatchers("/api/v1/test/**").hasRole("ADMIN")
 
                         // 관리자 전용 엔드포인트 (ADMIN 역할 필요)
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

@@ -1,4 +1,4 @@
-package com.cos.fairbid.admin.adapter.in.dto;
+package com.cos.fairbid.admin.application.dto;
 
 import com.cos.fairbid.user.domain.OAuthProvider;
 import com.cos.fairbid.user.domain.User;
@@ -8,10 +8,10 @@ import lombok.Builder;
 import java.time.LocalDateTime;
 
 /**
- * 관리자용 유저 응답 DTO
+ * 관리자용 유저 결과 DTO (Application Layer)
  */
 @Builder
-public record AdminUserResponse(
+public record AdminUserResult(
         Long id,
         String email,
         String nickname,
@@ -25,13 +25,13 @@ public record AdminUserResponse(
         LocalDateTime createdAt
 ) {
     /**
-     * Domain → Response DTO 변환
+     * Domain → Result DTO 변환
      *
      * @param user 유저 도메인 객체
-     * @return 관리자용 유저 응답 DTO
+     * @return 관리자용 유저 결과 DTO
      */
-    public static AdminUserResponse from(User user) {
-        return AdminUserResponse.builder()
+    public static AdminUserResult from(User user) {
+        return AdminUserResult.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .nickname(user.getNickname())
