@@ -20,6 +20,7 @@ public class User {
     private String phoneNumber;
     private OAuthProvider provider;
     private String providerId;
+    private UserRole role;
     private int warningCount;
     private boolean isActive;
     private LocalDateTime createdAt;
@@ -37,13 +38,15 @@ public class User {
      * @param email      OAuth Provider에서 제공한 이메일
      * @param provider   OAuth Provider 종류
      * @param providerId Provider 고유 사용자 ID
+     * @param role       사용자 역할 (USER 또는 ADMIN)
      * @return 생성된 User 도메인 객체
      */
-    public static User create(String email, OAuthProvider provider, String providerId) {
+    public static User create(String email, OAuthProvider provider, String providerId, UserRole role) {
         return User.builder()
                 .email(email)
                 .provider(provider)
                 .providerId(providerId)
+                .role(role)
                 .warningCount(0)
                 .isActive(true)
                 .build();
@@ -118,5 +121,24 @@ public class User {
      */
     public void addWarning() {
         this.warningCount++;
+    }
+
+    /**
+     * 관리자 여부를 확인한다.
+     *
+     * @return ADMIN 역할이면 true
+     */
+    public boolean isAdmin() {
+        return role == UserRole.ADMIN;
+    }
+
+    /**
+     * 사용자 역할을 변경한다.
+     * ADMIN_EMAILS 환경변수 변경 시 역할을 동기화할 때 사용한다.
+     *
+     * @param role 새로운 역할
+     */
+    public void updateRole(UserRole role) {
+        this.role = role;
     }
 }
