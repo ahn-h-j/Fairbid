@@ -1,5 +1,6 @@
 package com.cos.fairbid.auth.infrastructure.jwt;
 
+import com.cos.fairbid.auth.application.port.out.TokenProviderPort;
 import com.cos.fairbid.auth.domain.exception.TokenExpiredException;
 import com.cos.fairbid.auth.domain.exception.TokenInvalidException;
 import com.cos.fairbid.user.domain.User;
@@ -16,6 +17,7 @@ import java.util.Date;
 
 /**
  * JWT 토큰 생성 및 검증 컴포넌트
+ * TokenProviderPort를 구현하여 Application Layer에서 추상화된 인터페이스로 사용 가능하다.
  *
  * - Access Token: userId, nickname, onboarded 클레임 포함 (30분)
  * - Refresh Token: userId 클레임만 포함 (2주)
@@ -24,7 +26,7 @@ import java.util.Date;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class JwtTokenProvider {
+public class JwtTokenProvider implements TokenProviderPort {
 
     private final JwtProperties jwtProperties;
     private SecretKey secretKey;
@@ -46,7 +48,7 @@ public class JwtTokenProvider {
 
     /**
      * Access Token을 생성한다.
-     * 클레임에 userId, nickname, onboarded 정보를 포함하여
+     * 클레임에 userId, nickname, onboarded, role 정보를 포함하여
      * 프론트엔드에서 추가 API 호출 없이 사용자 상태를 판단할 수 있도록 한다.
      *
      * @param user User 도메인 객체
@@ -60,6 +62,7 @@ public class JwtTokenProvider {
                 .subject(String.valueOf(user.getId()))
                 .claim("nickname", user.getNickname())
                 .claim("onboarded", user.isOnboarded())
+                .claim("role", user.getRole().name())
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(secretKey)

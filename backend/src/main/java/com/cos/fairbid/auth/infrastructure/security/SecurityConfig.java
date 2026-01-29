@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -34,6 +35,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity  // @PreAuthorize, @PostAuthorize 활성화
 @Profile("!test")
 @RequiredArgsConstructor
 public class SecurityConfig {
@@ -76,6 +78,9 @@ public class SecurityConfig {
 
                         // 개발용 테스트 엔드포인트
                         .requestMatchers("/api/v1/test/**").permitAll()
+
+                        // 관리자 전용 엔드포인트 (ADMIN 역할 필요)
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 
                         // 그 외 모든 요청은 인증 필요
                         .anyRequest().authenticated()

@@ -50,15 +50,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = Long.parseLong(claims.getSubject());
                 String nickname = claims.get("nickname", String.class);
                 Boolean onboarded = claims.get("onboarded", Boolean.class);
+                String role = claims.get("role", String.class);
 
                 CustomUserDetails userDetails = new CustomUserDetails(
-                        userId, nickname, onboarded != null && onboarded);
+                        userId, nickname, onboarded != null && onboarded, role);
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("JWT 인증 성공: userId={}", userId);
+                log.debug("JWT 인증 성공: userId={}, role={}", userId, role);
             } catch (TokenExpiredException | TokenInvalidException e) {
                 // JWT 관련 예외: 토큰 만료/무효 → SecurityContext 비워둠
                 log.debug("JWT 인증 실패: {}", e.getMessage());
