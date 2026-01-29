@@ -20,7 +20,9 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       COOKIE_SECURE: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
   # 프론트엔드 (nginx)
   frontend:

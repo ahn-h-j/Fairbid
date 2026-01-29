@@ -61,7 +61,8 @@ public class TestSecurityConfig {
             protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                             FilterChain filterChain) throws ServletException, IOException {
                 Long userId = extractUserId(request);
-                CustomUserDetails userDetails = new CustomUserDetails(userId, TEST_NICKNAME + userId, true);
+                // 테스트에서는 기본적으로 USER 역할 부여
+                CustomUserDetails userDetails = new CustomUserDetails(userId, TEST_NICKNAME + userId, true, "USER");
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
