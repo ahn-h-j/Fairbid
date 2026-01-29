@@ -2,6 +2,8 @@ package com.cos.fairbid.user.application.port.out;
 
 import com.cos.fairbid.user.domain.OAuthProvider;
 import com.cos.fairbid.user.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 
@@ -31,4 +33,14 @@ public interface LoadUserPort {
      * 전화번호 중복 여부를 확인한다.
      */
     boolean existsByPhoneNumber(String phoneNumber);
+
+    /**
+     * 유저 목록을 페이징하여 조회한다.
+     * 관리자 기능에서 사용한다.
+     *
+     * @param keyword  검색어 (닉네임 또는 이메일, optional)
+     * @param pageable 페이지 정보
+     * @return 유저 목록
+     */
+    Page<User> findAll(String keyword, Pageable pageable);
 }

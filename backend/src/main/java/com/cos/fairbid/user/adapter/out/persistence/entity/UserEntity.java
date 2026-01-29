@@ -1,6 +1,7 @@
 package com.cos.fairbid.user.adapter.out.persistence.entity;
 
 import com.cos.fairbid.user.domain.OAuthProvider;
+import com.cos.fairbid.user.domain.UserRole;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -48,6 +49,10 @@ public class UserEntity {
     @Column(name = "provider_id", nullable = false)
     private String providerId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private UserRole role;
+
     @Column(name = "warning_count", nullable = false)
     private Integer warningCount;
 
@@ -64,7 +69,7 @@ public class UserEntity {
 
     @Builder
     public UserEntity(Long id, String email, String nickname, String phoneNumber,
-                      OAuthProvider provider, String providerId,
+                      OAuthProvider provider, String providerId, UserRole role,
                       Integer warningCount, Boolean isActive,
                       LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
@@ -73,6 +78,7 @@ public class UserEntity {
         this.phoneNumber = phoneNumber;
         this.provider = provider;
         this.providerId = providerId;
+        this.role = role;
         this.warningCount = warningCount;
         this.isActive = isActive;
         this.createdAt = createdAt;

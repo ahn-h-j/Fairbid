@@ -7,6 +7,8 @@ import com.cos.fairbid.user.application.port.out.SaveUserPort;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import com.cos.fairbid.user.domain.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -49,5 +51,11 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         var entity = userMapper.toEntity(user);
         var savedEntity = userJpaRepository.save(entity);
         return userMapper.toDomain(savedEntity);
+    }
+
+    @Override
+    public Page<User> findAll(String keyword, Pageable pageable) {
+        return userJpaRepository.findAllByKeyword(keyword, pageable)
+                .map(userMapper::toDomain);
     }
 }
