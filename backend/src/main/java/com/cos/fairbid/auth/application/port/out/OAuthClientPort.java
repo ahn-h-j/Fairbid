@@ -1,6 +1,5 @@
 package com.cos.fairbid.auth.application.port.out;
 
-import com.cos.fairbid.auth.adapter.out.oauth.OAuthUserInfo;
 import com.cos.fairbid.user.domain.OAuthProvider;
 
 /**

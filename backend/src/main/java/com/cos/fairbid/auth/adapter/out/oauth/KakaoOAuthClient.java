@@ -1,5 +1,6 @@
 package com.cos.fairbid.auth.adapter.out.oauth;
 
+import com.cos.fairbid.auth.application.port.out.OAuthUserInfo;
 import com.cos.fairbid.auth.domain.exception.OAuthEmailRequiredException;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import lombok.extern.slf4j.Slf4j;
