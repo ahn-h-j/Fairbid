@@ -15,6 +15,7 @@ import java.util.List;
  * - userId: 사용자 고유 ID
  * - nickname: 사용자 닉네임 (온보딩 전이면 null)
  * - onboarded: 온보딩 완료 여부
+ * - role: 사용자 역할 (USER, ADMIN)
  */
 @Getter
 public class CustomUserDetails implements UserDetails {
@@ -22,16 +23,20 @@ public class CustomUserDetails implements UserDetails {
     private final Long userId;
     private final String nickname;
     private final boolean onboarded;
+    private final String role;
 
-    public CustomUserDetails(Long userId, String nickname, boolean onboarded) {
+    public CustomUserDetails(Long userId, String nickname, boolean onboarded, String role) {
         this.userId = userId;
         this.nickname = nickname;
         this.onboarded = onboarded;
+        this.role = role;
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        // ADMIN이면 ROLE_ADMIN, 그 외에는 ROLE_USER
+        String authority = "ADMIN".equals(role) ? "ROLE_ADMIN" : "ROLE_USER";
+        return List.of(new SimpleGrantedAuthority(authority));
     }
 
     @Override

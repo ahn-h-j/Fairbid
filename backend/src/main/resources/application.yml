@@ -36,7 +36,8 @@ spring.web.resources:
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:DEBUG}
+    com.cos.fairbid.admin: ${LOG_LEVEL_ADMIN:INFO}
 
 # Actuator & Prometheus
 management:
@@ -84,3 +85,5 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   cookie:
     secure: ${COOKIE_SECURE:true}
+  admin:
+    emails: ${ADMIN_EMAILS:}  # 콤마 구분 이메일 목록 (예: admin@test.com,admin2@test.com)

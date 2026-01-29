@@ -1,7 +1,7 @@
 package com.cos.fairbid.user.application.service;
 
 import com.cos.fairbid.auth.application.port.out.RefreshTokenPort;
-import com.cos.fairbid.auth.infrastructure.jwt.JwtTokenProvider;
+import com.cos.fairbid.auth.application.port.out.TokenProviderPort;
 import com.cos.fairbid.user.application.port.in.*;
 import com.cos.fairbid.user.application.port.out.LoadUserPort;
 import com.cos.fairbid.user.application.port.out.SaveUserPort;
@@ -32,7 +32,7 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
 
     private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final TokenProviderPort tokenProviderPort;
     private final RefreshTokenPort refreshTokenPort;
 
     /**
@@ -121,9 +121,9 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
         log.info("닉네임 수정: userId={}", userId);
 
         // 4. 새 JWT 발급
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-        refreshTokenPort.save(userId, refreshToken, jwtTokenProvider.getRefreshExpirationSeconds());
+        String accessToken = tokenProviderPort.generateAccessToken(user);
+        String refreshToken = tokenProviderPort.generateRefreshToken(user);
+        refreshTokenPort.save(userId, refreshToken, tokenProviderPort.getRefreshExpirationSeconds());
 
         return new UpdateResult(accessToken, refreshToken);
     }
@@ -156,9 +156,9 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
      * 새 Access Token + Refresh Token을 발급하고 Redis에 저장한다.
      */
     private OnboardingResult reissueTokens(User user) {
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-        refreshTokenPort.save(user.getId(), refreshToken, jwtTokenProvider.getRefreshExpirationSeconds());
+        String accessToken = tokenProviderPort.generateAccessToken(user);
+        String refreshToken = tokenProviderPort.generateRefreshToken(user);
+        refreshTokenPort.save(user.getId(), refreshToken, tokenProviderPort.getRefreshExpirationSeconds());
         return new OnboardingResult(accessToken, refreshToken);
     }
 }

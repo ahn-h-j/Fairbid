@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import SplashScreen from './components/SplashScreen';
 import AuctionListPage from './pages/AuctionListPage';
 import AuctionDetailPage from './pages/AuctionDetailPage';
 import AuctionCreatePage from './pages/AuctionCreatePage';
@@ -12,13 +14,33 @@ import PaymentPage from './pages/PaymentPage';
 import PaymentCompletePage from './pages/PaymentCompletePage';
 import ProtectedRoute from './components/ProtectedRoute';
 
+// Admin pages
+import AdminLayout from './pages/admin/AdminLayout';
+import DashboardPage from './pages/admin/DashboardPage';
+import AuctionManagePage from './pages/admin/AuctionManagePage';
+import UserManagePage from './pages/admin/UserManagePage';
+
 /**
  * 앱 루트 컴포넌트
  * AuthProvider로 인증 상태를 전역 관리하고, React Router v7로 SPA 라우팅을 구성한다.
+ * 초기 접속 시 스플래시 화면을 표시한다.
  */
 export default function App() {
+  // 세션당 한 번만 스플래시 표시 (sessionStorage 사용)
+  const [showSplash, setShowSplash] = useState(() => {
+    return !sessionStorage.getItem('fairbid_splash_shown');
+  });
+
+  // 스플래시 완료 처리
+  const handleSplashComplete = () => {
+    sessionStorage.setItem('fairbid_splash_shown', 'true');
+    setShowSplash(false);
+  };
+
   return (
     <BrowserRouter>
+      {/* 스플래시 화면 (세션당 최초 1회만 표시) */}
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <AuthProvider>
         <Routes>
           <Route element={<Layout />}>
@@ -39,6 +61,13 @@ export default function App() {
               <Route path="/auctions/create" element={<AuctionCreatePage />} />
               <Route path="/auctions/:auctionId/payment" element={<PaymentPage />} />
               <Route path="/auctions/:auctionId/payment/complete" element={<PaymentCompletePage />} />
+            </Route>
+
+            {/* 관리자 라우트 (ADMIN 역할 필요, AdminLayout에서 권한 체크) */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<DashboardPage />} />
+              <Route path="auctions" element={<AuctionManagePage />} />
+              <Route path="users" element={<UserManagePage />} />
             </Route>
           </Route>
         </Routes>

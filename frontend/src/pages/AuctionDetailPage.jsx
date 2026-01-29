@@ -311,8 +311,8 @@ export default function AuctionDetailPage() {
           auctionId={auctionId}
         />
       )}
-      {/* 테스트 도구 */}
-      <TestTools auctionId={auctionId} mutate={mutate} />
+      {/* 테스트 도구 (관리자 전용) */}
+      {user?.role === 'ADMIN' && <TestTools auctionId={auctionId} mutate={mutate} />}
     </div>
   );
 }
@@ -414,12 +414,18 @@ function InfoItem({ label, value }) {
 }
 
 /**
- * 테스트용 노쇼 처리 버튼 컴포넌트
+ * 테스트용 노쇼 처리 버튼 컴포넌트 (관리자 전용)
  * 결제 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
  */
 function TestNoShowButton({ auctionId }) {
+  const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
+
+  // 관리자가 아니면 렌더링하지 않음
+  if (user?.role !== 'ADMIN') {
+    return null;
+  }
 
   const handleForceNoShow = async () => {
     if (!confirm('노쇼 처리를 실행하시겠습니까?\n\n1순위 낙찰자의 결제 기한이 만료 처리되고,\n2순위가 90% 이상이면 자동으로 승계됩니다.')) {

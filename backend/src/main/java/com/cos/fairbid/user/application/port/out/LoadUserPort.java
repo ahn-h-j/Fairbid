@@ -2,8 +2,12 @@ package com.cos.fairbid.user.application.port.out;
 
 import com.cos.fairbid.user.domain.OAuthProvider;
 import com.cos.fairbid.user.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 사용자 조회 아웃바운드 포트
@@ -15,6 +19,12 @@ public interface LoadUserPort {
      * ID로 사용자를 조회한다.
      */
     Optional<User> findById(Long userId);
+
+    /**
+     * 여러 ID로 사용자를 일괄 조회한다.
+     * N+1 문제 방지를 위해 사용한다.
+     */
+    List<User> findAllByIds(Set<Long> ids);
 
     /**
      * OAuth Provider와 Provider ID로 사용자를 조회한다.
@@ -31,4 +41,14 @@ public interface LoadUserPort {
      * 전화번호 중복 여부를 확인한다.
      */
     boolean existsByPhoneNumber(String phoneNumber);
+
+    /**
+     * 유저 목록을 페이징하여 조회한다.
+     * 관리자 기능에서 사용한다.
+     *
+     * @param keyword  검색어 (닉네임 또는 이메일, optional)
+     * @param pageable 페이지 정보
+     * @return 유저 목록
+     */
+    Page<User> findAll(String keyword, Pageable pageable);
 }
