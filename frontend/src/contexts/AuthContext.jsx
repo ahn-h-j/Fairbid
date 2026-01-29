@@ -52,6 +52,7 @@ export function AuthProvider({ children }) {
       userId: payload.sub,
       nickname: payload.nickname,
       onboarded: payload.onboarded,
+      role: payload.role || 'USER',
     };
     setUser(userInfo);
 

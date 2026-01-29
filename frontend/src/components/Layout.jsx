@@ -9,7 +9,7 @@ import UserDropdown from './UserDropdown';
  */
 export default function Layout() {
   const location = useLocation();
-  const { authState } = useAuth();
+  const { authState, user } = useAuth();
 
   const isActive = (path) => location.pathname === path;
 
@@ -69,6 +69,23 @@ export default function Layout() {
                 )}
                 <span className="hidden sm:inline">경매 </span>등록
               </Link>
+
+              {/* 관리자 링크: ADMIN 역할일 때만 노출 */}
+              {user?.role === 'ADMIN' && (
+                <Link
+                  to="/admin"
+                  className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
+                    location.pathname.startsWith('/admin')
+                      ? 'text-violet-600 bg-violet-50/80'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
+                  }`}
+                >
+                  {location.pathname.startsWith('/admin') && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-violet-500 rounded-full" />
+                  )}
+                  관리자
+                </Link>
+              )}
 
               {/* 인증 영역: 로그인 상태에 따라 분기 */}
               <div className="flex items-center border-l border-gray-200/60 pl-3 ml-2">
