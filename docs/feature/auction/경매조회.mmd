@@ -1,26 +1,51 @@
 sequenceDiagram
-    autonumber
-    actor Buyer as 구매자 (Client)
-    participant Ctrl as AuctionController
-    participant Svc as AuctionService
-    participant Repo as AuctionRepository
-    participant RDB as RDB (Database)
+autonumber
+actor Buyer as 구매자 (Client)
+participant Ctrl as AuctionController
+participant UC as GetAuctionUseCase
+participant Svc as AuctionQueryService
+participant Cache as RedisAuctionCacheAdapter
+participant Port as AuctionRepository (Port)
+participant Adapter as AuctionPersistenceAdapter
+participant Redis as Redis
+participant RDB as MySQL
 
     Buyer->>Ctrl: GET /api/v1/auctions/{id}
-    Ctrl->>Svc: getAuctionDetail(id)
-    
-    Svc->>Repo: findById(id)
-    Repo->>RDB: SELECT * FROM auctions WHERE id = ?
-    Note right of RDB: [조회 데이터]<br/>상품정보, 판매자정보, 시작가, 즉시구매가,<br/>현재최고가, 입찰단위, 총입찰횟수, 종료시간 등
-    RDB-->>Repo: Auction Entity 반환
-    Repo-->>Svc: AuctionEntity
+    Ctrl->>UC: getAuction(id)
+    UC->>Svc: getAuctionDetail(id)
 
-    rect rgb(240, 248, 255)
-        Note over Svc: [응답용 데이터 가공 로직]
-        Svc->>Svc: 1. 즉시 구매 버튼 활성화 여부 계산<br/>(조건: 입찰가 <= 현재가 * 90%)
-        Svc->>Svc: 2. 다음 입찰 가능 최소 금액 계산<br/>(현재 최고가 + 입찰 단위)
-        Svc->>Svc: 3. 수정 가능 여부 플래그 계산<br/>(조건: 총 입찰 횟수 == 0 인 경우만 가능)
+    rect rgb(235, 245, 255)
+        Note over Svc, Redis: [Redis 캐시 조회 우선]
+        Svc->>Cache: findById(id)
+        Cache->>Redis: HGETALL auction:{id}
+
+        alt 캐시 히트
+            Redis-->>Cache: 경매 데이터
+            Cache-->>Svc: Auction (from cache)
+        else 캐시 미스
+            Redis-->>Cache: null
+            Cache-->>Svc: null
+            Svc->>Port: findById(id)
+            Port->>Adapter: findById(id)
+            Adapter->>RDB: SELECT * FROM auctions WHERE id = ?
+            RDB-->>Adapter: AuctionEntity
+            Adapter-->>Port: Auction
+            Port-->>Svc: Auction
+
+            Note over Svc, Redis: [캐시에 로드]
+            Svc->>Cache: saveToCache(auction)
+            Cache->>Redis: HSET auction:{id} ...
+        end
     end
 
-    Svc-->>Ctrl: AuctionDetailResponseDto
-    Ctrl-->>Buyer: 200 OK (Auction Detail Data)
+    rect rgb(240, 248, 255)
+        Note over Svc: [응답 데이터 가공]
+        Svc->>Svc: 1. 즉시 구매 활성화 여부<br/>(currentPrice < instantBuyPrice * 0.9)
+        Svc->>Svc: 2. 다음 입찰 최소 금액<br/>(currentPrice + bidIncrement)
+        Svc->>Svc: 3. 수정 가능 여부<br/>(totalBidCount == 0)
+        Svc->>Svc: 4. 남은 시간 계산
+    end
+
+    Svc-->>UC: AuctionDetailResponse
+    UC-->>Ctrl: AuctionDetailResponse
+    Ctrl-->>Buyer: 200 OK

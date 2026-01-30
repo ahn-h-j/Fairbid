@@ -1,0 +1,65 @@
+sequenceDiagram
+autonumber
+actor Buyer as 구매자 (Client)
+participant Ctrl as BidController
+participant UC as PlaceBidUseCase
+participant Svc as BidService
+participant Cache as RedisBidCacheAdapter
+participant Redis as Redis
+participant Lua as bid.lua (Lua Script)
+participant WS as WebSocket
+participant RDB as MySQL
+
+    Note over Buyer, RDB: [즉시 구매 활성화 조건]<br/>1. 즉시구매가 설정됨<br/>2. 현재가 < 즉시구매가 × 90%
+
+    Buyer->>Ctrl: POST /api/v1/auctions/{id}/bids
+    Note right of Buyer: { bidType: "INSTANT_BUY" }
+    Ctrl->>UC: placeBid(PlaceBidCommand)
+    UC->>Svc: placeBid(command)
+
+    rect rgb(235, 245, 255)
+        Note over Svc, Lua: [Lua 스크립트 즉시구매 처리]
+        Svc->>Cache: placeBidAtomic(auctionId, bidderId, INSTANT_BUY, null)
+        Cache->>Redis: EVALSHA bid.lua
+
+        Redis->>Lua: 실행
+
+        alt 즉시구매 비활성화 (currentPrice >= instantBuyPrice * 0.9)
+            Lua-->>Redis: { status: "INSTANT_BUY_DISABLED" }
+            Redis-->>Cache: 실패
+            Cache-->>Svc: 실패
+            Svc-->>Ctrl: 400 Bad Request
+            Ctrl-->>Buyer: "즉시 구매가 비활성화되었습니다"
+        else 즉시구매 활성화
+            Lua->>Lua: [상태 변경]
+            Note right of Lua: status = INSTANT_BUY_PENDING<br/>currentPrice = instantBuyPrice<br/>instantBuyerId = bidderId<br/>endTime = now + 1시간
+
+            Lua->>Lua: [입찰 단위 재계산]
+            Note right of Lua: 즉시구매가 기준으로<br/>새 입찰 단위 계산
+
+            Lua-->>Redis: { status: "INSTANT_BUY_PENDING", ... }
+        end
+    end
+
+    rect rgb(255, 250, 230)
+        Note over Svc, WS: [실시간 알림 - 1시간 최종 입찰 기회]
+        Svc->>WS: publish(InstantBuyActivatedEvent)
+        WS-->>Buyer: WebSocket 브로드캐스트
+        Note right of WS: "즉시 구매가 신청되었습니다.<br/>1시간 내 더 높은 입찰이 없으면<br/>즉시 구매자에게 낙찰됩니다."
+    end
+
+    Svc->>RDB: 동기화 (currentPrice, status, endTime)
+
+    Svc-->>UC: BidResponse
+    UC-->>Ctrl: BidResponse
+    Ctrl-->>Buyer: 200 OK
+
+    Note over Buyer, RDB: [1시간 후 처리]
+
+    rect rgb(240, 255, 240)
+        alt 1시간 내 더 높은 입찰 있음
+            Note over Redis: 일반 입찰 처리<br/>status = ACTIVE로 복귀<br/>즉시구매자는 2순위로
+        else 1시간 내 입찰 없음
+            Note over Redis: AuctionClosingScheduler가<br/>종료 처리<br/>→ 즉시구매자 낙찰
+        end
+    end

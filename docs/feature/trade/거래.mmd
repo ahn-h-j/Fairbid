@@ -1,0 +1,111 @@
+sequenceDiagram
+autonumber
+actor Winner as 낙찰자 (구매자)
+actor Seller as 판매자
+participant Ctrl as TradeController
+participant CmdSvc as TradeCommandService
+participant QrySvc as TradeQueryService
+participant TradeRepo as TradeRepository
+participant WinRepo as WinningRepository
+participant RDB as MySQL
+participant Noti as PushNotificationPort
+
+    Note over Winner, Noti: [거래 상태 흐름]<br/>AWAITING_METHOD_SELECTION → AWAITING_PAYMENT → COMPLETED
+
+    %% 거래 정보 조회
+    rect rgb(235, 245, 255)
+        Note over Winner, RDB: [1단계: 거래 정보 조회]
+        Winner->>Ctrl: GET /api/v1/trades/{tradeId}
+        Ctrl->>QrySvc: getTrade(tradeId, userId)
+        QrySvc->>TradeRepo: findById(tradeId)
+        TradeRepo->>RDB: SELECT * FROM trades WHERE id = ?
+        RDB-->>TradeRepo: Trade
+        TradeRepo-->>QrySvc: Trade
+
+        QrySvc-->>Ctrl: TradeDetailResponse
+        Note right of Ctrl: [응답 데이터]<br/>- 경매 정보 (제목, 이미지)<br/>- 최종 낙찰가<br/>- 판매자 정보<br/>- 거래 방식 옵션<br/>- 남은 응답 시간
+        Ctrl-->>Winner: 200 OK
+    end
+
+    %% 거래 방식 선택
+    rect rgb(255, 240, 240)
+        Note over Winner, RDB: [2단계: 거래 방식 선택 (3시간 내)]
+        Winner->>Ctrl: POST /api/v1/trades/{tradeId}/method
+        Note right of Winner: { method: "DELIVERY" | "DIRECT_TRADE",<br/>  deliveryAddress: "..." (택배 시) }
+
+        Ctrl->>CmdSvc: selectMethod(tradeId, userId, request)
+
+        CmdSvc->>TradeRepo: findById(tradeId)
+        TradeRepo->>RDB: SELECT * FROM trades
+        RDB-->>CmdSvc: Trade
+
+        CmdSvc->>CmdSvc: 검증
+        Note right of CmdSvc: 1. 본인 거래인지 확인<br/>2. 상태가 AWAITING_METHOD_SELECTION인지<br/>3. 경매에서 허용된 방식인지
+
+        alt 택배 선택 (DELIVERY)
+            CmdSvc->>TradeRepo: updateMethod(DELIVERY)
+            TradeRepo->>RDB: UPDATE trades<br/>SET trade_method = 'DELIVERY',<br/>status = 'AWAITING_PAYMENT'
+
+            CmdSvc->>RDB: INSERT INTO delivery_infos (...)
+            Note right of RDB: 배송지 정보 저장
+        else 직거래 선택 (DIRECT_TRADE)
+            CmdSvc->>TradeRepo: updateMethod(DIRECT_TRADE)
+            TradeRepo->>RDB: UPDATE trades<br/>SET trade_method = 'DIRECT_TRADE',<br/>status = 'AWAITING_PAYMENT'
+        end
+
+        CmdSvc->>WinRepo: respondTo(winningId)
+        WinRepo->>RDB: UPDATE winnings<br/>SET status = 'RESPONDED'
+
+        CmdSvc->>Noti: notifySeller(sellerId)
+        Noti-->>Seller: "구매자가 거래 방식을<br/>선택했습니다."
+
+        CmdSvc-->>Ctrl: TradeResponse
+        Ctrl-->>Winner: 200 OK
+    end
+
+    %% 결제 처리 (Mock)
+    rect rgb(240, 255, 240)
+        Note over Winner, RDB: [3단계: 결제 처리 (Mock)]
+        Winner->>Ctrl: POST /api/v1/trades/{tradeId}/payment
+        Note right of Winner: { paymentMethod: "CARD" | "BANK_TRANSFER" }
+
+        Ctrl->>CmdSvc: completePayment(tradeId, userId)
+
+        CmdSvc->>CmdSvc: Mock 결제 처리
+        Note right of CmdSvc: 실제 PG 연동 없이<br/>즉시 성공 처리
+
+        CmdSvc->>TradeRepo: completePayment(tradeId)
+        TradeRepo->>RDB: UPDATE trades<br/>SET status = 'AWAITING_SHIPMENT',<br/>paid_at = NOW()
+
+        CmdSvc->>Noti: notifyPaymentComplete(sellerId, buyerId)
+        Noti-->>Seller: "결제가 완료되었습니다.<br/>배송을 준비해주세요."
+        Noti-->>Winner: "결제가 완료되었습니다."
+
+        CmdSvc-->>Ctrl: TradeResponse
+        Ctrl-->>Winner: 200 OK
+    end
+
+    %% 거래 완료
+    rect rgb(255, 250, 230)
+        Note over Seller, RDB: [4단계: 거래 완료 확인]
+
+        alt 택배 거래
+            Seller->>Ctrl: POST /api/v1/trades/{tradeId}/ship
+            Note right of Seller: { trackingNumber: "..." }
+            Ctrl->>CmdSvc: updateShipment(tradeId, trackingNumber)
+            CmdSvc->>RDB: UPDATE trades SET tracking_number = ?
+
+            Winner->>Ctrl: POST /api/v1/trades/{tradeId}/confirm
+            Ctrl->>CmdSvc: confirmReceipt(tradeId, userId)
+        else 직거래
+            Winner->>Ctrl: POST /api/v1/trades/{tradeId}/confirm
+            Ctrl->>CmdSvc: confirmReceipt(tradeId, userId)
+        end
+
+        CmdSvc->>TradeRepo: complete(tradeId)
+        TradeRepo->>RDB: UPDATE trades<br/>SET status = 'COMPLETED',<br/>completed_at = NOW()
+
+        CmdSvc->>Noti: notifyTradeComplete(sellerId, buyerId)
+        Noti-->>Seller: "거래가 완료되었습니다."
+        Noti-->>Winner: "거래가 완료되었습니다."
+    end

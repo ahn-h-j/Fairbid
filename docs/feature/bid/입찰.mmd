@@ -2,61 +2,76 @@ sequenceDiagram
 autonumber
 actor Buyer as 구매자 (Client)
 participant Ctrl as BidController
+participant UC as PlaceBidUseCase
 participant Svc as BidService
-participant AuctionRepo as AuctionRepository
-participant BidRepo as BidRepository
-participant Auction as Auction (Domain)
-participant RDB as RDB (Database)
-participant EventPub as EventPublisher
+participant Cache as RedisBidCacheAdapter
+participant Redis as Redis
+participant Lua as bid.lua (Lua Script)
+participant Domain as Bid (Domain)
+participant BidPort as BidRepository (Port)
+participant AucPort as AuctionRepository (Port)
+participant RDB as MySQL
+participant WS as WebSocket
 
-    Buyer->>Ctrl: POST /api/v1/auctions/{id}/bids (입찰 요청)
-    Ctrl->>Svc: placeBid(command)
+    Buyer->>Ctrl: POST /api/v1/auctions/{id}/bids
+    Note right of Buyer: { bidType: "ONE_TOUCH" | "DIRECT" | "INSTANT_BUY",<br/>  amount: 15000 (DIRECT일 때만) }
+    Ctrl->>UC: placeBid(PlaceBidCommand)
+    UC->>Svc: placeBid(command)
 
     rect rgb(235, 245, 255)
-        Note over Svc, RDB: [트랜잭션 시작 & 동시성 제어]
-        Svc->>AuctionRepo: findByIdWithLock(auctionId)
-        AuctionRepo->>RDB: SELECT * FROM auctions WHERE id = ? FOR UPDATE
-        RDB-->>AuctionRepo: Auction Entity 반환 (Lock 획득)
-        AuctionRepo-->>Svc: Auction Domain 반환
+        Note over Svc, Redis: [1단계: Redis 캐시 확인]
+        Svc->>Cache: existsInCache(auctionId)
+        Cache->>Redis: EXISTS auction:{id}
+
+        alt 캐시 미스
+            Redis-->>Cache: false
+            Svc->>Svc: loadAuctionToRedis(auctionId)
+            Note right of Svc: RDB에서 조회 후<br/>Redis에 로드
+        end
     end
 
     rect rgb(255, 240, 240)
-        Note over Svc, Auction: [Auction 도메인 - 입찰 검증]
-        Svc->>Auction: validateBidEligibility(bidderId)
-        Note right of Auction: 1. 경매 종료 여부 확인<br/>2. 본인 경매 입찰 불가 확인
+        Note over Svc, Lua: [2단계: Lua 스크립트 원자적 입찰]
+        Svc->>Cache: placeBidAtomic(auctionId, bidderId, bidType, amount)
+        Cache->>Redis: EVALSHA bid.lua
 
-        Svc->>Auction: isInExtensionPeriod()
-        Note right of Auction: 종료 5분 전 여부 체크
+        Redis->>Lua: 실행
+        Note over Lua: [검증]<br/>1. 경매 상태 확인 (ACTIVE/INSTANT_BUY_PENDING)<br/>2. 종료 시간 확인<br/>3. 본인 경매 입찰 불가<br/>4. 최고 입찰자 재입찰 불가
 
-        alt 연장 구간인 경우 (Extension Case)
-            Svc->>Auction: extend()
-            Note right of Auction: 종료시간 5분 추가<br/>연장 횟수 갱신
-        end
+        Lua->>Lua: [BidType별 금액 계산]
+        Note right of Lua: ONE_TOUCH: currentPrice + bidIncrement<br/>DIRECT: 요청 금액 (최소금액 검증)<br/>INSTANT_BUY: instantBuyPrice
 
-        Svc->>Auction: getMinBidAmount()
-        Note right of Auction: 현재가 + 할증된 입찰단위<br/>(연장 3회당 50% 할증)
+        Lua->>Lua: [경매 연장 확인]
+        Note right of Lua: 종료 5분 전 입찰 시<br/>→ endTime += 5분<br/>→ extensionCount++<br/>→ 3회마다 입찰단위 50% 증가
 
-        Svc->>Auction: placeBid(amount)
-        Note right of Auction: 현재가 갱신<br/>총 입찰수 증가<br/>입찰단위 재계산
+        Lua->>Lua: [상태 업데이트]
+        Note right of Lua: currentPrice = newBidAmount<br/>highestBidderId = bidderId<br/>totalBidCount++<br/>bidIncrement 재계산
+
+        Lua-->>Redis: BidResult
+        Redis-->>Cache: BidResult
+        Cache-->>Svc: BidResult
     end
 
     rect rgb(240, 255, 240)
-        Note over Svc, RDB: [데이터베이스 업데이트 - 원자적 처리]
-        Svc->>AuctionRepo: save(auction)
-        AuctionRepo->>RDB: UPDATE auctions SET ...
+        Note over Svc, RDB: [3단계: RDB 동기화]
+        Svc->>Domain: Bid.create(auctionId, bidderId, amount, bidType)
 
-        Svc->>BidRepo: save(bid)
-        BidRepo->>RDB: INSERT INTO bids ...
+        par 병렬 처리
+            Svc->>BidPort: save(bid)
+            BidPort->>RDB: INSERT INTO bids (...)
+        and
+            Svc->>AucPort: updateCurrentPrice(auctionId, newPrice)
+            AucPort->>RDB: UPDATE auctions SET current_price = ?
+        end
     end
-
-    Note over RDB: 트랜잭션 커밋 (Lock 해제)
-    RDB-->>Svc: Success
 
     rect rgb(255, 250, 230)
-        Note over Svc, EventPub: [이벤트 발행 - 확장 포인트]
-        Svc->>EventPub: publish(BidPlacedEvent)
-        Note right of EventPub: 추후 NotificationService에서<br/>이벤트 구독하여 알림 처리
+        Note over Svc, WS: [4단계: 실시간 알림]
+        Svc->>WS: publish(BidPlacedEvent)
+        WS-->>Buyer: WebSocket 브로드캐스트
+        Note right of WS: 경매 참여자들에게<br/>실시간 입찰 현황 전송
     end
 
-    Svc-->>Ctrl: Bid Domain
-    Ctrl-->>Buyer: 200 OK (BidResponse)
+    Svc-->>UC: BidResponse
+    UC-->>Ctrl: BidResponse
+    Ctrl-->>Buyer: 200 OK

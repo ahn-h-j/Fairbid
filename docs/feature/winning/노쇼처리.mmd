@@ -1,0 +1,88 @@
+sequenceDiagram
+autonumber
+participant Sched as PaymentTimeoutScheduler
+participant Svc as NoShowProcessingService
+participant Helper as NoShowProcessingHelper
+participant WinRepo as WinningRepository
+participant TradeRepo as TradeRepository
+participant UserRepo as UserRepository
+participant AucRepo as AuctionRepository
+participant RDB as MySQL
+participant Noti as PushNotificationPort
+actor User1 as 1순위 (노쇼)
+actor User2 as 2순위
+
+    Note over Sched: 주기적 실행 (Scheduled)
+    Note over Sched, User2: [비즈니스 규칙]<br/>- 낙찰 후 3시간 내 거래 방식 선택 필수<br/>- 미응답 시 노쇼 처리 (1회 경고)<br/>- 3회 누적 경고 시 계정 차단<br/>- 1순위 노쇼 시 2순위 자동 승계
+
+    Sched->>Svc: processExpiredPayments()
+
+    rect rgb(235, 245, 255)
+        Note over Svc, RDB: [1단계: 만료된 응답 조회]
+        Svc->>WinRepo: findExpiredPendingResponses(deadline)
+        WinRepo->>RDB: SELECT * FROM winnings<br/>WHERE status = 'PENDING_RESPONSE'<br/>AND created_at < ? (now - 3시간)
+        RDB-->>WinRepo: List<Winning>
+        WinRepo-->>Svc: expiredWinnings
+    end
+
+    loop 각 만료 건 처리
+        Svc->>Helper: processExpiredWinning(winning)
+
+        rect rgb(255, 240, 240)
+            Note over Helper, RDB: [2단계: 노쇼 처리 트랜잭션]
+
+            Helper->>WinRepo: markAsNoShow(winning)
+            WinRepo->>RDB: UPDATE winnings<br/>SET status = 'NO_SHOW'
+
+            Helper->>UserRepo: incrementNoShowCount(userId)
+            UserRepo->>RDB: UPDATE users<br/>SET no_show_count = no_show_count + 1
+
+            Helper->>UserRepo: findById(userId)
+            UserRepo->>RDB: SELECT no_show_count FROM users
+            RDB-->>UserRepo: User
+
+            alt noShowCount >= 3
+                Helper->>UserRepo: block(userId)
+                UserRepo->>RDB: UPDATE users SET status = 'BLOCKED'
+                Helper->>Noti: sendBlockedNotification(userId)
+                Noti-->>User1: "경고 3회 누적으로<br/>계정이 차단되었습니다."
+            else noShowCount < 3
+                Helper->>Noti: sendNoShowWarning(userId, count)
+                Noti-->>User1: "노쇼 경고 {n}회.<br/>3회 시 계정 차단됩니다."
+            end
+        end
+
+        rect rgb(240, 255, 240)
+            Note over Helper, RDB: [3단계: 2순위 승계 확인]
+            Helper->>WinRepo: findSecondRank(auctionId)
+            WinRepo->>RDB: SELECT * FROM winnings<br/>WHERE auction_id = ? AND rank = 2
+            RDB-->>WinRepo: Optional<Winning>
+
+            alt 2순위 존재 && 입찰가 >= 즉시구매가 * 90%
+                Helper->>WinRepo: promoteToFirstRank(secondRankWinning)
+                WinRepo->>RDB: UPDATE winnings<br/>SET rank = 1, status = 'PENDING_RESPONSE'
+
+                Helper->>AucRepo: updateWinner(auctionId, secondRankUserId)
+                AucRepo->>RDB: UPDATE auctions<br/>SET winner_id = ?
+
+                Helper->>TradeRepo: updateBuyer(tradeId, secondRankUserId)
+                TradeRepo->>RDB: UPDATE trades<br/>SET buyer_id = ?,<br/>status = 'AWAITING_METHOD_SELECTION'
+
+                rect rgb(255, 250, 230)
+                    Note over Helper, User2: [2순위 알림]
+                    Helper->>Noti: sendSuccessionNotification(secondRankUserId)
+                    Noti-->>User2: "낙찰권이 승계되었습니다!<br/>3시간 내 거래 방식을<br/>선택해주세요."
+                end
+
+            else 2순위 없음 또는 90% 미만
+                Helper->>AucRepo: markAsFailed(auctionId)
+                AucRepo->>RDB: UPDATE auctions<br/>SET status = 'FAILED'
+
+                Helper->>TradeRepo: cancel(tradeId)
+                TradeRepo->>RDB: UPDATE trades<br/>SET status = 'CANCELLED'
+
+                Helper->>Noti: sendAuctionFailedToSeller(sellerId)
+                Note right of Noti: 판매자에게<br/>최종 유찰 알림
+            end
+        end
+    end

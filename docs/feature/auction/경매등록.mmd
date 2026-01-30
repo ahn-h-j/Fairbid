@@ -2,27 +2,54 @@ sequenceDiagram
 autonumber
 actor Seller as 판매자 (Client)
 participant Ctrl as AuctionController
+participant UC as CreateAuctionUseCase
 participant Svc as AuctionService
-participant Repo as AuctionRepository
-participant RDB as RDB (Database)
+participant Domain as Auction (Domain)
+participant Policy as BidIncrementPolicy
+participant Port as AuctionRepository (Port)
+participant Adapter as AuctionPersistenceAdapter
+participant Cache as RedisAuctionCacheAdapter
+participant RDB as MySQL
+participant Redis as Redis
 
-    Seller->>Ctrl: POST /api/v1/auctions (RegisterRequest)
-    Ctrl->>Svc: createAuction(requestDto)
-    
+    Seller->>Ctrl: POST /api/v1/auctions (CreateAuctionRequest)
+    Ctrl->>UC: createAuction(CreateAuctionCommand)
+    UC->>Svc: createAuction(command)
+
     rect rgb(235, 245, 255)
-        Note over Svc: [비즈니스 로직 및 검증]
-        Svc->>Svc: 1. Auction 상태 설정: status = 'BIDDING'
-        Svc->>Svc: 2. 즉시구입가 검증: startPrice < instantBuyPrice
-        Svc->>Svc: 3. 입찰 단위(bidIncrement) 계산
-        Note over Policy: 시작가(Price) 구간별 계산<br/>1만 미만: +500<br/>1만~5만: +1,000<br/>...<br/>100만 이상: +30,000
-        Svc->>Svc: 4. 종료 예정 시간(endTime) 계산 (24h/48h)
+        Note over Svc, Domain: [도메인 생성 및 검증]
+        Svc->>Domain: Auction.create(command)
+        Note right of Domain: 1. 즉시구매가 > 시작가 검증<br/>2. 거래 방식 최소 1개 검증<br/>3. 직거래 시 위치 필수 검증
+
+        Domain->>Policy: calculateBaseIncrement(startPrice)
+        Note right of Policy: [가격 구간별 입찰 단위]<br/>~1만: 500원<br/>1만~5만: 1,000원<br/>5만~10만: 3,000원<br/>10만~50만: 5,000원<br/>50만~100만: 10,000원<br/>100만~: 30,000원
+        Policy-->>Domain: bidIncrement
+
+        Domain->>Domain: endTime 계산 (24h/48h)
+        Domain->>Domain: status = ACTIVE
     end
 
-    Svc->>Repo: save(auctionEntity)
-    Repo->>RDB: INSERT INTO auctions (...)
-    Note right of RDB: [저장 필드 리스트]<br/>- product_info (name, desc, images)<br/>- seller_id<br/>- start_price, instant_buy_price<br/>- current_highest_bid (초기값 = start_price)<br/>- start_at, end_at<br/>- bid_increment, total_bids(0)
-    
-    RDB-->>Repo: Success (Row Created)
-    Repo-->>Svc: Saved Entity
-    Svc-->>Ctrl: AuctionResponseDto
-    Ctrl-->>Seller: 201 Created (Auction Detail)
+    rect rgb(240, 255, 240)
+        Note over Svc, RDB: [RDB 저장]
+        Svc->>Port: save(auction)
+        Port->>Adapter: save(auction)
+        Adapter->>RDB: INSERT INTO auctions (...)
+        Note right of RDB: seller_id, title, description<br/>start_price, instant_buy_price<br/>current_price, bid_increment<br/>start_at, end_at, status
+        RDB-->>Adapter: AuctionEntity
+        Adapter-->>Port: Auction
+        Port-->>Svc: Auction
+    end
+
+    rect rgb(255, 250, 230)
+        Note over Svc, Redis: [이벤트 발행 → Redis 캐시]
+        Svc->>Svc: eventPublisher.publish(AuctionCreatedEvent)
+        Svc->>Cache: saveToCache(auction)
+        Cache->>Redis: HSET auction:{id} fields...
+        Note right of Redis: Redis Hash 구조<br/>- currentPrice<br/>- bidIncrement<br/>- endTime<br/>- status
+        Cache->>Redis: ZADD auction:closing {endTime} {id}
+        Note right of Redis: Sorted Set으로<br/>종료 대기 큐 관리
+    end
+
+    Svc-->>UC: Auction
+    UC-->>Ctrl: CreateAuctionResponse
+    Ctrl-->>Seller: 201 Created

@@ -1,0 +1,88 @@
+sequenceDiagram
+autonumber
+participant Sched as AuctionClosingScheduler
+participant Svc as AuctionClosingService
+participant Helper as AuctionClosingHelper
+participant Proc as AuctionClosingProcessor
+participant Cache as AuctionCachePort
+participant Redis as Redis
+participant BidRepo as BidRepository
+participant WinRepo as WinningRepository
+participant TradeRepo as TradeRepository
+participant AucRepo as AuctionRepository
+participant RDB as MySQL
+participant Noti as PushNotificationPort
+actor Winner as 낙찰자
+
+    Note over Sched: 매 초 실행 (Scheduled)
+
+    Sched->>Svc: closeExpiredAuctions()
+
+    rect rgb(235, 245, 255)
+        Note over Svc, Redis: [1단계: 종료 대상 조회]
+        Svc->>Cache: findAuctionIdsToClose(now)
+        Cache->>Redis: ZRANGEBYSCORE auction:closing 0 {now}
+        Note right of Redis: Sorted Set에서<br/>종료 시간이 지난<br/>경매 ID 조회
+        Redis-->>Cache: [auctionId1, auctionId2, ...]
+        Cache-->>Svc: List<Long> auctionIds
+    end
+
+    loop 각 경매별 처리
+        Svc->>Helper: processAuctionClosing(auctionId)
+
+        rect rgb(255, 240, 240)
+            Note over Helper, RDB: [2단계: 최고 입찰자 조회]
+            Helper->>BidRepo: findLastBid(auctionId)
+            BidRepo->>RDB: SELECT * FROM bids<br/>WHERE auction_id = ?<br/>ORDER BY amount DESC LIMIT 1
+            RDB-->>BidRepo: Bid (nullable)
+            BidRepo-->>Helper: Optional<Bid>
+        end
+
+        alt 입찰 있음 (낙찰)
+            Helper->>Proc: processFirstRankWinner(auction, winningBid)
+
+            rect rgb(240, 255, 240)
+                Note over Proc, RDB: [3단계: 낙찰 처리 트랜잭션]
+
+                Proc->>AucRepo: close(auctionId, winnerId)
+                AucRepo->>RDB: UPDATE auctions<br/>SET status = 'CLOSED',<br/>winner_id = ?
+
+                Proc->>WinRepo: save(Winning.createFirstRank(...))
+                WinRepo->>RDB: INSERT INTO winnings<br/>(auction_id, user_id, amount, rank, status)
+                Note right of RDB: rank = 1<br/>status = PENDING_RESPONSE
+
+                Proc->>TradeRepo: save(Trade.create(...))
+                TradeRepo->>RDB: INSERT INTO trades<br/>(auction_id, seller_id, buyer_id,<br/>final_price, status)
+                Note right of RDB: status = AWAITING_METHOD_SELECTION
+
+                opt 2순위 존재 && 90% 이상
+                    Proc->>WinRepo: save(Winning.createSecondRank(...))
+                    Note right of RDB: 2순위 후보 저장<br/>(1순위 노쇼 대비)
+                end
+            end
+
+            rect rgb(255, 250, 230)
+                Note over Proc, Winner: [4단계: 알림 발송]
+                Proc->>Noti: sendWinnerNotification(winnerId, auction)
+                Noti-->>Winner: 푸시 알림
+                Note right of Winner: "축하합니다!<br/>3시간 내 거래 방식을<br/>선택해주세요."
+            end
+
+        else 입찰 없음 (유찰)
+            Helper->>Proc: processNoWinner(auction)
+
+            Proc->>AucRepo: close(auctionId, null)
+            AucRepo->>RDB: UPDATE auctions<br/>SET status = 'FAILED'
+
+            Proc->>Noti: sendFailedAuctionNotification(sellerId)
+            Note right of Noti: 판매자에게<br/>유찰 알림
+        end
+
+        rect rgb(235, 245, 255)
+            Note over Svc, Redis: [5단계: Redis 정리]
+            Svc->>Cache: removeFromClosingQueue(auctionId)
+            Cache->>Redis: ZREM auction:closing {auctionId}
+            Svc->>Cache: deleteAuctionCache(auctionId)
+            Cache->>Redis: DEL auction:{auctionId}
+        end
+    end
