@@ -1,29 +1,17 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../api/client';
-import useInfiniteScroll from '../hooks/useInfiniteScroll';
 import Spinner from '../components/Spinner';
-
-/** 판매 탭 상태 필터 목록 */
-const SALE_FILTERS = [
-  { value: '', label: '전체' },
-  { value: 'ACTIVE', label: '진행중' },
-  { value: 'PAYMENT_PENDING', label: '결제대기' },
-  { value: 'COMPLETED', label: '거래완료' },
-  { value: 'NO_BID', label: '유찰' },
-];
 
 /**
  * 마이페이지
- * 프로필 섹션 + 판매/구매 탭으로 구성된다.
+ * 프로필 + 거래 통계 + 배송지 관리
  */
 export default function MyPage() {
   const { user, updateAuthFromToken, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('sales');
-  const [saleFilter, setSaleFilter] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [editNickname, setEditNickname] = useState('');
   const [nicknameError, setNicknameError] = useState('');
@@ -32,9 +20,18 @@ export default function MyPage() {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
+  // 배송지 수정 상태
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [addressForm, setAddressForm] = useState({
+    recipientName: '',
+    recipientPhone: '',
+    postalCode: '',
+    address: '',
+    addressDetail: '',
+  });
+  const [addressError, setAddressError] = useState('');
+
   const nicknameInputRef = useRef(null);
-  const observerRef = useRef(null);
-  const loadMoreRef = useRef(null);
 
   // 프로필 정보 로드
   useEffect(() => {
@@ -42,6 +39,10 @@ export default function MyPage() {
       try {
         const data = await apiRequest('/users/me');
         setProfile(data);
+        // 배송지 정보가 있으면 폼에 설정
+        if (data.shippingAddress) {
+          setAddressForm(data.shippingAddress);
+        }
       } catch {
         // 프로필 로드 실패 시 기본값 사용
       } finally {
@@ -50,51 +51,6 @@ export default function MyPage() {
     };
     loadProfile();
   }, []);
-
-  // 판매 목록 무한스크롤
-  const {
-    items: salesItems,
-    isLoading: salesLoading,
-    isLoadingMore: salesLoadingMore,
-    hasMore: salesHasMore,
-    loadMore: salesLoadMore,
-  } = useInfiniteScroll('/users/me/auctions', { status: saleFilter });
-
-  // 구매 목록 무한스크롤
-  const {
-    items: bidsItems,
-    isLoading: bidsLoading,
-    isLoadingMore: bidsLoadingMore,
-    hasMore: bidsHasMore,
-    loadMore: bidsLoadMore,
-  } = useInfiniteScroll('/users/me/bids');
-
-  // Intersection Observer로 무한스크롤 트리거
-  useEffect(() => {
-    if (observerRef.current) observerRef.current.disconnect();
-
-    const currentLoadMore = activeTab === 'sales' ? salesLoadMore : bidsLoadMore;
-    const currentHasMore = activeTab === 'sales' ? salesHasMore : bidsHasMore;
-
-    if (!currentHasMore) return;
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          currentLoadMore();
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-
-    return () => {
-      if (observerRef.current) observerRef.current.disconnect();
-    };
-  }, [activeTab, salesLoadMore, bidsLoadMore, salesHasMore, bidsHasMore]);
 
   /** 닉네임 수정 시작 */
   const startEditNickname = () => {
@@ -118,7 +74,6 @@ export default function MyPage() {
         body: JSON.stringify({ nickname: trimmed }),
       });
 
-      // 새 JWT로 인증 상태 갱신
       if (result.accessToken) {
         updateAuthFromToken(result.accessToken);
       }
@@ -139,6 +94,26 @@ export default function MyPage() {
     if (e.key === 'Escape') setIsEditingNickname(false);
   };
 
+  /** 배송지 저장 */
+  const saveAddress = async () => {
+    if (!addressForm.recipientName || !addressForm.recipientPhone || !addressForm.address) {
+      setAddressError('수령인, 연락처, 주소는 필수입니다.');
+      return;
+    }
+
+    try {
+      await apiRequest('/users/me/shipping-address', {
+        method: 'PUT',
+        body: JSON.stringify(addressForm),
+      });
+      setProfile((prev) => (prev ? { ...prev, shippingAddress: addressForm } : prev));
+      setIsEditingAddress(false);
+      setAddressError('');
+    } catch (err) {
+      setAddressError(err.message || '저장에 실패했습니다.');
+    }
+  };
+
   /** 회원 탈퇴 처리 */
   const handleDeleteAccount = async () => {
     setDeleteError('');
@@ -148,15 +123,14 @@ export default function MyPage() {
       await logout();
       navigate('/', { replace: true });
     } catch (err) {
-      // 탈퇴 실패 시 에러 메시지 표시, 모달 유지
       setDeleteError(err.message || '탈퇴에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   };
 
   /** 가격 포맷팅 */
-  const formatPrice = useCallback((price) => {
-    return new Intl.NumberFormat('ko-KR').format(price);
-  }, []);
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('ko-KR').format(price || 0);
+  };
 
   if (profileLoading) {
     return (
@@ -190,22 +164,18 @@ export default function MyPage() {
                     maxLength={20}
                     spellCheck={false}
                     className="w-32 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                    aria-label="닉네임 수정"
-                    aria-invalid={!!nicknameError}
                   />
                   <button
                     type="button"
                     onClick={saveNickname}
-                    className="px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                    aria-label="닉네임 저장"
+                    className="px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg"
                   >
                     저장
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsEditingNickname(false)}
-                    className="px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                    aria-label="닉네임 수정 취소"
+                    className="px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg"
                   >
                     취소
                   </button>
@@ -218,8 +188,7 @@ export default function MyPage() {
                   <button
                     type="button"
                     onClick={startEditNickname}
-                    className="text-xs text-blue-500 hover:text-blue-700 transition-colors duration-200"
-                    aria-label="닉네임 수정"
+                    className="text-xs text-blue-500 hover:text-blue-700"
                   >
                     수정
                   </button>
@@ -228,7 +197,7 @@ export default function MyPage() {
             </dd>
           </div>
           {nicknameError && (
-            <p className="text-xs text-red-600 text-right" role="alert">{nicknameError}</p>
+            <p className="text-xs text-red-600 text-right">{nicknameError}</p>
           )}
 
           {/* 이메일 */}
@@ -245,7 +214,7 @@ export default function MyPage() {
 
           {/* 경고 횟수 */}
           <div className="flex items-center justify-between">
-            <dt className="text-sm text-gray-500">경고</dt>
+            <dt className="text-sm text-gray-500">노쇼 경고</dt>
             <dd className="text-sm font-semibold">
               <span className={profile?.warningCount > 0 ? 'text-red-600' : 'text-gray-900'}>
                 {profile?.warningCount ?? 0}/3
@@ -255,142 +224,127 @@ export default function MyPage() {
         </dl>
       </section>
 
-      {/* 판매/구매 탭 */}
-      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* 탭 헤더 */}
-        <div className="flex border-b border-gray-100" role="tablist" aria-label="마이페이지 탭">
-          <button
-            type="button"
-            id="tab-sales"
-            onClick={() => setActiveTab('sales')}
-            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors duration-200 ${
-              activeTab === 'sales'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            aria-selected={activeTab === 'sales'}
-            aria-controls="tabpanel-sales"
-            role="tab"
-          >
-            판매
-          </button>
-          <button
-            type="button"
-            id="tab-bids"
-            onClick={() => setActiveTab('bids')}
-            className={`flex-1 py-3 text-sm font-semibold text-center transition-colors duration-200 ${
-              activeTab === 'bids'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            aria-selected={activeTab === 'bids'}
-            aria-controls="tabpanel-bids"
-            role="tab"
-          >
-            구매
-          </button>
+      {/* 거래 통계 섹션 */}
+      <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">거래 통계</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-blue-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-blue-600">{profile?.stats?.totalSales ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-1">판매 완료</p>
+          </div>
+          <div className="bg-violet-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-violet-600">{profile?.stats?.totalPurchases ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-1">구매 완료</p>
+          </div>
+          <div className="bg-green-50 rounded-xl p-4 text-center col-span-2">
+            <p className="text-2xl font-bold text-green-600">{formatPrice(profile?.stats?.totalAmount)}원</p>
+            <p className="text-xs text-gray-500 mt-1">총 거래 금액</p>
+          </div>
+        </div>
+      </section>
+
+      {/* 배송지 관리 섹션 */}
+      <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">배송지</h2>
+          {!isEditingAddress && (
+            <button
+              type="button"
+              onClick={() => setIsEditingAddress(true)}
+              className="text-xs text-blue-500 hover:text-blue-700"
+            >
+              {profile?.shippingAddress ? '수정' : '등록'}
+            </button>
+          )}
         </div>
 
-        {/* 판매 탭 콘텐츠 */}
-        {activeTab === 'sales' && (
-          <div role="tabpanel" id="tabpanel-sales" aria-labelledby="tab-sales">
-            {/* 상태 필터 */}
-            <div className="flex gap-2 p-4 overflow-x-auto">
-              {SALE_FILTERS.map((filter) => (
-                <button
-                  key={filter.value}
-                  type="button"
-                  onClick={() => setSaleFilter(filter.value)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors duration-200 ${
-                    saleFilter === filter.value
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                  aria-label={`${filter.label} 필터`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+        {isEditingAddress ? (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">수령인</label>
+              <input
+                type="text"
+                value={addressForm.recipientName}
+                onChange={(e) => setAddressForm({ ...addressForm, recipientName: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="홍길동"
+              />
             </div>
-
-            {/* 경매 리스트 */}
-            <div className="divide-y divide-gray-50">
-              {salesLoading ? (
-                <div className="flex justify-center py-10"><Spinner /></div>
-              ) : salesItems.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-10">등록한 경매가 없습니다.</p>
-              ) : (
-                salesItems.map((item) => (
-                  <button
-                    key={item.id || item.auctionId}
-                    type="button"
-                    onClick={() => navigate(`/auctions/${item.id || item.auctionId}`)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50/80 transition-colors duration-200 text-left"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{item.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {item.createdAt ? new Intl.DateTimeFormat('ko-KR').format(new Date(item.createdAt)) : ''}
-                      </p>
-                    </div>
-                    <div className="text-right ml-3 shrink-0">
-                      <p className="text-sm font-bold text-gray-900">{formatPrice(item.currentPrice || item.startPrice || 0)}원</p>
-                      <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-50 text-blue-600">
-                        {item.statusLabel || item.status}
-                      </span>
-                    </div>
-                  </button>
-                ))
-              )}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">연락처</label>
+              <input
+                type="tel"
+                value={addressForm.recipientPhone}
+                onChange={(e) => setAddressForm({ ...addressForm, recipientPhone: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="010-1234-5678"
+              />
             </div>
-
-            {salesLoadingMore && (
-              <div className="flex justify-center py-4"><Spinner /></div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">우편번호</label>
+              <input
+                type="text"
+                value={addressForm.postalCode}
+                onChange={(e) => setAddressForm({ ...addressForm, postalCode: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="12345"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">주소</label>
+              <input
+                type="text"
+                value={addressForm.address}
+                onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="서울시 강남구 테헤란로 123"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">상세주소</label>
+              <input
+                type="text"
+                value={addressForm.addressDetail}
+                onChange={(e) => setAddressForm({ ...addressForm, addressDetail: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="101동 202호"
+              />
+            </div>
+            {addressError && (
+              <p className="text-xs text-red-600">{addressError}</p>
             )}
-          </div>
-        )}
-
-        {/* 구매 탭 콘텐츠 */}
-        {activeTab === 'bids' && (
-          <div role="tabpanel" id="tabpanel-bids" aria-labelledby="tab-bids">
-            <div className="divide-y divide-gray-50">
-              {bidsLoading ? (
-                <div className="flex justify-center py-10"><Spinner /></div>
-              ) : bidsItems.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-10">입찰한 경매가 없습니다.</p>
-              ) : (
-                bidsItems.map((item) => (
-                  <button
-                    key={item.id || item.auctionId}
-                    type="button"
-                    onClick={() => navigate(`/auctions/${item.id || item.auctionId}`)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50/80 transition-colors duration-200 text-left"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{item.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        내 입찰가: {formatPrice(item.myHighestBid || 0)}원
-                      </p>
-                    </div>
-                    <div className="text-right ml-3 shrink-0">
-                      <p className="text-sm font-bold text-gray-900">{formatPrice(item.currentPrice || 0)}원</p>
-                      <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-violet-50 text-violet-600">
-                        {item.statusLabel || item.status}
-                      </span>
-                    </div>
-                  </button>
-                ))
-              )}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={saveAddress}
+                className="flex-1 py-2 text-sm font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600"
+              >
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingAddress(false);
+                  setAddressError('');
+                  if (profile?.shippingAddress) {
+                    setAddressForm(profile.shippingAddress);
+                  }
+                }}
+                className="flex-1 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                취소
+              </button>
             </div>
-
-            {bidsLoadingMore && (
-              <div className="flex justify-center py-4"><Spinner /></div>
-            )}
           </div>
+        ) : profile?.shippingAddress ? (
+          <div className="text-sm text-gray-700 space-y-1">
+            <p className="font-semibold">{profile.shippingAddress.recipientName} ({profile.shippingAddress.recipientPhone})</p>
+            <p>{profile.shippingAddress.postalCode && `[${profile.shippingAddress.postalCode}] `}{profile.shippingAddress.address}</p>
+            {profile.shippingAddress.addressDetail && <p>{profile.shippingAddress.addressDetail}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">등록된 배송지가 없습니다.</p>
         )}
-
-        {/* 무한스크롤 트리거 */}
-        <div ref={loadMoreRef} className="h-1" />
       </section>
 
       {/* 회원 탈퇴 */}
@@ -398,8 +352,7 @@ export default function MyPage() {
         <button
           type="button"
           onClick={() => setShowDeleteModal(true)}
-          className="text-xs text-gray-400 hover:text-red-500 transition-colors duration-200"
-          aria-label="회원 탈퇴"
+          className="text-xs text-gray-400 hover:text-red-500 transition-colors"
         >
           회원 탈퇴
         </button>
@@ -407,36 +360,27 @@ export default function MyPage() {
 
       {/* 탈퇴 확인 모달 */}
       {showDeleteModal && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="회원 탈퇴 확인"
-        >
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-lg font-bold text-gray-900 mb-2">회원 탈퇴</h3>
             <p className="text-sm text-gray-500 mb-4">
               정말 탈퇴하시겠습니까? 탈퇴 후 계정을 복구할 수 없습니다.
             </p>
             {deleteError && (
-              <p className="text-xs text-red-600 mb-4" role="alert" aria-live="polite">
-                {deleteError}
-              </p>
+              <p className="text-xs text-red-600 mb-4">{deleteError}</p>
             )}
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="flex-1 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors duration-200"
-                aria-label="탈퇴 취소"
+                className="flex-1 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
               >
                 취소
               </button>
               <button
                 type="button"
                 onClick={handleDeleteAccount}
-                className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors duration-200"
-                aria-label="탈퇴 확인"
+                className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600"
               >
                 탈퇴하기
               </button>

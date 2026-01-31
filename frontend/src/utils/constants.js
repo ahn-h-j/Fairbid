@@ -17,7 +17,6 @@ export const STATUSES = {
   BIDDING: { label: '진행중', className: 'bg-green-100 text-green-800' },
   INSTANT_BUY_PENDING: { label: '즉시구매 대기', className: 'bg-blue-100 text-blue-800' },
   ENDED: { label: '종료', className: 'bg-gray-200 text-gray-700' },
-  CLOSED: { label: '종료', className: 'bg-gray-200 text-gray-700' },
   FAILED: { label: '유찰', className: 'bg-red-100 text-red-800' },
   CANCELLED: { label: '취소됨', className: 'bg-gray-100 text-gray-500' },
 };
