@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, AUTH_STATE } from '../contexts/AuthContext';
 import UserDropdown from './UserDropdown';
+import NotificationDropdown from './NotificationDropdown';
 
 /**
  * 앱 전체 레이아웃 컴포넌트
@@ -70,6 +71,23 @@ export default function Layout() {
                 <span className="hidden sm:inline">경매 </span>등록
               </Link>
 
+              {/* 내 거래 링크: 로그인 시 노출 */}
+              {isLoggedIn && (
+                <Link
+                  to="/trades"
+                  className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
+                    location.pathname.startsWith('/trades')
+                      ? 'text-blue-600 bg-blue-50/80'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
+                  }`}
+                >
+                  {location.pathname.startsWith('/trades') && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-blue-500 rounded-full" />
+                  )}
+                  <span className="hidden sm:inline">내 </span>거래
+                </Link>
+              )}
+
               {/* 관리자 링크: ADMIN 역할일 때만 노출 */}
               {user?.role === 'ADMIN' && (
                 <Link
@@ -88,13 +106,16 @@ export default function Layout() {
               )}
 
               {/* 인증 영역: 로그인 상태에 따라 분기 */}
-              <div className="flex items-center border-l border-gray-200/60 pl-3 ml-2">
+              <div className="flex items-center gap-2 border-l border-gray-200/60 pl-3 ml-2">
                 {authState === AUTH_STATE.LOADING ? (
                   /* 로딩 중에는 빈 공간 (깜빡임 방지) */
                   <div className="w-16 h-8" />
                 ) : isLoggedIn ? (
-                  /* 로그인 상태: 닉네임 드롭다운 */
-                  <UserDropdown />
+                  /* 로그인 상태: 알림 + 닉네임 드롭다운 */
+                  <>
+                    <NotificationDropdown />
+                    <UserDropdown />
+                  </>
                 ) : (
                   /* 비로그인 상태: 로그인 버튼 */
                   <Link
