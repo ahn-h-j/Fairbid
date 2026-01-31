@@ -14,9 +14,9 @@ import java.util.List;
  * 노쇼 처리 서비스
  *
  * 노쇼 처리 흐름:
- * 1. 결제 기한 만료된 Winning 조회
+ * 1. 응답 기한 만료된 Winning 조회
  * 2. 1순위 노쇼 시:
- *    - 경고 부여 (TODO: User 도메인 구현 후)
+ *    - 경고 부여
  *    - 2순위가 있고 90% 이상이면 자동 승계
  *    - 아니면 유찰
  * 3. 2순위 노쇼 시 (승계 후):
@@ -34,14 +34,14 @@ public class NoShowProcessingService implements ProcessNoShowUseCase {
 
     @Override
     public void processExpiredPayments() {
-        // 1. 결제 기한 만료된 Winning 조회
-        List<Winning> expiredWinnings = winningRepository.findExpiredPendingPayments();
+        // 1. 응답 기한 만료된 Winning 조회
+        List<Winning> expiredWinnings = winningRepository.findExpiredPendingResponses();
 
         if (expiredWinnings.isEmpty()) {
             return;
         }
 
-        log.info("결제 기한 만료 건 {}건 처리 시작", expiredWinnings.size());
+        log.info("응답 기한 만료 건 {}건 처리 시작", expiredWinnings.size());
 
         // 2. 각 만료 건을 독립 트랜잭션에서 처리
         for (Winning winning : expiredWinnings) {

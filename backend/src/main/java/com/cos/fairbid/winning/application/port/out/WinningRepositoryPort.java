@@ -37,11 +37,11 @@ public interface WinningRepositoryPort {
     Optional<Winning> findByAuctionIdAndRank(Long auctionId, Integer rank);
 
     /**
-     * 결제 기한이 만료된 결제 대기 중인 낙찰 목록을 조회한다
+     * 응답 기한이 만료된 응답 대기 중인 낙찰 목록을 조회한다
      *
-     * @return 결제 기한 만료된 낙찰 목록
+     * @return 응답 기한 만료된 낙찰 목록
      */
-    List<Winning> findExpiredPendingPayments();
+    List<Winning> findExpiredPendingResponses();
 
     /**
      * ID로 낙찰 정보를 조회한다
@@ -52,8 +52,8 @@ public interface WinningRepositoryPort {
     Optional<Winning> findById(Long id);
 
     /**
-     * 경매 ID와 입찰자 ID로 결제 대기 중인 낙찰 정보를 조회한다
-     * 결제 처리 시 현재 Transaction의 구매자에 해당하는 PENDING_PAYMENT 상태의 Winning을 찾을 때 사용
+     * 경매 ID와 입찰자 ID로 응답 대기 중인 낙찰 정보를 조회한다
+     * 거래 조율 시 현재 Trade의 구매자에 해당하는 PENDING_RESPONSE 상태의 Winning을 찾을 때 사용
      *
      * @param auctionId 경매 ID
      * @param bidderId  입찰자 ID

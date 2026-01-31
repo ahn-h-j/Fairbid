@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseCase,
-        GetMyProfileUseCase, UpdateNicknameUseCase, DeactivateAccountUseCase {
+        GetMyProfileUseCase, UpdateNicknameUseCase, DeactivateAccountUseCase, UpdateShippingAddressUseCase {
 
     private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
@@ -150,6 +150,23 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
         // 3. Redis Refresh Token 삭제
         refreshTokenPort.delete(userId);
         log.info("회원 탈퇴: userId={}", userId);
+    }
+
+    /**
+     * 배송지 정보를 수정한다.
+     */
+    @Override
+    @Transactional
+    public User updateShippingAddress(Long userId, String recipientName, String phone,
+                                      String postalCode, String address, String addressDetail) {
+        User user = loadUserPort.findById(userId)
+                .orElseThrow(() -> UserNotFoundException.withId(userId));
+
+        user.updateShippingAddress(recipientName, phone, postalCode, address, addressDetail);
+        user = saveUserPort.save(user);
+        log.info("배송지 수정: userId={}", userId);
+
+        return user;
     }
 
     /**
