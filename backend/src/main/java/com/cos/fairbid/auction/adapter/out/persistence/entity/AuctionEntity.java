@@ -78,6 +78,16 @@ public class AuctionEntity {
     @Column(name = "instant_buy_activated_time")
     private LocalDateTime instantBuyActivatedTime;
 
+    // 거래 방식 관련 필드
+    @Column(name = "direct_trade_available", nullable = false)
+    private Boolean directTradeAvailable;
+
+    @Column(name = "delivery_available", nullable = false)
+    private Boolean deliveryAvailable;
+
+    @Column(name = "direct_trade_location")
+    private String directTradeLocation;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -105,6 +115,9 @@ public class AuctionEntity {
             Long winnerId,
             Long instantBuyerId,
             LocalDateTime instantBuyActivatedTime,
+            Boolean directTradeAvailable,
+            Boolean deliveryAvailable,
+            String directTradeLocation,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {
@@ -125,6 +138,9 @@ public class AuctionEntity {
         this.winnerId = winnerId;
         this.instantBuyerId = instantBuyerId;
         this.instantBuyActivatedTime = instantBuyActivatedTime;
+        this.directTradeAvailable = directTradeAvailable;
+        this.deliveryAvailable = deliveryAvailable;
+        this.directTradeLocation = directTradeLocation;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }

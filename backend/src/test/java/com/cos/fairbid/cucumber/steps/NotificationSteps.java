@@ -6,10 +6,7 @@ import io.cucumber.java.ko.그리고;
 import io.cucumber.java.ko.만약;
 import org.springframework.http.ResponseEntity;
 
-import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 알림 관련 Step Definitions
@@ -49,21 +46,5 @@ public class NotificationSteps {
                 Map.class
         );
         testContext.setLastResponse(response);
-    }
-
-    @그리고("응답 본문의 목록 크기는 {int}이다")
-    public void 응답_본문의_목록_크기는_이다(int expectedSize) {
-        ResponseEntity<Map> response = testContext.getLastResponse();
-        Map<String, Object> body = response.getBody();
-        assertThat(body).isNotNull();
-
-        // data 필드가 List인 경우 직접 검사
-        Object data = body.get("data");
-        if (data instanceof List) {
-            assertThat((List<?>) data).hasSize(expectedSize);
-        } else {
-            // 기존 CommonSteps의 content 구조 사용
-            throw new AssertionError("응답 data가 List 타입이 아닙니다: " + data);
-        }
     }
 }

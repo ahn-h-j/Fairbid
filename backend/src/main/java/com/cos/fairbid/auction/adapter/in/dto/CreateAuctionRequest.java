@@ -34,7 +34,14 @@ public record CreateAuctionRequest(
         @NotNull(message = "경매 기간은 필수입니다")
         AuctionDuration duration,
 
-        List<String> imageUrls
+        List<String> imageUrls,
+
+        // 거래 방식 관련 필드
+        Boolean directTradeAvailable,   // 직거래 가능 여부 (기본값: true)
+
+        Boolean deliveryAvailable,      // 택배 가능 여부 (기본값: true)
+
+        String directTradeLocation      // 직거래 희망 위치 (직거래 가능 시 필수)
 ) {
     /**
      * Request DTO → Command 변환
@@ -43,6 +50,14 @@ public record CreateAuctionRequest(
      * @return CreateAuctionCommand
      */
     public CreateAuctionCommand toCommand(Long sellerId) {
+        // 거래 방식 기본값 설정: 둘 다 null이면 둘 다 true로 설정
+        Boolean isDirect = directTradeAvailable;
+        Boolean isDelivery = deliveryAvailable;
+        if (isDirect == null && isDelivery == null) {
+            isDirect = true;
+            isDelivery = true;
+        }
+
         return CreateAuctionCommand.builder()
                 .sellerId(Objects.requireNonNull(sellerId, "sellerId must not be null"))
                 .title(title)
@@ -52,6 +67,9 @@ public record CreateAuctionRequest(
                 .instantBuyPrice(instantBuyPrice)
                 .duration(duration)
                 .imageUrls(imageUrls != null ? List.copyOf(imageUrls) : List.of())
+                .directTradeAvailable(isDirect)
+                .deliveryAvailable(isDelivery)
+                .directTradeLocation(directTradeLocation)
                 .build();
     }
 }

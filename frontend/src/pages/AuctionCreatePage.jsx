@@ -18,6 +18,10 @@ export default function AuctionCreatePage() {
     startPrice: '',
     instantBuyPrice: '',
     duration: 'HOURS_24',
+    // 거래 방식 설정
+    directTradeAvailable: true,
+    deliveryAvailable: true,
+    directTradeLocation: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -38,7 +42,20 @@ export default function AuctionCreatePage() {
       const instantBuyPrice = parseInt(formData.instantBuyPrice, 10);
       if (instantBuyPrice <= startPrice) return '즉시 구매가는 시작 가격보다 높아야 합니다.';
     }
+    // 거래 방식 검증
+    if (!formData.directTradeAvailable && !formData.deliveryAvailable) {
+      return '최소 1개의 거래 방식을 선택해주세요.';
+    }
+    if (formData.directTradeAvailable && !formData.directTradeLocation.trim()) {
+      return '직거래 선택 시 희망 위치를 입력해주세요.';
+    }
     return null;
+  };
+
+  const handleCheckboxChange = (e) => {
+    const { name, checked } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: checked }));
+    setError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -62,6 +79,12 @@ export default function AuctionCreatePage() {
           ? parseInt(formData.instantBuyPrice, 10)
           : null,
         duration: formData.duration,
+        // 거래 방식 설정
+        directTradeAvailable: formData.directTradeAvailable,
+        deliveryAvailable: formData.deliveryAvailable,
+        directTradeLocation: formData.directTradeAvailable
+          ? formData.directTradeLocation.trim()
+          : null,
       };
       const result = await createAuction(payload);
       setCreatedAuction(result);
@@ -253,6 +276,67 @@ export default function AuctionCreatePage() {
                 <span className="text-[13px] font-semibold">{label}</span>
               </label>
             ))}
+          </div>
+        </div>
+
+        {/* 거래 방식 섹션 */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">거래 방식</h2>
+          <p className="text-[12px] text-gray-400 -mt-2">최소 1개 이상의 거래 방식을 선택해주세요</p>
+
+          <div className="space-y-3">
+            {/* 직거래 옵션 */}
+            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-all ${
+              formData.directTradeAvailable ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
+            }`}>
+              <input
+                type="checkbox"
+                name="directTradeAvailable"
+                checked={formData.directTradeAvailable}
+                onChange={handleCheckboxChange}
+                className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mt-0.5"
+              />
+              <div className="flex-1">
+                <span className="text-[14px] font-semibold text-gray-900">직거래</span>
+                <p className="text-[12px] text-gray-500 mt-0.5">구매자와 직접 만나서 거래</p>
+              </div>
+            </label>
+
+            {/* 직거래 위치 입력 (직거래 선택 시만 표시) */}
+            {formData.directTradeAvailable && (
+              <div className="ml-8 animate-fade-in">
+                <label htmlFor="directTradeLocation" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+                  희망 거래 위치 <span className="text-red-400 font-normal">*</span>
+                </label>
+                <input
+                  id="directTradeLocation"
+                  name="directTradeLocation"
+                  type="text"
+                  value={formData.directTradeLocation}
+                  onChange={handleChange}
+                  placeholder="예: 강남역 2번 출구, 홍대입구역 등"
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-300 transition-all"
+                />
+                <p className="text-[11px] text-gray-400 mt-1.5 ml-1">구매자에게 표시될 거래 희망 장소입니다</p>
+              </div>
+            )}
+
+            {/* 택배 옵션 */}
+            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-all ${
+              formData.deliveryAvailable ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
+            }`}>
+              <input
+                type="checkbox"
+                name="deliveryAvailable"
+                checked={formData.deliveryAvailable}
+                onChange={handleCheckboxChange}
+                className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mt-0.5"
+              />
+              <div className="flex-1">
+                <span className="text-[14px] font-semibold text-gray-900">택배</span>
+                <p className="text-[12px] text-gray-500 mt-0.5">택배를 통해 배송</p>
+              </div>
+            </label>
           </div>
         </div>
 

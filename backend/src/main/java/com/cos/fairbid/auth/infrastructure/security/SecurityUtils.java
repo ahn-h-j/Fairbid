@@ -29,6 +29,20 @@ public final class SecurityUtils {
     }
 
     /**
+     * 현재 인증된 사용자의 ID를 반환한다.
+     * 인증되지 않은 상태에서 호출하면 null을 반환한다.
+     *
+     * @return 현재 사용자 ID (인증되지 않은 경우 null)
+     */
+    public static Long getCurrentUserIdOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            return null;
+        }
+        return userDetails.getUserId();
+    }
+
+    /**
      * 현재 인증된 사용자의 닉네임을 반환한다.
      *
      * @return 현재 사용자 닉네임 (온보딩 전이면 null)
@@ -54,17 +68,4 @@ public final class SecurityUtils {
         return userDetails.isOnboarded();
     }
 
-    /**
-     * 현재 인증된 사용자의 ID를 반환한다.
-     * 인증되지 않은 상태에서는 null을 반환한다.
-     *
-     * @return 현재 사용자 ID 또는 null
-     */
-    public static Long getCurrentUserIdOrNull() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
-            return null;
-        }
-        return userDetails.getUserId();
-    }
 }

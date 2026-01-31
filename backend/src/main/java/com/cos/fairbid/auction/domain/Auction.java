@@ -44,17 +44,25 @@ public class Auction {
     private Long instantBuyerId;                    // 즉시 구매 요청자 ID
     private LocalDateTime instantBuyActivatedTime;  // 즉시 구매 활성화 시간
 
+    // 거래 방식 관련 필드
+    private Boolean directTradeAvailable;           // 직거래 가능 여부
+    private Boolean deliveryAvailable;              // 택배 가능 여부
+    private String directTradeLocation;             // 직거래 희망 위치 (직거래 가능 시 필수)
+
     /**
      * 새로운 경매 생성을 위한 정적 팩토리 메서드
      *
-     * @param sellerId        판매자 ID
-     * @param title           경매 제목
-     * @param description     경매 설명
-     * @param category        카테고리
-     * @param startPrice      시작가
-     * @param instantBuyPrice 즉시구매가 (nullable)
-     * @param duration        경매 기간 (24h/48h)
-     * @param imageUrls       이미지 URL 목록
+     * @param sellerId              판매자 ID
+     * @param title                 경매 제목
+     * @param description           경매 설명
+     * @param category              카테고리
+     * @param startPrice            시작가
+     * @param instantBuyPrice       즉시구매가 (nullable)
+     * @param duration              경매 기간 (24h/48h)
+     * @param imageUrls             이미지 URL 목록
+     * @param directTradeAvailable  직거래 가능 여부
+     * @param deliveryAvailable     택배 가능 여부
+     * @param directTradeLocation   직거래 희망 위치 (직거래 가능 시 필수)
      * @return 생성된 Auction 도메인 객체
      */
     public static Auction create(
@@ -65,11 +73,26 @@ public class Auction {
             Long startPrice,
             Long instantBuyPrice,
             AuctionDuration duration,
-            List<String> imageUrls
+            List<String> imageUrls,
+            Boolean directTradeAvailable,
+            Boolean deliveryAvailable,
+            String directTradeLocation
     ) {
         // 즉시구매가 검증: 시작가보다 높아야 함
         if (instantBuyPrice != null && instantBuyPrice <= startPrice) {
             throw InvalidAuctionException.instantBuyPriceTooLow(startPrice, instantBuyPrice);
+        }
+
+        // 거래 방식 검증: 최소 1개 방식 선택 필수
+        boolean isDirect = directTradeAvailable != null && directTradeAvailable;
+        boolean isDelivery = deliveryAvailable != null && deliveryAvailable;
+        if (!isDirect && !isDelivery) {
+            throw InvalidAuctionException.noTradeMethodSelected();
+        }
+
+        // 직거래 선택 시 위치 필수
+        if (isDirect && (directTradeLocation == null || directTradeLocation.isBlank())) {
+            throw InvalidAuctionException.directTradeLocationRequired();
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -92,6 +115,9 @@ public class Auction {
                 .imageUrls(imageUrls)
                 .createdAt(now)
                 .updatedAt(now)
+                .directTradeAvailable(isDirect)
+                .deliveryAvailable(isDelivery)
+                .directTradeLocation(isDirect ? directTradeLocation : null)
                 .build();
     }
 

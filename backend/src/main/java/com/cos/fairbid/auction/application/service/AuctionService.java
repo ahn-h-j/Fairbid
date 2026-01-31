@@ -3,12 +3,15 @@ package com.cos.fairbid.auction.application.service;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
+import com.cos.fairbid.auction.application.port.in.GetUserWinningInfoUseCase;
 import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.event.AuctionCreatedEvent;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
+import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -27,11 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
-public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase, GetAuctionListUseCase {
+public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUseCase, GetAuctionListUseCase, GetUserWinningInfoUseCase {
 
     private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
     private final ApplicationEventPublisher eventPublisher;
+    private final WinningRepositoryPort winningRepositoryPort;
 
     /**
      * 새로운 경매를 생성한다
@@ -54,7 +58,10 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
                 command.startPrice(),
                 command.instantBuyPrice(),
                 command.duration(),
-                command.imageUrls()
+                command.imageUrls(),
+                command.directTradeAvailable(),
+                command.deliveryAvailable(),
+                command.directTradeLocation()
         );
 
         // 저장
@@ -101,5 +108,33 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
     @Override
     public Page<Auction> getAuctionList(AuctionStatus status, String keyword, Pageable pageable) {
         return auctionRepository.findAll(status, keyword, pageable);
+    }
+
+    /**
+     * 특정 경매에서 사용자의 낙찰 정보를 조회한다.
+     *
+     * @param auctionId 경매 ID
+     * @param userId    사용자 ID
+     * @return 사용자의 낙찰 정보 (낙찰자가 아니면 null)
+     */
+    @Override
+    public UserWinningInfo getUserWinningInfo(Long auctionId, Long userId) {
+        if (userId == null) {
+            return null;
+        }
+
+        Winning userWinning = winningRepositoryPort.findByAuctionId(auctionId).stream()
+                .filter(w -> w.getBidderId().equals(userId))
+                .findFirst()
+                .orElse(null);
+
+        if (userWinning == null) {
+            return null;
+        }
+
+        return new UserWinningInfo(
+                userWinning.getRank(),
+                userWinning.getStatus().name()
+        );
     }
 }
