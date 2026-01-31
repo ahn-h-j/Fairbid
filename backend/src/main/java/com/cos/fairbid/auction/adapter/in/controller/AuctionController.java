@@ -6,13 +6,13 @@ import com.cos.fairbid.auction.adapter.in.dto.CreateAuctionRequest;
 import com.cos.fairbid.auction.application.port.in.CreateAuctionUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionDetailUseCase;
 import com.cos.fairbid.auction.application.port.in.GetAuctionListUseCase;
+import com.cos.fairbid.auction.application.port.in.GetUserWinningInfoUseCase;
+import com.cos.fairbid.auction.application.port.in.GetUserWinningInfoUseCase.UserWinningInfo;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
-import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
-import com.cos.fairbid.winning.domain.Winning;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,7 +34,7 @@ public class AuctionController {
     private final CreateAuctionUseCase createAuctionUseCase;
     private final GetAuctionDetailUseCase getAuctionDetailUseCase;
     private final GetAuctionListUseCase getAuctionListUseCase;
-    private final WinningRepositoryPort winningRepositoryPort;
+    private final GetUserWinningInfoUseCase getUserWinningInfoUseCase;
 
     /**
      * 경매 등록 API
@@ -91,20 +91,17 @@ public class AuctionController {
     ) {
         Auction auction = getAuctionDetailUseCase.getAuctionDetail(auctionId);
 
-        // 인증된 사용자가 있으면 낙찰 순위 및 상태 조회
+        // 인증된 사용자가 있고 종료된 경매면 낙찰 정보 조회
         Integer userWinningRank = null;
         String userWinningStatus = null;
-        Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
 
-        if (currentUserId != null && auction.getStatus() == AuctionStatus.ENDED) {
-            Winning userWinning = winningRepositoryPort.findByAuctionId(auctionId).stream()
-                    .filter(w -> w.getBidderId().equals(currentUserId))
-                    .findFirst()
-                    .orElse(null);
+        if (auction.getStatus() == AuctionStatus.ENDED) {
+            Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
+            UserWinningInfo winningInfo = getUserWinningInfoUseCase.getUserWinningInfo(auctionId, currentUserId);
 
-            if (userWinning != null) {
-                userWinningRank = userWinning.getRank();
-                userWinningStatus = userWinning.getStatus().name();
+            if (winningInfo != null) {
+                userWinningRank = winningInfo.rank();
+                userWinningStatus = winningInfo.status();
             }
         }
 
