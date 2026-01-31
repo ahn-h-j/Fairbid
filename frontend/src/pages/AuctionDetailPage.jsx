@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuction } from '../api/useAuction';
-import { useTransactionByAuctionId } from '../api/useTransaction';
 import { placeBid } from '../api/mutations';
 import { apiRequest } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +11,7 @@ import CategoryBadge from '../components/CategoryBadge';
 import Alert from '../components/Alert';
 import Spinner from '../components/Spinner';
 import { BID_TYPES } from '../utils/constants';
-import { formatPrice, formatDate, parseServerDate } from '../utils/formatters';
+import { formatPrice } from '../utils/formatters';
 
 /**
  * 경매 상세 페이지
@@ -23,10 +22,6 @@ export default function AuctionDetailPage() {
   const { id: auctionId } = useParams();
   const { user } = useAuth();
   const { auction, isLoading, error, mutate } = useAuction(auctionId);
-
-  // 경매가 종료된 경우에만 거래 정보 조회
-  const isAuctionEnded = auction && (auction.status === 'ENDED' || auction.status === 'CLOSED');
-  const { transaction } = useTransactionByAuctionId(isAuctionEnded ? auctionId : null);
 
   const [bidAmount, setBidAmount] = useState('');
   const [bidLoading, setBidLoading] = useState(false);
@@ -72,12 +67,12 @@ export default function AuctionDetailPage() {
     }
   }, [mutate]);
 
-  // WebSocket: 경매 종료 수신
+  // WebSocket: 경매 종료 수신 - 서버에서 최신 데이터(winnerId, userWinningRank 등) 다시 가져오기
   const handleAuctionClosed = useCallback(() => {
-    mutate((prev) => {
-      if (!prev) return prev;
-      return { ...prev, status: 'CLOSED' };
-    }, { revalidate: false });
+    // 백엔드 처리 완료 후 최신 데이터 fetch (약간의 딜레이)
+    setTimeout(() => {
+      mutate();
+    }, 500);
   }, [mutate]);
 
   useWebSocket(auctionId, {
@@ -303,12 +298,10 @@ export default function AuctionDetailPage() {
           ) : null}
         </div>
       ) : (
-        /* 종료된 경매 - 결제 관련 UI */
+        /* 종료된 경매 - 거래 안내 UI */
         <EndedAuctionSection
           auction={auction}
-          transaction={transaction}
           user={user}
-          auctionId={auctionId}
         />
       )}
       {/* 테스트 도구 (관리자 전용) */}
@@ -414,251 +407,179 @@ function InfoItem({ label, value }) {
 }
 
 /**
- * 테스트용 노쇼 처리 버튼 컴포넌트 (관리자 전용)
- * 결제 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
- */
-function TestNoShowButton({ auctionId }) {
-  const { user } = useAuth();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState(null);
-
-  // 관리자가 아니면 렌더링하지 않음
-  if (user?.role !== 'ADMIN') {
-    return null;
-  }
-
-  const handleForceNoShow = async () => {
-    if (!confirm('노쇼 처리를 실행하시겠습니까?\n\n1순위 낙찰자의 결제 기한이 만료 처리되고,\n2순위가 90% 이상이면 자동으로 승계됩니다.')) {
-      return;
-    }
-
-    setIsProcessing(true);
-    setResult(null);
-
-    try {
-      const response = await fetch(`/api/v1/test/auctions/${auctionId}/force-noshow`, {
-        method: 'POST',
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        setResult({
-          type: 'success',
-          message: '노쇼 처리 완료',
-          details: data.data
-        });
-        // 페이지 새로고침하여 변경사항 반영
-        setTimeout(() => window.location.reload(), 1500);
-      } else {
-        setResult({
-          type: 'error',
-          message: data.error?.message || '처리 실패'
-        });
-      }
-    } catch (err) {
-      setResult({
-        type: 'error',
-        message: err.message || '네트워크 오류'
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <div className="pt-3 border-t border-gray-100">
-      <p className="text-[11px] text-gray-400 mb-2 text-center">테스트 도구</p>
-      <button
-        type="button"
-        onClick={handleForceNoShow}
-        disabled={isProcessing}
-        className="w-full py-2.5 bg-red-500 text-white text-[13px] font-semibold rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {isProcessing ? '처리중...' : '노쇼 강제 처리 (테스트)'}
-      </button>
-      {result && (
-        <div className={`mt-2 p-2 rounded-lg text-[11px] ${
-          result.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-        }`}>
-          <p className="font-semibold">{result.message}</p>
-          {result.details && (
-            <p className="mt-1 text-[10px] opacity-80">
-              1순위: {result.details.afterFirstWinningStatus}
-              {result.details.afterSecondWinningStatus && ` / 2순위: ${result.details.afterSecondWinningStatus}`}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
  * 종료된 경매 섹션 컴포넌트
- * 사용자 역할(판매자/낙찰자/기타)에 따라 다른 UI를 표시한다.
+ * 사용자 역할에 따라 다른 메시지 표시:
+ * - 1순위 낙찰자: "축하합니다! 낙찰되었습니다"
+ * - 2순위 낙찰자: "2순위 낙찰자입니다"
+ * - 판매자: "경매가 종료되었습니다" + 낙찰 정보
+ * - 그 외: "아쉽게도 낙찰되지 않았습니다" 또는 "이 경매는 종료되었습니다"
  */
-function EndedAuctionSection({ auction, transaction, user, auctionId }) {
-  // 사용자 역할 판별
-  const isSeller = user?.userId && String(auction.sellerId) === String(user.userId);
-  const isWinner = user?.userId && transaction && String(transaction.buyerId) === String(user.userId);
+function EndedAuctionSection({ auction, user }) {
+  const isLoggedIn = !!user?.userId;
+  const isSeller = isLoggedIn && String(auction.sellerId) === String(user.userId);
+  const hasFinalPrice = !!auction.finalPrice;
 
-  // 거래 상태 판별
-  const isPaid = transaction?.status === 'PAID';
-  const isNoShow = transaction?.status === 'NO_SHOW';
-  const isAwaitingPayment = transaction?.status === 'AWAITING_PAYMENT';
+  // API에서 반환하는 userWinningRank, userWinningStatus 사용
+  const userWinningRank = auction.userWinningRank;
+  const userWinningStatus = auction.userWinningStatus;
 
-  // 결제 기한 만료 여부 (서버 시간은 UTC로 해석)
-  const isPaymentExpired = transaction?.paymentDeadline &&
-    parseServerDate(transaction.paymentDeadline) < new Date();
-
-  // 판매자 화면
-  if (isSeller) {
+  // 1순위 노쇼된 경우
+  if (userWinningRank === 1 && userWinningStatus === 'NO_SHOW') {
     return (
-      <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
-        <h2 className="text-[15px] font-bold text-gray-900 flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 bg-violet-50 rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
+      <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-6 ring-1 ring-red-200/60 animate-fade-in">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-3 bg-red-100 rounded-2xl ring-1 ring-red-300/60 flex items-center justify-center">
+            <span className="text-3xl">⚠️</span>
           </div>
-          거래 상태
-        </h2>
-
-        {!transaction ? (
-          <div className="text-center py-6">
-            <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-xl flex items-center justify-center">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="text-sm text-gray-500">경매가 종료되었습니다</p>
-            <p className="text-[12px] text-gray-400 mt-1">낙찰자가 없거나 거래 정보가 아직 생성되지 않았습니다</p>
-          </div>
-        ) : isPaid ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 px-4 py-3 bg-green-50 rounded-xl">
-              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-green-800">결제 완료</p>
-                <p className="text-[11px] text-green-600">낙찰가: {formatPrice(transaction.finalPrice)}</p>
-              </div>
-            </div>
-          </div>
-        ) : isNoShow ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 px-4 py-3 bg-red-50 rounded-xl">
-              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-red-800">노쇼 처리됨</p>
-                <p className="text-[11px] text-red-600">낙찰자가 결제 기한 내 결제하지 않았습니다</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 px-4 py-3 bg-yellow-50 rounded-xl">
-              <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-yellow-800">결제 대기중</p>
-                <p className="text-[11px] text-yellow-600">
-                  낙찰가: {formatPrice(transaction.finalPrice)} / 기한: {formatDate(transaction.paymentDeadline)}
-                </p>
-              </div>
-            </div>
-
-            {/* 테스트용 노쇼 처리 버튼 */}
-            <TestNoShowButton auctionId={auctionId} />
-          </div>
-        )}
+          <p className="text-red-700 font-bold text-[18px]">노쇼 처리되었습니다</p>
+          <p className="text-[13px] text-red-600 mt-1">
+            응답 기한이 만료되어 낙찰 권한이 2순위에게 넘어갔습니다.
+          </p>
+          <p className="text-[12px] text-red-500 mt-2">
+            경고 1회가 부여되었습니다.
+          </p>
+        </div>
       </div>
     );
   }
 
-  // 낙찰자 화면
-  if (isWinner) {
-    // 결제 완료
-    if (isPaid) {
-      return (
-        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
-          <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-3 bg-green-50 rounded-2xl ring-1 ring-green-200/60 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-[12px] font-bold ring-1 ring-green-200/60 mb-2">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              결제 완료
-            </span>
-            <p className="text-gray-600 font-medium text-[14px] mt-2">축하합니다! 결제가 완료되었습니다</p>
-            <p className="text-[12px] text-gray-400 mt-1">결제 금액: {formatPrice(transaction.finalPrice)}</p>
+  // 1순위 낙찰자 (정상)
+  if (userWinningRank === 1) {
+    return (
+      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 ring-1 ring-green-200/60 animate-fade-in">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-3 bg-green-100 rounded-2xl ring-1 ring-green-300/60 flex items-center justify-center">
+            <span className="text-3xl">🎉</span>
           </div>
-        </div>
-      );
-    }
-
-    // 노쇼 처리 또는 기한 만료
-    if (isNoShow || isPaymentExpired) {
-      return (
-        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
-          <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-3 bg-red-50 rounded-2xl ring-1 ring-red-200/60 flex items-center justify-center">
-              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="text-gray-700 font-semibold text-[15px]">결제 기한이 만료되었습니다</p>
-            <p className="text-[12px] text-gray-400 mt-1">결제 기한 내 결제하지 않아 거래가 취소되었습니다</p>
-          </div>
-        </div>
-      );
-    }
-
-    // 결제 대기 중 - 결제하기 버튼 표시
-    if (isAwaitingPayment) {
-      return (
-        <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in space-y-4">
-          <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-3 bg-blue-50 rounded-2xl ring-1 ring-blue-200/60 flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-            </div>
-            <p className="text-gray-700 font-bold text-[16px]">축하합니다! 낙찰되었습니다</p>
-            <p className="text-[13px] text-gray-500 mt-1">낙찰가: {formatPrice(transaction.finalPrice)}</p>
-          </div>
-
-          {/* 결제 기한 */}
-          <div className="flex justify-between items-center py-3 px-4 bg-yellow-50 rounded-xl">
-            <span className="text-[13px] text-yellow-700 font-medium">결제 기한</span>
-            <span className="text-[13px] font-bold text-yellow-800">{formatDate(transaction.paymentDeadline)}</span>
-          </div>
-
-          {/* 결제하기 버튼 */}
+          <p className="text-green-700 font-bold text-[18px]">축하합니다! 낙찰되었습니다</p>
+          <p className="text-[14px] text-green-600 mt-1 font-semibold">
+            낙찰가: {formatPrice(auction.finalPrice)}
+          </p>
           <Link
-            to={`/auctions/${auctionId}/payment`}
-            className="block w-full py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-center text-[14px] font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 btn-press"
+            to="/trades"
+            className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[14px] font-semibold rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all shadow-lg shadow-green-500/20 hover:shadow-green-500/30 btn-press"
           >
-            결제하기
+            거래 진행하기
           </Link>
         </div>
-      );
-    }
+      </div>
+    );
   }
 
-  // 기타 사용자 (비회원 또는 입찰 미참여자)
+  // 2순위 승계됨 (PENDING_RESPONSE or RESPONDED)
+  if (userWinningRank === 2 && (userWinningStatus === 'PENDING_RESPONSE' || userWinningStatus === 'RESPONDED')) {
+    return (
+      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 ring-1 ring-green-200/60 animate-fade-in">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-3 bg-green-100 rounded-2xl ring-1 ring-green-300/60 flex items-center justify-center">
+            <span className="text-3xl">🎉</span>
+          </div>
+          <p className="text-green-700 font-bold text-[18px]">축하합니다! 2순위로 낙찰되었습니다</p>
+          <p className="text-[13px] text-green-600 mt-1">
+            1순위 낙찰자가 응답하지 않아 낙찰 권한이 승계되었습니다.
+          </p>
+          <p className="text-[14px] text-green-600 mt-1 font-semibold">
+            낙찰가: {formatPrice(auction.finalPrice)}
+          </p>
+          <Link
+            to="/trades"
+            className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[14px] font-semibold rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all shadow-lg shadow-green-500/20 hover:shadow-green-500/30 btn-press"
+          >
+            거래 진행하기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 2순위 대기 중 (STANDBY)
+  if (userWinningRank === 2 && userWinningStatus === 'STANDBY') {
+    return (
+      <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl p-6 ring-1 ring-amber-200/60 animate-fade-in">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-3 bg-amber-100 rounded-2xl ring-1 ring-amber-300/60 flex items-center justify-center">
+            <span className="text-3xl">⏳</span>
+          </div>
+          <p className="text-amber-700 font-bold text-[18px]">2순위 대기 중입니다</p>
+          <p className="text-[13px] text-amber-600 mt-1">
+            1순위 낙찰자가 거래를 진행하지 않으면 낙찰 기회가 주어집니다.
+          </p>
+          <p className="text-[12px] text-amber-500 mt-2">
+            알림을 확인해주세요!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2순위 실패 (FAILED)
+  if (userWinningRank === 2 && userWinningStatus === 'FAILED') {
+    return (
+      <div className="bg-gray-50 rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto mb-3 bg-gray-100 rounded-2xl ring-1 ring-gray-200/60 flex items-center justify-center">
+            <span className="text-2xl">😢</span>
+          </div>
+          <p className="text-gray-600 font-bold text-[16px]">거래가 성사되지 않았습니다</p>
+          <p className="text-[13px] text-gray-400 mt-1">
+            이 경매는 유찰되었습니다.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 판매자
+  if (isSeller) {
+    return (
+      <div className="bg-white rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto mb-3 bg-blue-50 rounded-2xl ring-1 ring-blue-200/60 flex items-center justify-center">
+            <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="text-gray-700 font-bold text-[16px]">경매가 종료되었습니다</p>
+          <p className="text-[13px] text-gray-500 mt-1">
+            {hasFinalPrice ? `낙찰가: ${formatPrice(auction.finalPrice)}` : '낙찰자가 없습니다 (유찰)'}
+          </p>
+          {hasFinalPrice && (
+            <Link
+              to="/trades"
+              className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[14px] font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 btn-press"
+            >
+              거래 진행하기
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 로그인한 사용자 (입찰했으나 낙찰 실패)
+  if (isLoggedIn && hasFinalPrice) {
+    return (
+      <div className="bg-gray-50 rounded-2xl p-6 ring-1 ring-black/[0.04] animate-fade-in">
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto mb-3 bg-gray-100 rounded-2xl ring-1 ring-gray-200/60 flex items-center justify-center">
+            <span className="text-2xl">😢</span>
+          </div>
+          <p className="text-gray-600 font-bold text-[16px]">아쉽게도 낙찰되지 않았습니다</p>
+          <p className="text-[13px] text-gray-400 mt-1">
+            최종 낙찰가: {formatPrice(auction.finalPrice)}
+          </p>
+          <Link
+            to="/"
+            className="inline-block mt-4 px-5 py-2.5 bg-gray-200 text-gray-700 text-[13px] font-semibold rounded-xl hover:bg-gray-300 transition-colors"
+          >
+            다른 경매 둘러보기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 비로그인 또는 유찰된 경매
   return (
     <div className="bg-gray-50 rounded-2xl p-8 text-center ring-1 ring-black/[0.04] animate-fade-in">
       <div className="w-14 h-14 mx-auto mb-3 bg-white rounded-2xl ring-1 ring-gray-200/60 flex items-center justify-center shadow-sm">
@@ -667,8 +588,8 @@ function EndedAuctionSection({ auction, transaction, user, auctionId }) {
         </svg>
       </div>
       <p className="text-gray-600 font-semibold text-[15px]">이 경매는 종료되었습니다</p>
-      {transaction && (
-        <p className="text-[12px] text-gray-400 mt-1">최종 낙찰가: {formatPrice(transaction.finalPrice)}</p>
+      {hasFinalPrice && (
+        <p className="text-[12px] text-gray-400 mt-1">최종 낙찰가: {formatPrice(auction.finalPrice)}</p>
       )}
     </div>
   );
