@@ -27,6 +27,9 @@ export default function AuctionManagePage() {
   const [noShowResult, setNoShowResult] = useState(null);
   const [noShowLoading, setNoShowLoading] = useState(null);
 
+  // 새로고침 트리거
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // 데이터 로드
   useEffect(() => {
     async function fetchAuctions() {
@@ -50,7 +53,7 @@ export default function AuctionManagePage() {
     }
 
     fetchAuctions();
-  }, [status, searchKeyword, page]);
+  }, [status, searchKeyword, page, refreshKey]);
 
   // 검색 핸들러
   const handleSearch = (e) => {
@@ -78,7 +81,7 @@ export default function AuctionManagePage() {
       });
       setNoShowResult({ auctionId, success: true, data: result });
       // 목록 새로고침
-      setPage((p) => p);
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setNoShowResult({ auctionId, success: false, error: err.message });
     } finally {
