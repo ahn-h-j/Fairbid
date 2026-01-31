@@ -1,6 +1,6 @@
 package com.cos.fairbid.common.test;
 
-import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
+import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,7 @@ import java.util.Map;
 public class TestNoShowHelper {
 
     private final WinningRepositoryPort winningRepositoryPort;
-    private final TransactionRepositoryPort transactionRepositoryPort;
+    private final TradeRepositoryPort tradeRepositoryPort;
 
     /**
      * deadline을 만료시키는 별도 트랜잭션
@@ -41,9 +41,9 @@ public class TestNoShowHelper {
                 .orElseThrow(() -> new IllegalArgumentException("1순위 낙찰자가 없습니다. auctionId: " + auctionId));
 
         String beforeWinningStatus = firstWinning.getStatus().name();
-        LocalDateTime beforeWinningDeadline = firstWinning.getPaymentDeadline();
+        LocalDateTime beforeWinningDeadline = firstWinning.getResponseDeadline();
 
-        firstWinning.expirePaymentDeadlineForTest();
+        firstWinning.expireResponseDeadlineForTest();
         winningRepositoryPort.save(firstWinning);
 
         result.put("firstWinning", Map.of(
@@ -51,23 +51,10 @@ public class TestNoShowHelper {
                 "bidderId", firstWinning.getBidderId(),
                 "beforeStatus", beforeWinningStatus,
                 "beforeDeadline", beforeWinningDeadline != null ? beforeWinningDeadline.toString() : "null",
-                "afterDeadline", firstWinning.getPaymentDeadline().toString()
+                "afterDeadline", firstWinning.getResponseDeadline().toString()
         ));
 
-        // 2. Transaction 조회 및 deadline 변경
-        transactionRepositoryPort.findByAuctionId(auctionId).ifPresent(transaction -> {
-            LocalDateTime beforeTxDeadline = transaction.getPaymentDeadline();
-            transaction.expirePaymentDeadlineForTest();
-            transactionRepositoryPort.save(transaction);
-
-            result.put("transaction", Map.of(
-                    "id", transaction.getId(),
-                    "beforeDeadline", beforeTxDeadline != null ? beforeTxDeadline.toString() : "null",
-                    "afterDeadline", transaction.getPaymentDeadline().toString()
-            ));
-        });
-
-        // 3. 2순위 정보 확인
+        // 2. 2순위 정보 확인
         Long firstBidAmount = firstWinning.getBidAmount();
         winningRepositoryPort.findByAuctionIdAndRank(auctionId, 2).ifPresent(secondWinning -> {
             boolean isEligible = secondWinning.isEligibleForAutoTransfer(firstBidAmount);

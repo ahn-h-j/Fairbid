@@ -8,12 +8,14 @@ import java.time.LocalDateTime;
 /**
  * 내 입찰 경매 응답 DTO
  *
- * @param auctionId    경매 ID
- * @param title        제목
- * @param myHighestBid 내 최고 입찰가
- * @param currentPrice 현재가
- * @param status       경매 상태
- * @param createdAt    등록일
+ * @param auctionId     경매 ID
+ * @param title         제목
+ * @param myHighestBid  내 최고 입찰가
+ * @param currentPrice  현재가
+ * @param status        경매 상태
+ * @param createdAt     등록일
+ * @param winnerRank    낙찰 순위 (1: 1순위, 2: 2순위, null: 미낙찰/진행중)
+ * @param winningStatus Winning 상태 (PENDING_RESPONSE, RESPONDED, NO_SHOW, FAILED, STANDBY)
  */
 public record MyBidResponse(
         Long auctionId,
@@ -21,7 +23,9 @@ public record MyBidResponse(
         Long myHighestBid,
         Long currentPrice,
         AuctionStatus status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        Integer winnerRank,
+        String winningStatus
 ) {
     /**
      * UseCase 결과에서 응답 DTO를 생성한다.
@@ -33,7 +37,9 @@ public record MyBidResponse(
                 item.myHighestBid(),
                 item.currentPrice(),
                 item.status(),
-                item.createdAt()
+                item.createdAt(),
+                item.winnerRank(),
+                item.winningStatus()
         );
     }
 }

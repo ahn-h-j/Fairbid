@@ -5,6 +5,7 @@ import com.cos.fairbid.auth.infrastructure.security.CookieUtils;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
+import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
 import com.cos.fairbid.user.adapter.in.dto.*;
 import com.cos.fairbid.common.pagination.CursorPage;
 import com.cos.fairbid.user.application.port.in.*;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
  * - GET  /api/v1/users/check-nickname → 닉네임 중복 확인 (비인증)
  * - GET  /api/v1/users/me → 내 프로필 조회
  * - PUT  /api/v1/users/me → 닉네임 수정 + JWT 재발급
+ * - PUT  /api/v1/users/me/shipping-address → 배송지 수정
  * - DELETE /api/v1/users/me → 회원 탈퇴
  * - GET  /api/v1/users/me/auctions → 내 판매 목록 (커서 페이지네이션)
  * - GET  /api/v1/users/me/bids → 내 입찰 목록 (커서 페이지네이션)
@@ -46,10 +48,12 @@ public class UserController {
     private final CheckNicknameUseCase checkNicknameUseCase;
     private final GetMyProfileUseCase getMyProfileUseCase;
     private final UpdateNicknameUseCase updateNicknameUseCase;
+    private final UpdateShippingAddressUseCase updateShippingAddressUseCase;
     private final DeactivateAccountUseCase deactivateAccountUseCase;
     private final GetMyAuctionsUseCase getMyAuctionsUseCase;
     private final GetMyBidsUseCase getMyBidsUseCase;
     private final CookieUtils cookieUtils;
+    private final TradeRepositoryPort tradeRepositoryPort;
 
     /**
      * 온보딩을 완료한다.
@@ -92,6 +96,7 @@ public class UserController {
 
     /**
      * 내 프로필 정보를 조회한다.
+     * 거래 통계 (판매/구매 완료 수, 총 거래 금액) 포함
      *
      * @return 사용자 프로필 정보
      */
@@ -99,7 +104,15 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> getMyProfile() {
         Long userId = SecurityUtils.getCurrentUserId();
         User user = getMyProfileUseCase.getMyProfile(userId);
-        return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user)));
+
+        // 거래 통계 조회
+        var stats = new UserProfileResponse.TradeStats(
+                tradeRepositoryPort.countCompletedSales(userId),
+                tradeRepositoryPort.countCompletedPurchases(userId),
+                tradeRepositoryPort.sumCompletedAmount(userId)
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
     }
 
     /**
@@ -184,5 +197,36 @@ public class UserController {
         CursorPageResponse<MyBidResponse> response =
                 CursorPageResponse.from(page, MyBidResponse::from);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * 배송지를 수정한다.
+     *
+     * @param request 배송지 수정 요청
+     * @return 수정된 프로필 정보
+     */
+    @PutMapping("/me/shipping-address")
+    @RequireOnboarding
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateShippingAddress(
+            @Valid @RequestBody UpdateShippingAddressRequest request) {
+
+        Long userId = SecurityUtils.getCurrentUserId();
+        User user = updateShippingAddressUseCase.updateShippingAddress(
+                userId,
+                request.recipientName(),
+                request.recipientPhone(),
+                request.postalCode(),
+                request.address(),
+                request.addressDetail()
+        );
+
+        // 거래 통계 조회
+        var stats = new UserProfileResponse.TradeStats(
+                tradeRepositoryPort.countCompletedSales(userId),
+                tradeRepositoryPort.countCompletedPurchases(userId),
+                tradeRepositoryPort.sumCompletedAmount(userId)
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
     }
 }
