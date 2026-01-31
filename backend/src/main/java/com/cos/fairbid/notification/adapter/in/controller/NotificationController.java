@@ -2,12 +2,15 @@ package com.cos.fairbid.notification.adapter.in.controller;
 
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.response.ApiResponse;
-import com.cos.fairbid.notification.application.port.out.NotificationStoragePort;
+import com.cos.fairbid.notification.application.port.in.NotificationQueryUseCase;
 import com.cos.fairbid.notification.domain.InAppNotification;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -22,9 +25,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
+@Validated
 public class NotificationController {
 
-    private final NotificationStoragePort notificationStoragePort;
+    private final NotificationQueryUseCase notificationQueryUseCase;
 
     /**
      * 내 알림 목록을 조회한다
@@ -34,7 +38,7 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<NotificationResponse>>> getMyNotifications() {
         Long userId = SecurityUtils.getCurrentUserId();
-        List<InAppNotification> notifications = notificationStoragePort.findByUserId(userId);
+        List<InAppNotification> notifications = notificationQueryUseCase.getNotifications(userId);
 
         List<NotificationResponse> response = notifications.stream()
                 .map(NotificationResponse::from)
@@ -51,7 +55,7 @@ public class NotificationController {
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Map<String, Integer>>> getUnreadCount() {
         Long userId = SecurityUtils.getCurrentUserId();
-        int count = notificationStoragePort.countUnread(userId);
+        int count = notificationQueryUseCase.countUnread(userId);
 
         return ResponseEntity.ok(ApiResponse.success(Map.of("unreadCount", count)));
     }
@@ -62,9 +66,10 @@ public class NotificationController {
      * @param notificationId 알림 ID
      */
     @PostMapping("/{notificationId}/read")
-    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String notificationId) {
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable @NotBlank String notificationId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        notificationStoragePort.markAsRead(userId, notificationId);
+        notificationQueryUseCase.markAsRead(userId, notificationId);
 
         return ResponseEntity.ok(ApiResponse.success());
     }
@@ -80,7 +85,7 @@ public class NotificationController {
             Long auctionId,
             Long tradeId,
             boolean read,
-            String createdAt
+            LocalDateTime createdAt
     ) {
         public static NotificationResponse from(InAppNotification notification) {
             return new NotificationResponse(
@@ -91,7 +96,7 @@ public class NotificationController {
                     notification.getAuctionId(),
                     notification.getTradeId(),
                     notification.isRead(),
-                    notification.getCreatedAt().toString()
+                    notification.getCreatedAt()
             );
         }
     }
