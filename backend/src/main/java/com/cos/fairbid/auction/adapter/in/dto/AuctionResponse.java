@@ -34,16 +34,39 @@ public record AuctionResponse(
         // 계산된 비즈니스 필드
         boolean instantBuyEnabled,  // 즉시 구매 버튼 활성화 여부
         Long nextMinBidPrice,       // 다음 입찰 가능 최소 금액
-        boolean editable            // 수정 가능 여부
+        boolean editable,           // 수정 가능 여부
+
+        // 거래 방식 정보
+        Boolean directTradeAvailable,   // 직거래 가능 여부
+        Boolean deliveryAvailable,      // 택배 가능 여부
+        String directTradeLocation,     // 직거래 희망 위치
+
+        // 낙찰 정보 (종료된 경매)
+        Long winnerId,                  // 낙찰자 ID
+        Long finalPrice,                // 최종 낙찰가 (종료 시 currentPrice)
+
+        // 현재 사용자의 낙찰 순위 (1: 1순위 낙찰자, 2: 2순위 낙찰자, null: 낙찰자 아님)
+        Integer userWinningRank,
+
+        // 현재 사용자의 낙찰 상태 (PENDING_RESPONSE, RESPONDED, NO_SHOW, STANDBY, FAILED)
+        String userWinningStatus
 ) {
     /**
-     * Domain → Response DTO 변환
-     * 도메인 객체의 비즈니스 로직 메서드를 호출하여 계산된 필드 포함
-     *
-     * @param auction 경매 도메인 객체
-     * @return 경매 응답 DTO
+     * Domain → Response DTO 변환 (기본)
      */
     public static AuctionResponse from(Auction auction) {
+        return from(auction, null, null);
+    }
+
+    /**
+     * Domain → Response DTO 변환 (사용자 낙찰 정보 포함)
+     *
+     * @param auction           경매 도메인 객체
+     * @param userWinningRank   현재 사용자의 낙찰 순위 (1, 2, 또는 null)
+     * @param userWinningStatus 현재 사용자의 낙찰 상태
+     * @return 경매 응답 DTO
+     */
+    public static AuctionResponse from(Auction auction, Integer userWinningRank, String userWinningStatus) {
         return AuctionResponse.builder()
                 // 기본 정보
                 .id(auction.getId())
@@ -65,6 +88,16 @@ public record AuctionResponse(
                 .instantBuyEnabled(auction.isInstantBuyEnabled())
                 .nextMinBidPrice(auction.getNextMinBidPrice())
                 .editable(auction.isEditable())
+                // 거래 방식 정보
+                .directTradeAvailable(auction.getDirectTradeAvailable())
+                .deliveryAvailable(auction.getDeliveryAvailable())
+                .directTradeLocation(auction.getDirectTradeLocation())
+                // 낙찰 정보
+                .winnerId(auction.getWinnerId())
+                .finalPrice(auction.getWinnerId() != null ? auction.getCurrentPrice() : null)
+                // 사용자 낙찰 순위 및 상태
+                .userWinningRank(userWinningRank)
+                .userWinningStatus(userWinningStatus)
                 .build();
     }
 }

@@ -11,6 +11,8 @@ import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
+import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
+import com.cos.fairbid.winning.domain.Winning;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,6 +34,7 @@ public class AuctionController {
     private final CreateAuctionUseCase createAuctionUseCase;
     private final GetAuctionDetailUseCase getAuctionDetailUseCase;
     private final GetAuctionListUseCase getAuctionListUseCase;
+    private final WinningRepositoryPort winningRepositoryPort;
 
     /**
      * 경매 등록 API
@@ -77,6 +80,7 @@ public class AuctionController {
 
     /**
      * 경매 상세 조회 API
+     * 인증된 사용자가 있으면 해당 사용자의 낙찰 순위 정보도 포함
      *
      * @param auctionId 조회할 경매 ID
      * @return 경매 상세 정보
@@ -86,8 +90,25 @@ public class AuctionController {
             @PathVariable Long auctionId
     ) {
         Auction auction = getAuctionDetailUseCase.getAuctionDetail(auctionId);
-        AuctionResponse response = AuctionResponse.from(auction);
 
+        // 인증된 사용자가 있으면 낙찰 순위 및 상태 조회
+        Integer userWinningRank = null;
+        String userWinningStatus = null;
+        Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
+
+        if (currentUserId != null && auction.getStatus() == AuctionStatus.ENDED) {
+            Winning userWinning = winningRepositoryPort.findByAuctionId(auctionId).stream()
+                    .filter(w -> w.getBidderId().equals(currentUserId))
+                    .findFirst()
+                    .orElse(null);
+
+            if (userWinning != null) {
+                userWinningRank = userWinning.getRank();
+                userWinningStatus = userWinning.getStatus().name();
+            }
+        }
+
+        AuctionResponse response = AuctionResponse.from(auction, userWinningRank, userWinningStatus);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
