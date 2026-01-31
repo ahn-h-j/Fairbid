@@ -54,7 +54,10 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
                 command.startPrice(),
                 command.instantBuyPrice(),
                 command.duration(),
-                command.imageUrls()
+                command.imageUrls(),
+                command.directTradeAvailable(),
+                command.deliveryAvailable(),
+                command.directTradeLocation()
         );
 
         // 저장

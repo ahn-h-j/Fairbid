@@ -32,7 +32,10 @@ public interface CreateAuctionUseCase {
             Long startPrice,
             Long instantBuyPrice,
             AuctionDuration duration,
-            List<String> imageUrls
+            List<String> imageUrls,
+            Boolean directTradeAvailable,   // 직거래 가능 여부
+            Boolean deliveryAvailable,      // 택배 가능 여부
+            String directTradeLocation      // 직거래 희망 위치
     ) {
     }
 }
