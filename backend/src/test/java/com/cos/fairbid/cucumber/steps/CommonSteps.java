@@ -39,7 +39,9 @@ public class CommonSteps {
 
         // DB 데이터 정리 (각 시나리오 독립성 보장)
         // 외래키 제약조건을 고려하여 순서대로 삭제
-        jdbcTemplate.execute("DELETE FROM transaction");
+        jdbcTemplate.execute("DELETE FROM delivery_info");
+        jdbcTemplate.execute("DELETE FROM direct_trade_info");
+        jdbcTemplate.execute("DELETE FROM trade");
         jdbcTemplate.execute("DELETE FROM winning");
         jdbcTemplate.execute("DELETE FROM bid");
         jdbcTemplate.execute("DELETE FROM auction");
@@ -141,19 +143,24 @@ public class CommonSteps {
      */
     @SuppressWarnings("unchecked")
     private List<?> extractContentList(Map<String, Object> body) {
-        // data 필드 검증
-        assertThat(body.get("data"))
-                .as("응답 body.data가 존재하고 Map 타입이어야 합니다")
-                .isInstanceOf(Map.class);
+        Object data = body.get("data");
+        assertThat(data).as("응답 body.data가 존재해야 합니다").isNotNull();
 
-        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        // Case 1: data가 직접 List인 경우 (예: 알림 목록)
+        if (data instanceof List) {
+            return (List<?>) data;
+        }
 
-        // content 필드 검증
-        assertThat(data.get("content"))
-                .as("응답 body.data.content가 존재하고 List 타입이어야 합니다")
-                .isInstanceOf(List.class);
+        // Case 2: data가 Map이고 content 필드가 있는 경우 (페이지네이션 응답)
+        if (data instanceof Map) {
+            Map<String, Object> dataMap = (Map<String, Object>) data;
+            assertThat(dataMap.get("content"))
+                    .as("응답 body.data.content가 존재하고 List 타입이어야 합니다")
+                    .isInstanceOf(List.class);
+            return (List<?>) dataMap.get("content");
+        }
 
-        return (List<?>) data.get("content");
+        throw new AssertionError("응답 body.data가 List 또는 Map 타입이어야 합니다: " + data.getClass());
     }
 
     @SuppressWarnings("unchecked")
