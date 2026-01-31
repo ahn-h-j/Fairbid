@@ -12,6 +12,7 @@ import com.cos.fairbid.trade.application.port.in.TradeQueryUseCase;
 import com.cos.fairbid.trade.domain.DeliveryInfo;
 import com.cos.fairbid.trade.domain.DirectTradeInfo;
 import com.cos.fairbid.trade.domain.Trade;
+import com.cos.fairbid.trade.domain.exception.NotTradeParticipantException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -43,6 +44,7 @@ public class TradeController {
 
     /**
      * 거래 상세 조회
+     * 거래 참여자(판매자/구매자)만 조회 가능
      */
     @GetMapping("/{tradeId}")
     public ResponseEntity<ApiResponse<TradeDetailResponse>> getTrade(
@@ -50,6 +52,11 @@ public class TradeController {
     ) {
         Long userId = SecurityUtils.getCurrentUserId();
         Trade trade = tradeQueryUseCase.getById(tradeId);
+
+        // 거래 참여자 권한 검사
+        if (!trade.isParticipant(userId)) {
+            throw NotTradeParticipantException.notParticipant(userId, tradeId);
+        }
 
         // 거래 방식에 따라 상세 정보 조회
         DirectTradeInfo directTradeInfo = null;

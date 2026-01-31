@@ -5,7 +5,6 @@ import com.cos.fairbid.auth.infrastructure.security.CookieUtils;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
-import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
 import com.cos.fairbid.user.adapter.in.dto.*;
 import com.cos.fairbid.common.pagination.CursorPage;
 import com.cos.fairbid.user.application.port.in.*;
@@ -52,8 +51,8 @@ public class UserController {
     private final DeactivateAccountUseCase deactivateAccountUseCase;
     private final GetMyAuctionsUseCase getMyAuctionsUseCase;
     private final GetMyBidsUseCase getMyBidsUseCase;
+    private final GetTradeStatsUseCase getTradeStatsUseCase;
     private final CookieUtils cookieUtils;
-    private final TradeRepositoryPort tradeRepositoryPort;
 
     /**
      * 온보딩을 완료한다.
@@ -105,11 +104,12 @@ public class UserController {
         Long userId = SecurityUtils.getCurrentUserId();
         User user = getMyProfileUseCase.getMyProfile(userId);
 
-        // 거래 통계 조회
+        // 거래 통계 조회 (UseCase를 통해 접근)
+        var tradeStats = getTradeStatsUseCase.getTradeStats(userId);
         var stats = new UserProfileResponse.TradeStats(
-                tradeRepositoryPort.countCompletedSales(userId),
-                tradeRepositoryPort.countCompletedPurchases(userId),
-                tradeRepositoryPort.sumCompletedAmount(userId)
+                tradeStats.completedSales(),
+                tradeStats.completedPurchases(),
+                tradeStats.totalAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
@@ -220,11 +220,12 @@ public class UserController {
                 request.addressDetail()
         );
 
-        // 거래 통계 조회
+        // 거래 통계 조회 (UseCase를 통해 접근)
+        var tradeStats = getTradeStatsUseCase.getTradeStats(userId);
         var stats = new UserProfileResponse.TradeStats(
-                tradeRepositoryPort.countCompletedSales(userId),
-                tradeRepositoryPort.countCompletedPurchases(userId),
-                tradeRepositoryPort.sumCompletedAmount(userId)
+                tradeStats.completedSales(),
+                tradeStats.completedPurchases(),
+                tradeStats.totalAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
