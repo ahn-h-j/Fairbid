@@ -32,6 +32,9 @@ public class AuctionSteps {
                 .startPrice(Long.parseLong(auctionInfo.get("startPrice")))
                 .instantBuyPrice(Long.parseLong(auctionInfo.get("instantBuyPrice")))
                 .duration(AuctionDuration.valueOf(auctionInfo.get("duration")))
+                .directTradeAvailable(true)
+                .deliveryAvailable(true)
+                .directTradeLocation("서울시 강남구")
                 .build();
 
         testContext.setLastRequestBody(request);
@@ -47,6 +50,9 @@ public class AuctionSteps {
                 .startPrice(Long.parseLong(auctionInfo.get("startPrice")))
                 .instantBuyPrice(null)
                 .duration(AuctionDuration.valueOf(auctionInfo.get("duration")))
+                .directTradeAvailable(true)
+                .deliveryAvailable(true)
+                .directTradeLocation("서울시 강남구")
                 .build();
 
         testContext.setLastRequestBody(request);
