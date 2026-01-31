@@ -131,10 +131,11 @@ public class Trade {
 
     /**
      * 거래를 완료한다
+     * ARRANGED 상태에서만 완료 가능 (조율 완료 후)
      */
     public void complete() {
-        if (this.status != TradeStatus.ARRANGED && this.status != TradeStatus.AWAITING_ARRANGEMENT) {
-            throw new IllegalStateException("거래 완료 처리가 불가능한 상태입니다. 현재 상태: " + this.status);
+        if (this.status != TradeStatus.ARRANGED) {
+            throw new IllegalStateException("거래 완료 처리가 불가능한 상태입니다. 조율이 완료된 상태(ARRANGED)에서만 완료 가능합니다. 현재 상태: " + this.status);
         }
         this.status = TradeStatus.COMPLETED;
         this.completedAt = LocalDateTime.now();
@@ -157,6 +158,10 @@ public class Trade {
      * @param newFinalPrice 새로운 낙찰가 (2순위 입찰가)
      */
     public void transferToSecondRank(Long newBuyerId, Long newFinalPrice) {
+        // 이미 완료되거나 취소된 거래는 승계 불가
+        if (this.status == TradeStatus.COMPLETED || this.status == TradeStatus.CANCELLED) {
+            throw new IllegalStateException("이미 완료되거나 취소된 거래는 2순위 승계가 불가능합니다. 현재 상태: " + this.status);
+        }
         if (newBuyerId == null) {
             throw new IllegalArgumentException("새로운 구매자 ID는 null일 수 없습니다.");
         }

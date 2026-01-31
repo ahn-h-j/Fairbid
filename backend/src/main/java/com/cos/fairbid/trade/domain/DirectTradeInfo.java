@@ -101,6 +101,9 @@ public class DirectTradeInfo {
 
     /**
      * 제안/역제안의 유효성을 검증한다
+     * - 날짜/시간 필수
+     * - 과거 날짜 불가
+     * - 당일인 경우 과거 시간 불가
      */
     private static void validateProposal(LocalDate date, LocalTime time) {
         if (date == null) {
@@ -109,8 +112,13 @@ public class DirectTradeInfo {
         if (time == null) {
             throw new IllegalArgumentException("만남 시간은 필수입니다.");
         }
-        if (date.isBefore(LocalDate.now())) {
+        LocalDate today = LocalDate.now();
+        if (date.isBefore(today)) {
             throw new IllegalArgumentException("만남 날짜는 오늘 이후여야 합니다.");
+        }
+        // 당일인 경우 과거 시간 체크
+        if (date.isEqual(today) && time.isBefore(LocalTime.now())) {
+            throw new IllegalArgumentException("당일 약속은 현재 시간 이후로만 설정 가능합니다.");
         }
     }
 }
