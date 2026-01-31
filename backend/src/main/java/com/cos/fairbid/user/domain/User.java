@@ -26,6 +26,13 @@ public class User {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // 배송지 정보
+    private String shippingRecipientName;
+    private String shippingPhone;
+    private String shippingPostalCode;
+    private String shippingAddress;
+    private String shippingAddressDetail;
+
     private static final int MAX_WARNING_COUNT = 3;
 
     // ========== 팩토리 메서드 ==========
@@ -140,5 +147,32 @@ public class User {
      */
     public void updateRole(UserRole role) {
         this.role = role;
+    }
+
+    /**
+     * 배송지 정보를 업데이트한다.
+     *
+     * @param recipientName 수령인 이름
+     * @param phone         연락처
+     * @param postalCode    우편번호
+     * @param address       주소
+     * @param addressDetail 상세주소
+     */
+    public void updateShippingAddress(String recipientName, String phone, String postalCode,
+                                      String address, String addressDetail) {
+        this.shippingRecipientName = recipientName;
+        this.shippingPhone = phone;
+        this.shippingPostalCode = postalCode;
+        this.shippingAddress = address;
+        this.shippingAddressDetail = addressDetail;
+    }
+
+    /**
+     * 배송지가 등록되어 있는지 확인한다.
+     *
+     * @return 배송지 등록 여부
+     */
+    public boolean hasShippingAddress() {
+        return shippingRecipientName != null && shippingAddress != null;
     }
 }

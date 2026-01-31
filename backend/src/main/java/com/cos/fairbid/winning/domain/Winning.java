@@ -8,6 +8,10 @@ import java.time.LocalDateTime;
 /**
  * 낙찰 도메인 모델
  * 1, 2순위 낙찰 후보 정보를 관리한다
+ *
+ * 결제 → 응답 기반 시스템으로 변경됨
+ * - 낙찰자는 24시간 내에 거래 조율에 응답해야 함
+ * - 2순위 승계 시 12시간 내에 응답해야 함
  */
 @Getter
 @Builder
@@ -19,20 +23,21 @@ public class Winning {
     private Long bidderId;
     private Long bidAmount;
     private WinningStatus status;
-    private LocalDateTime paymentDeadline;
+    private LocalDateTime responseDeadline;  // 응답 기한 (payment → response)
     private LocalDateTime createdAt;
 
-    /** 결제 대기 시간 (3시간) */
-    private static final int PAYMENT_DEADLINE_HOURS = 3;
+    /** 응답 대기 시간 (24시간) - 거래 조율 응답 기한 */
+    public static final int RESPONSE_DEADLINE_HOURS = 24;
 
-    /** 2순위 승계 결제 대기 시간 (1시간) */
-    private static final int SECOND_RANK_DEADLINE_HOURS = 1;
+    /** 2순위 승계 응답 대기 시간 (12시간) */
+    public static final int SECOND_RANK_DEADLINE_HOURS = 12;
 
     /** 2순위 자동 승계 기준 비율 (90%) */
-    private static final double AUTO_TRANSFER_THRESHOLD = 0.9;
+    public static final double AUTO_TRANSFER_THRESHOLD = 0.9;
 
     /**
      * 1순위 낙찰자 생성
+     * 24시간 응답 기한이 설정됨
      *
      * @param auctionId 경매 ID
      * @param bidderId  입찰자 ID
@@ -56,15 +61,15 @@ public class Winning {
                 .rank(1)
                 .bidderId(bidderId)
                 .bidAmount(bidAmount)
-                .status(WinningStatus.PENDING_PAYMENT)
-                .paymentDeadline(now.plusHours(PAYMENT_DEADLINE_HOURS))
+                .status(WinningStatus.PENDING_RESPONSE)
+                .responseDeadline(now.plusHours(RESPONSE_DEADLINE_HOURS))
                 .createdAt(now)
                 .build();
     }
 
     /**
      * 2순위 낙찰 후보 생성
-     * 초기 상태는 PENDING_PAYMENT지만 실제 결제 권한은 1순위 노쇼 시 부여됨
+     * 초기 상태는 PENDING_RESPONSE지만 실제 응답 권한은 1순위 노쇼 시 부여됨
      *
      * @param auctionId 경매 ID
      * @param bidderId  입찰자 ID
@@ -88,8 +93,8 @@ public class Winning {
                 .rank(2)
                 .bidderId(bidderId)
                 .bidAmount(bidAmount)
-                .status(WinningStatus.PENDING_PAYMENT)
-                .paymentDeadline(null)  // 승계 시 설정
+                .status(WinningStatus.STANDBY)  // 2순위는 대기 상태로 시작
+                .responseDeadline(null)  // 승계 시 설정
                 .createdAt(now)
                 .build();
     }
@@ -129,10 +134,11 @@ public class Winning {
     }
 
     /**
-     * 결제 완료 처리한다
+     * 응답 완료 처리한다
+     * 낙찰자가 거래 조율에 응답함
      */
-    public void markAsPaid() {
-        this.status = WinningStatus.PAID;
+    public void markAsResponded() {
+        this.status = WinningStatus.RESPONDED;
     }
 
     /**
@@ -144,39 +150,40 @@ public class Winning {
 
     /**
      * 2순위 승계 처리한다
-     * 1시간 결제 대기 시간 부여
+     * STANDBY → PENDING_RESPONSE 상태로 전환하고 12시간 응답 대기 시간 부여
      *
-     * @throws IllegalStateException 2순위가 아니거나 PENDING_PAYMENT 상태가 아닌 경우
+     * @throws IllegalStateException 2순위가 아니거나 STANDBY 상태가 아닌 경우
      */
     public void transferToSecondRank() {
         if (this.rank != 2) {
             throw new IllegalStateException("2순위만 승계 가능합니다.");
         }
-        if (this.status != WinningStatus.PENDING_PAYMENT) {
-            throw new IllegalStateException("PENDING_PAYMENT 상태에서만 승계 가능합니다. 현재 상태: " + this.status);
+        if (this.status != WinningStatus.STANDBY) {
+            throw new IllegalStateException("STANDBY 상태에서만 승계 가능합니다. 현재 상태: " + this.status);
         }
-        this.paymentDeadline = LocalDateTime.now().plusHours(SECOND_RANK_DEADLINE_HOURS);
+        this.status = WinningStatus.PENDING_RESPONSE;  // 대기 → 응답 대기로 전환
+        this.responseDeadline = LocalDateTime.now().plusHours(SECOND_RANK_DEADLINE_HOURS);
     }
 
     /**
-     * 결제 기한이 만료되었는지 확인한다
+     * 응답 기한이 만료되었는지 확인한다
      *
      * @return 만료되었으면 true
      */
-    public boolean isPaymentExpired() {
-        if (paymentDeadline == null) {
+    public boolean isResponseExpired() {
+        if (responseDeadline == null) {
             return false;
         }
-        return LocalDateTime.now().isAfter(paymentDeadline);
+        return LocalDateTime.now().isAfter(responseDeadline);
     }
 
     /**
-     * 결제 대기 중인지 확인한다
+     * 응답 대기 중인지 확인한다
      *
-     * @return 결제 대기 중이면 true
+     * @return 응답 대기 중이면 true
      */
-    public boolean isPendingPayment() {
-        return this.status == WinningStatus.PENDING_PAYMENT;
+    public boolean isPendingResponse() {
+        return this.status == WinningStatus.PENDING_RESPONSE;
     }
 
     // =====================================================
@@ -184,10 +191,10 @@ public class Winning {
     // =====================================================
 
     /**
-     * [테스트 전용] 결제 기한을 강제로 만료시킨다.
+     * [테스트 전용] 응답 기한을 강제로 만료시킨다.
      * 노쇼 처리 테스트를 위해 deadline을 과거로 설정한다.
      */
-    public void expirePaymentDeadlineForTest() {
-        this.paymentDeadline = LocalDateTime.now().minusHours(1);
+    public void expireResponseDeadlineForTest() {
+        this.responseDeadline = LocalDateTime.now().minusHours(1);
     }
 }
