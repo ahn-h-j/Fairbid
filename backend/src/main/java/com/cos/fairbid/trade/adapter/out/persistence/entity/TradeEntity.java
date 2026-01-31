@@ -1,11 +1,14 @@
-package com.cos.fairbid.transaction.adapter.out.persistence.entity;
+package com.cos.fairbid.trade.adapter.out.persistence.entity;
 
-import com.cos.fairbid.transaction.domain.TransactionStatus;
+import com.cos.fairbid.trade.domain.TradeMethod;
+import com.cos.fairbid.trade.domain.TradeStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -14,64 +17,62 @@ import java.time.LocalDateTime;
  * DB 테이블 매핑 전용 (비즈니스 로직 금지)
  */
 @Entity
-@Table(name = "transaction")
+@Table(name = "trade")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class TransactionEntity {
+@EntityListeners(AuditingEntityListener.class)
+public class TradeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 경매 ID */
-    @Column(name = "auction_id", nullable = false)
+    @Column(name = "auction_id", nullable = false, unique = true)
     private Long auctionId;
 
-    /** 판매자 ID */
     @Column(name = "seller_id", nullable = false)
     private Long sellerId;
 
-    /** 구매자(낙찰자) ID */
     @Column(name = "buyer_id", nullable = false)
     private Long buyerId;
 
-    /** 최종 낙찰가 */
     @Column(name = "final_price", nullable = false)
     private Long finalPrice;
 
-    /** 거래 상태 (AWAITING_PAYMENT, PAID, CANCELLED) */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private TransactionStatus status;
+    private TradeStatus status;
 
-    /** 결제 마감 일시 */
-    @Column(name = "payment_deadline")
-    private LocalDateTime paymentDeadline;
+    @Enumerated(EnumType.STRING)
+    @Column
+    private TradeMethod method;
 
-    /** 거래 생성 일시 */
+    @Column(name = "response_deadline")
+    private LocalDateTime responseDeadline;
+
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
+
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /** 결제 완료 일시 */
-    @Column(name = "paid_at")
-    private LocalDateTime paidAt;
-
-    /** 리마인더 발송 여부 */
-    @Column(name = "reminder_sent", nullable = false)
-    private boolean reminderSent;
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Builder
-    private TransactionEntity(
+    private TradeEntity(
             Long id,
             Long auctionId,
             Long sellerId,
             Long buyerId,
             Long finalPrice,
-            TransactionStatus status,
-            LocalDateTime paymentDeadline,
+            TradeStatus status,
+            TradeMethod method,
+            LocalDateTime responseDeadline,
+            LocalDateTime reminderSentAt,
             LocalDateTime createdAt,
-            LocalDateTime paidAt,
-            boolean reminderSent
+            LocalDateTime completedAt
     ) {
         this.id = id;
         this.auctionId = auctionId;
@@ -79,9 +80,10 @@ public class TransactionEntity {
         this.buyerId = buyerId;
         this.finalPrice = finalPrice;
         this.status = status;
-        this.paymentDeadline = paymentDeadline;
+        this.method = method;
+        this.responseDeadline = responseDeadline;
+        this.reminderSentAt = reminderSentAt;
         this.createdAt = createdAt;
-        this.paidAt = paidAt;
-        this.reminderSent = reminderSent;
+        this.completedAt = completedAt;
     }
 }

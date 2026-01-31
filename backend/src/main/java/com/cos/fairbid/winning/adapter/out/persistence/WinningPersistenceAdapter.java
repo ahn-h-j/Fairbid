@@ -46,9 +46,9 @@ public class WinningPersistenceAdapter implements WinningRepositoryPort {
     }
 
     @Override
-    public List<Winning> findExpiredPendingPayments() {
-        return jpaWinningRepository.findExpiredPendingPayments(
-                        WinningStatus.PENDING_PAYMENT,
+    public List<Winning> findExpiredPendingResponses() {
+        return jpaWinningRepository.findExpiredPendingResponses(
+                        WinningStatus.PENDING_RESPONSE,
                         LocalDateTime.now()
                 )
                 .stream()
@@ -65,7 +65,7 @@ public class WinningPersistenceAdapter implements WinningRepositoryPort {
     @Override
     public Optional<Winning> findPendingByAuctionIdAndBidderId(Long auctionId, Long bidderId) {
         return jpaWinningRepository.findByAuctionIdAndBidderIdAndStatus(
-                        auctionId, bidderId, WinningStatus.PENDING_PAYMENT)
+                        auctionId, bidderId, WinningStatus.PENDING_RESPONSE)
                 .map(winningMapper::toDomain);
     }
 }
