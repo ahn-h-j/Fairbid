@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications, useUnreadCount, markAsRead } from '../api/useNotifications';
+import { getServerTime } from '../api/client';
 
 /**
  * 알림 드롭다운 컴포넌트
@@ -30,9 +31,13 @@ export default function NotificationDropdown() {
   const handleNotificationClick = async (notification) => {
     // 읽음 처리
     if (!notification.read) {
-      await markAsRead(notification.id);
-      mutateNotifications();
-      mutateCount();
+      try {
+        await markAsRead(notification.id);
+        mutateNotifications();
+        mutateCount();
+      } catch (error) {
+        console.error('알림 읽음 처리 실패:', error);
+      }
     }
 
     // 알림 타입에 따라 적절한 페이지로 이동
@@ -96,8 +101,11 @@ export default function NotificationDropdown() {
 
   // 상대 시간 표시
   const getRelativeTime = (dateString) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
-    const now = new Date();
+    if (isNaN(date.getTime())) return '';
+
+    const now = getServerTime();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
