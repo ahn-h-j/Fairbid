@@ -229,6 +229,10 @@ function MethodSelectionUI({ tradeId, onAction, submitting }) {
 function DirectTradeUI({ trade, isSeller, onAction, submitting }) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  // 역제안 모달 상태
+  const [showCounterModal, setShowCounterModal] = useState(false);
+  const [counterDate, setCounterDate] = useState('');
+  const [counterTime, setCounterTime] = useState('');
   const directInfo = trade.directTradeInfo;
 
   if (!directInfo) {
@@ -292,28 +296,78 @@ function DirectTradeUI({ trade, isSeller, onAction, submitting }) {
       </div>
 
       {directInfo.status !== 'ACCEPTED' && !isMyProposal && (
-        <div className="flex gap-3">
-          <button
-            onClick={() => onAction(() => acceptDirectTrade(trade.id))}
-            disabled={submitting}
-            className="flex-1 py-3 bg-green-600 text-white text-[14px] font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
-          >
-            수락
-          </button>
-          <button
-            onClick={() => {
-              const newDate = prompt('새로운 날짜 (YYYY-MM-DD):');
-              const newTime = prompt('새로운 시간 (HH:MM):');
-              if (newDate && newTime) {
-                onAction(() => counterProposeDirectTrade(trade.id, newDate, newTime));
-              }
-            }}
-            disabled={submitting}
-            className="flex-1 py-3 bg-gray-100 text-gray-700 text-[14px] font-semibold rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
-          >
-            역제안
-          </button>
-        </div>
+        <>
+          <div className="flex gap-3">
+            <button
+              onClick={() => onAction(() => acceptDirectTrade(trade.id))}
+              disabled={submitting}
+              className="flex-1 py-3 bg-green-600 text-white text-[14px] font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+            >
+              수락
+            </button>
+            <button
+              onClick={() => {
+                setCounterDate('');
+                setCounterTime('');
+                setShowCounterModal(true);
+              }}
+              disabled={submitting}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 text-[14px] font-semibold rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
+            >
+              역제안
+            </button>
+          </div>
+
+          {/* 역제안 모달 */}
+          {showCounterModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4 animate-fade-in">
+                <h3 className="text-[16px] font-bold text-gray-900">다른 시간 제안하기</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 mb-1">날짜</label>
+                    <input
+                      type="date"
+                      value={counterDate}
+                      onChange={(e) => setCounterDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2.5 bg-gray-50 rounded-lg text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 mb-1">시간</label>
+                    <input
+                      type="time"
+                      value={counterTime}
+                      onChange={(e) => setCounterTime(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-gray-50 rounded-lg text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowCounterModal(false)}
+                    className="flex-1 py-2.5 bg-gray-100 text-gray-700 text-[14px] font-semibold rounded-xl hover:bg-gray-200 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (counterDate && counterTime) {
+                        setShowCounterModal(false);
+                        onAction(() => counterProposeDirectTrade(trade.id, counterDate, counterTime));
+                      }
+                    }}
+                    disabled={!counterDate || !counterTime}
+                    className="flex-1 py-2.5 bg-blue-600 text-white text-[14px] font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    제안하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {directInfo.status !== 'ACCEPTED' && isMyProposal && (
@@ -556,6 +610,8 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
 
 // 조율 완료 UI
 function ArrangedUI({ trade, isSeller, onAction, submitting }) {
+  const isBuyer = !isSeller;
+
   return (
     <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] space-y-4">
       <h3 className="text-[14px] font-bold text-gray-900">거래 조율이 완료되었습니다</h3>
@@ -585,13 +641,18 @@ function ArrangedUI({ trade, isSeller, onAction, submitting }) {
         </div>
       )}
 
-      <button
-        onClick={() => onAction(() => completeTrade(trade.id))}
-        disabled={submitting}
-        className="w-full py-3 bg-green-600 text-white text-[14px] font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
-      >
-        {submitting ? '완료 중...' : '수령 확인'}
-      </button>
+      {/* 구매자만 수령 확인 가능 */}
+      {isBuyer ? (
+        <button
+          onClick={() => onAction(() => completeTrade(trade.id))}
+          disabled={submitting}
+          className="w-full py-3 bg-green-600 text-white text-[14px] font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+        >
+          {submitting ? '완료 중...' : '수령 확인'}
+        </button>
+      ) : (
+        <p className="text-[13px] text-center text-gray-500">구매자의 수령 확인을 기다리는 중...</p>
+      )}
     </div>
   );
 }

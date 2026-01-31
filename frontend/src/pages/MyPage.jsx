@@ -326,8 +326,17 @@ export default function MyPage() {
                 onClick={() => {
                   setIsEditingAddress(false);
                   setAddressError('');
+                  // 저장된 배송지가 있으면 복원, 없으면 폼 초기화
                   if (profile?.shippingAddress) {
                     setAddressForm(profile.shippingAddress);
+                  } else {
+                    setAddressForm({
+                      recipientName: '',
+                      recipientPhone: '',
+                      postalCode: '',
+                      address: '',
+                      addressDetail: '',
+                    });
                   }
                 }}
                 className="flex-1 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
