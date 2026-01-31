@@ -42,30 +42,6 @@ public enum NotificationType {
         }
     },
 
-    PAYMENT_COMPLETED {
-        @Override
-        public String getTitle() {
-            return "결제가 완료되었습니다";
-        }
-
-        @Override
-        public String formatBody(String auctionTitle, Long amount) {
-            return String.format("%,d원 결제가 완료되었습니다.", amount);
-        }
-    },
-
-    PAYMENT_REMINDER {
-        @Override
-        public String getTitle() {
-            return "결제 마감이 임박했습니다!";
-        }
-
-        @Override
-        public String formatBody(String auctionTitle, Long amount) {
-            return String.format("[%s] 결제 마감까지 1시간 남았습니다. %,d원을 결제해주세요.", auctionTitle, amount);
-        }
-    },
-
     RESPONSE_REMINDER {
         @Override
         public String getTitle() {
