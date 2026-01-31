@@ -144,7 +144,7 @@ public class WinningSteps {
                 .orElse(null);
 
         assertThat(firstRank).isNotNull();
-        assertThat(firstRank.getPaymentDeadline()).isNotNull();
+        assertThat(firstRank.getResponseDeadline()).isNotNull();
     }
 
     @그리고("2순위 낙찰 후보 정보가 생성된다")
@@ -160,6 +160,6 @@ public class WinningSteps {
                 .orElse(null);
 
         assertThat(secondRank).isNotNull();
-        assertThat(secondRank.getPaymentDeadline()).isNull(); // 승계 전이므로 null
+        assertThat(secondRank.getResponseDeadline()).isNull(); // 승계 전이므로 null
     }
 }

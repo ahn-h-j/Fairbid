@@ -42,8 +42,9 @@ public class WinningEntity {
     @Column(nullable = false)
     private WinningStatus status;
 
+    // 컬럼명은 payment_deadline 유지 (DB 호환성), 필드명은 responseDeadline
     @Column(name = "payment_deadline")
-    private LocalDateTime paymentDeadline;
+    private LocalDateTime responseDeadline;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -57,7 +58,7 @@ public class WinningEntity {
             Long bidderId,
             Long bidAmount,
             WinningStatus status,
-            LocalDateTime paymentDeadline
+            LocalDateTime responseDeadline
     ) {
         this.id = id;
         this.auctionId = auctionId;
@@ -65,6 +66,6 @@ public class WinningEntity {
         this.bidderId = bidderId;
         this.bidAmount = bidAmount;
         this.status = status;
-        this.paymentDeadline = paymentDeadline;
+        this.responseDeadline = responseDeadline;
     }
 }

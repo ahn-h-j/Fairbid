@@ -67,11 +67,29 @@ public class UserEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    // 배송지 정보
+    @Column(name = "shipping_recipient_name", length = 100)
+    private String shippingRecipientName;
+
+    @Column(name = "shipping_phone", length = 20)
+    private String shippingPhone;
+
+    @Column(name = "shipping_postal_code", length = 10)
+    private String shippingPostalCode;
+
+    @Column(name = "shipping_address", length = 500)
+    private String shippingAddress;
+
+    @Column(name = "shipping_address_detail", length = 200)
+    private String shippingAddressDetail;
+
     @Builder
     public UserEntity(Long id, String email, String nickname, String phoneNumber,
                       OAuthProvider provider, String providerId, UserRole role,
                       Integer warningCount, Boolean isActive,
-                      LocalDateTime createdAt, LocalDateTime updatedAt) {
+                      LocalDateTime createdAt, LocalDateTime updatedAt,
+                      String shippingRecipientName, String shippingPhone,
+                      String shippingPostalCode, String shippingAddress, String shippingAddressDetail) {
         this.id = id;
         this.email = email;
         this.nickname = nickname;
@@ -83,5 +101,10 @@ public class UserEntity {
         this.isActive = isActive;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.shippingRecipientName = shippingRecipientName;
+        this.shippingPhone = shippingPhone;
+        this.shippingPostalCode = shippingPostalCode;
+        this.shippingAddress = shippingAddress;
+        this.shippingAddressDetail = shippingAddressDetail;
     }
 }

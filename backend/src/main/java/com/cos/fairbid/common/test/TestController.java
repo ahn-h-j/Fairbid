@@ -5,7 +5,7 @@ import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.common.response.ApiResponse;
-import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
+import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
 import com.cos.fairbid.winning.application.port.in.CloseAuctionUseCase;
 import com.cos.fairbid.winning.application.port.in.ProcessNoShowUseCase;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
@@ -38,7 +38,7 @@ public class TestController {
     private final CloseAuctionUseCase closeAuctionUseCase;
     private final StringRedisTemplate redisTemplate;
     private final WinningRepositoryPort winningRepositoryPort;
-    private final TransactionRepositoryPort transactionRepositoryPort;
+    private final TradeRepositoryPort tradeRepositoryPort;
     private final ProcessNoShowUseCase processNoShowUseCase;
     private final TestNoShowHelper testNoShowHelper;
 
@@ -191,12 +191,11 @@ public class TestController {
     // =====================================================
 
     /**
-     * 특정 경매의 결제 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
+     * 특정 경매의 응답 기한을 강제로 만료시키고 노쇼 처리를 실행한다.
      *
      * 처리 순서:
-     * 1. 해당 경매의 1순위 Winning의 paymentDeadline을 과거로 변경 (별도 트랜잭션)
-     * 2. 해당 경매의 Transaction의 paymentDeadline을 과거로 변경 (별도 트랜잭션)
-     * 3. 노쇼 처리 스케줄러 로직 즉시 실행
+     * 1. 해당 경매의 1순위 Winning의 responseDeadline을 과거로 변경 (별도 트랜잭션)
+     * 2. 노쇼 처리 스케줄러 로직 즉시 실행
      *
      * @param auctionId 경매 ID
      * @return 처리 결과 (노쇼 처리 전/후 상태)
@@ -226,14 +225,14 @@ public class TestController {
 
         winningRepositoryPort.findByAuctionIdAndRank(auctionId, 2).ifPresent(secondWinning -> {
             result.put("afterSecondWinningStatus", secondWinning.getStatus().name());
-            if (secondWinning.getPaymentDeadline() != null) {
-                result.put("secondWinningNewDeadline", secondWinning.getPaymentDeadline().toString());
+            if (secondWinning.getResponseDeadline() != null) {
+                result.put("secondWinningNewDeadline", secondWinning.getResponseDeadline().toString());
             }
         });
 
-        transactionRepositoryPort.findByAuctionId(auctionId).ifPresent(transaction -> {
-            result.put("afterTransactionStatus", transaction.getStatus().name());
-            result.put("afterTransactionBuyerId", transaction.getBuyerId());
+        tradeRepositoryPort.findByAuctionId(auctionId).ifPresent(trade -> {
+            result.put("afterTradeStatus", trade.getStatus().name());
+            result.put("afterTradeBuyerId", trade.getBuyerId());
         });
 
         log.info("[TEST] 노쇼 강제 처리 완료 - result: {}", result);
@@ -261,8 +260,8 @@ public class TestController {
                     "bidderId", winning.getBidderId(),
                     "bidAmount", winning.getBidAmount(),
                     "status", winning.getStatus().name(),
-                    "paymentDeadline", winning.getPaymentDeadline() != null
-                            ? winning.getPaymentDeadline().toString() : "null"
+                    "responseDeadline", winning.getResponseDeadline() != null
+                            ? winning.getResponseDeadline().toString() : "null"
             ));
         });
 
@@ -273,20 +272,21 @@ public class TestController {
                     "bidderId", winning.getBidderId(),
                     "bidAmount", winning.getBidAmount(),
                     "status", winning.getStatus().name(),
-                    "paymentDeadline", winning.getPaymentDeadline() != null
-                            ? winning.getPaymentDeadline().toString() : "null"
+                    "responseDeadline", winning.getResponseDeadline() != null
+                            ? winning.getResponseDeadline().toString() : "null"
             ));
         });
 
-        // Transaction 정보
-        transactionRepositoryPort.findByAuctionId(auctionId).ifPresent(transaction -> {
-            result.put("transaction", Map.of(
-                    "id", transaction.getId(),
-                    "buyerId", transaction.getBuyerId(),
-                    "finalPrice", transaction.getFinalPrice(),
-                    "status", transaction.getStatus().name(),
-                    "paymentDeadline", transaction.getPaymentDeadline() != null
-                            ? transaction.getPaymentDeadline().toString() : "null"
+        // Trade 정보
+        tradeRepositoryPort.findByAuctionId(auctionId).ifPresent(trade -> {
+            result.put("trade", Map.of(
+                    "id", trade.getId(),
+                    "buyerId", trade.getBuyerId(),
+                    "finalPrice", trade.getFinalPrice(),
+                    "status", trade.getStatus().name(),
+                    "method", trade.getMethod() != null ? trade.getMethod().name() : "null",
+                    "responseDeadline", trade.getResponseDeadline() != null
+                            ? trade.getResponseDeadline().toString() : "null"
             ));
         });
 

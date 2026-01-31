@@ -25,10 +25,12 @@
 | 컬럼 | 설명 | 비고 |
 |------|------|------|
 | 사용자ID | PK | |
-| 이메일 | UK | |
-| 비밀번호 | | |
-| 이름 | | |
-| 전화번호 | UK | |
+| 이메일 | UK | OAuth Provider 제공 |
+| 닉네임 | UK | 2~20자 |
+| 전화번호 | UK | 최초 설정 후 변경 불가 |
+| 역할 | | USER, ADMIN |
+| Provider | | KAKAO, NAVER, GOOGLE |
+| ProviderId | | Provider 고유 ID |
 | 가입일시 | | |
 | 수정일시 | | |
 | 활성상태 | | |
@@ -56,6 +58,9 @@
 | 카테고리 | | |
 | 총입찰수 | | |
 | 낙찰자ID | FK | USER.사용자ID |
+| 직거래가능여부 | | |
+| 택배가능여부 | | |
+| 직거래희망위치 | | 직거래 가능 시 |
 | 등록일시 | | |
 | 수정일시 | | |
 
@@ -112,7 +117,7 @@
 
 ---
 
-### TRANSACTION (거래)
+### TRADE (거래)
 
 | 컬럼 | 설명 | 비고 |
 |------|------|------|
@@ -121,10 +126,42 @@
 | 판매자ID | FK | USER.사용자ID |
 | 구매자ID | FK | USER.사용자ID |
 | 최종낙찰가 | | |
-| 상태 | | |
-| 결제마감일시 | | |
+| 상태 | | AWAITING_METHOD_SELECTION, AWAITING_ARRANGEMENT, ARRANGED, COMPLETED, CANCELLED |
+| 거래방식 | | DIRECT, DELIVERY |
+| 응답마감일시 | | |
 | 거래생성일시 | | |
-| 결제완료일시 | | |
+| 거래완료일시 | | |
+
+---
+
+### DIRECT_TRADE_INFO (직거래 정보)
+
+| 컬럼 | 설명 | 비고 |
+|------|------|------|
+| ID | PK | |
+| 거래ID | FK | TRADE.거래ID |
+| 거래장소 | | |
+| 만남날짜 | | |
+| 만남시간 | | |
+| 상태 | | PROPOSED, COUNTER_PROPOSED, ACCEPTED |
+| 제안자ID | FK | USER.사용자ID |
+
+---
+
+### DELIVERY_INFO (택배 정보)
+
+| 컬럼 | 설명 | 비고 |
+|------|------|------|
+| ID | PK | |
+| 거래ID | FK | TRADE.거래ID |
+| 수령인명 | | |
+| 수령인연락처 | | |
+| 우편번호 | | |
+| 주소 | | |
+| 상세주소 | | |
+| 택배사 | | |
+| 송장번호 | | |
+| 상태 | | AWAITING_ADDRESS, ADDRESS_SUBMITTED, SHIPPED, DELIVERED |
 
 ---
 
@@ -138,5 +175,7 @@ USER 1:N NOTIFICATION (수신)
 AUCTION 1:N BID (입찰받음)
 AUCTION 1:N WINNING (낙찰후보, 최대 2개)
 AUCTION 1:N AUCTION_IMAGE (보유)
-AUCTION 1:1 TRANSACTION (낙찰, Optional)
+AUCTION 1:1 TRADE (낙찰, Optional)
+TRADE 1:1 DIRECT_TRADE_INFO (직거래 시, Optional)
+TRADE 1:1 DELIVERY_INFO (택배 시, Optional)
 ```

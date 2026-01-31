@@ -50,7 +50,7 @@ public class NoShowProcessingHelper {
             // 1순위 노쇼 처리 (도메인 서비스에 위임)
             noShowProcessor.processFirstRankNoShow(winning, auction);
         } else {
-            // 2순위 노쇼 (승계 후 미결제) → 유찰 처리 (도메인 서비스에 위임)
+            // 2순위 노쇼 (승계 후 미응답) → 유찰 처리 (도메인 서비스에 위임)
             noShowProcessor.processSecondRankExpired(winning, auction);
         }
     }

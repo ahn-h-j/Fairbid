@@ -2,6 +2,7 @@ package com.cos.fairbid.user.application.service;
 
 import com.cos.fairbid.auth.application.port.out.RefreshTokenPort;
 import com.cos.fairbid.auth.application.port.out.TokenProviderPort;
+import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
 import com.cos.fairbid.user.application.port.in.*;
 import com.cos.fairbid.user.application.port.out.LoadUserPort;
 import com.cos.fairbid.user.application.port.out.SaveUserPort;
@@ -28,12 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseCase,
-        GetMyProfileUseCase, UpdateNicknameUseCase, DeactivateAccountUseCase {
+        GetMyProfileUseCase, UpdateNicknameUseCase, DeactivateAccountUseCase,
+        UpdateShippingAddressUseCase, GetTradeStatsUseCase {
 
     private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
     private final TokenProviderPort tokenProviderPort;
     private final RefreshTokenPort refreshTokenPort;
+    private final TradeRepositoryPort tradeRepositoryPort;
 
     /**
      * 온보딩을 완료한다.
@@ -150,6 +153,35 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
         // 3. Redis Refresh Token 삭제
         refreshTokenPort.delete(userId);
         log.info("회원 탈퇴: userId={}", userId);
+    }
+
+    /**
+     * 배송지 정보를 수정한다.
+     */
+    @Override
+    @Transactional
+    public User updateShippingAddress(Long userId, String recipientName, String phone,
+                                      String postalCode, String address, String addressDetail) {
+        User user = loadUserPort.findById(userId)
+                .orElseThrow(() -> UserNotFoundException.withId(userId));
+
+        user.updateShippingAddress(recipientName, phone, postalCode, address, addressDetail);
+        user = saveUserPort.save(user);
+        log.info("배송지 수정: userId={}", userId);
+
+        return user;
+    }
+
+    /**
+     * 사용자의 거래 통계를 조회한다.
+     */
+    @Override
+    public TradeStats getTradeStats(Long userId) {
+        return new TradeStats(
+                tradeRepositoryPort.countCompletedSales(userId),
+                tradeRepositoryPort.countCompletedPurchases(userId),
+                tradeRepositoryPort.sumCompletedAmount(userId)
+        );
     }
 
     /**

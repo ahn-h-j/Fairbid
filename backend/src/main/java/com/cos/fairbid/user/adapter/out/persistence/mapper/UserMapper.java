@@ -30,6 +30,11 @@ public class UserMapper {
                 .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
+                .shippingRecipientName(user.getShippingRecipientName())
+                .shippingPhone(user.getShippingPhone())
+                .shippingPostalCode(user.getShippingPostalCode())
+                .shippingAddress(user.getShippingAddress())
+                .shippingAddressDetail(user.getShippingAddressDetail())
                 .build();
     }
 
@@ -53,6 +58,11 @@ public class UserMapper {
                 .isActive(entity.getIsActive())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .shippingRecipientName(entity.getShippingRecipientName())
+                .shippingPhone(entity.getShippingPhone())
+                .shippingPostalCode(entity.getShippingPostalCode())
+                .shippingAddress(entity.getShippingAddress())
+                .shippingAddressDetail(entity.getShippingAddressDetail())
                 .build();
     }
 }

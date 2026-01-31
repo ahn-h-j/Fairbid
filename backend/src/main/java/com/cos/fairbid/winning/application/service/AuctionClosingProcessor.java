@@ -3,8 +3,11 @@ package com.cos.fairbid.winning.application.service;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
-import com.cos.fairbid.transaction.application.port.out.TransactionRepositoryPort;
-import com.cos.fairbid.transaction.domain.Transaction;
+import com.cos.fairbid.trade.application.port.out.DeliveryInfoRepositoryPort;
+import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
+import com.cos.fairbid.trade.domain.DeliveryInfo;
+import com.cos.fairbid.trade.domain.Trade;
+import com.cos.fairbid.trade.domain.TradeMethod;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +27,8 @@ public class AuctionClosingProcessor {
 
     private final WinningRepositoryPort winningRepository;
     private final PushNotificationPort pushNotificationPort;
-    private final TransactionRepositoryPort transactionRepositoryPort;
+    private final TradeRepositoryPort tradeRepositoryPort;
+    private final DeliveryInfoRepositoryPort deliveryInfoRepositoryPort;
 
     /**
      * 입찰자가 없는 경우 유찰 처리한다
@@ -63,19 +67,28 @@ public class AuctionClosingProcessor {
         );
         winningRepository.save(firstWinning);
 
-        // 3. Transaction 생성 (Orchestrator 패턴: Winning + Transaction을 같은 흐름에서 조합)
-        Transaction transaction = Transaction.create(
+        // 3. Trade 생성 (기존 Transaction 대체)
+        // Auction에서 거래 방식 정보를 가져와서 Trade 생성
+        Trade trade = Trade.create(
                 auction.getId(),
                 auction.getSellerId(),
                 firstBid.getBidderId(),
                 firstBid.getAmount(),
-                firstWinning.getPaymentDeadline()  // Winning과 동일한 결제 기한
+                Boolean.TRUE.equals(auction.getDirectTradeAvailable()),
+                Boolean.TRUE.equals(auction.getDeliveryAvailable())
         );
-        transactionRepositoryPort.save(transaction);
+        Trade savedTrade = tradeRepositoryPort.save(trade);
 
-        log.debug("Transaction 생성 완료 - auctionId: {}, buyerId: {}", auction.getId(), firstBid.getBidderId());
+        // 4. 택배 거래인 경우 DeliveryInfo 생성
+        if (savedTrade.getMethod() == TradeMethod.DELIVERY) {
+            DeliveryInfo deliveryInfo = DeliveryInfo.create(savedTrade.getId());
+            deliveryInfoRepositoryPort.save(deliveryInfo);
+        }
 
-        // 4. 1순위 낙찰자에게 Push 알림
+        log.debug("Trade 생성 완료 - auctionId: {}, buyerId: {}, method: {}",
+                auction.getId(), firstBid.getBidderId(), savedTrade.getMethod());
+
+        // 5. 1순위 낙찰자에게 Push 알림
         pushNotificationPort.sendWinningNotification(
                 firstBid.getBidderId(),
                 auction.getId(),
@@ -97,6 +110,14 @@ public class AuctionClosingProcessor {
                 secondBid.getAmount()
         );
         winningRepository.save(secondWinning);
+
+        // 2순위에게 대기 알림 발송
+        pushNotificationPort.sendSecondRankStandbyNotification(
+                secondBid.getBidderId(),
+                auction.getId(),
+                auction.getTitle(),
+                secondBid.getAmount()
+        );
 
         log.debug("2순위 후보 저장 - auctionId: {}, bidderId: {}", auction.getId(), secondBid.getBidderId());
     }

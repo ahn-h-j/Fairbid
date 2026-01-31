@@ -24,7 +24,7 @@ public class WinningMapper {
                 .bidderId(winning.getBidderId())
                 .bidAmount(winning.getBidAmount())
                 .status(winning.getStatus())
-                .paymentDeadline(winning.getPaymentDeadline())
+                .responseDeadline(winning.getResponseDeadline())
                 .build();
     }
 
@@ -42,7 +42,7 @@ public class WinningMapper {
                 .bidderId(entity.getBidderId())
                 .bidAmount(entity.getBidAmount())
                 .status(entity.getStatus())
-                .paymentDeadline(entity.getPaymentDeadline())
+                .responseDeadline(entity.getResponseDeadline())
                 .createdAt(entity.getCreatedAt())
                 .build();
     }

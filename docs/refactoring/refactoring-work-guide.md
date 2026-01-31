@@ -1,7 +1,7 @@
 # 리팩토링 작업 가이드
 
 > 작업 브랜치: `refactor/clean-architecture`
-> 마지막 업데이트: 2026-01-14
+> 마지막 업데이트: 2026-01-29
 
 ---
 
@@ -133,7 +133,26 @@
 
 ---
 
-### 1.5 기타
+### 1.5 Notification 모듈 리팩토링
+
+| 커밋 | 내용 |
+|------|------|
+| - | FcmPushNotificationAdapter private 메서드 제거, 전략 패턴 적용 |
+
+**생성된 파일**:
+- `notification/domain/NotificationType.java` - 알림 유형별 메시지 생성 (전략 패턴)
+- `notification/adapter/out/fcm/FcmClient.java` - FCM 전송 책임 분리
+
+**변경 사항**:
+- `FcmPushNotificationAdapter.java` - 88줄 → 36줄 (-52줄)
+- `BidEventListener.java` - 60줄 → 39줄 (-21줄)
+- `BidUpdateMessage.java` - `from(BidPlacedEvent)` 오버로드 추가
+
+**문서**: `docs/refactoring/notification-refactoring.md`
+
+---
+
+### 1.6 기타
 
 | 커밋 | 내용 |
 |------|------|
@@ -148,8 +167,7 @@
 
 | 모듈 | 상태 | 비고 |
 |------|------|------|
-| `winning` | 미분석 | 낙찰/노쇼 처리 로직 |
-| `notification` | 미분석 | 알림 처리 |
+| `winning` | 미분석 | 낙찰/노쇼 처리 도메인 서비스 추가 검토 |
 
 ---
 
@@ -197,6 +215,7 @@ refactor(common): 도메인 예외 BaseBusinessException으로 통합
 - `docs/refactoring/auction-policy-refactoring.md`
 - `docs/refactoring/bid-strategy-pattern-refactoring.md`
 - `docs/refactoring/common-exception-refactoring.md`
+- `docs/refactoring/notification-refactoring.md`
 - `docs/todo/Todo.md` - 성능 최적화 TODO 항목
 - `docs/commit-convention.md`
 - `.github/ISSUE_TEMPLATE/refactor.md`

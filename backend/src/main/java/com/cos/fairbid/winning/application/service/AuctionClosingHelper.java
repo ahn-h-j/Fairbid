@@ -8,6 +8,7 @@ import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.winning.application.port.out.AuctionClosedEventPublisherPort;
+import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -59,10 +60,10 @@ public class AuctionClosingHelper {
         // 2. 입찰이 없으면 유찰 처리
         if (topBids.isEmpty()) {
             closingProcessor.processNoWinner(auction);
-            auctionRepository.save(auction);
+            Auction savedAuction = auctionRepository.save(auction);
 
-            // Redis 캐시 상태 동기화 + 종료 대기 큐 제거
-            syncRedisAfterClosing(auctionId, AuctionStatus.FAILED);
+            // Redis 캐시 전체 갱신 + 종료 대기 큐 제거
+            syncRedisAfterClosing(savedAuction);
 
             eventPublisher.publishAuctionClosed(auctionId);
             log.info("경매 유찰 완료 - auctionId: {}", auctionId);
@@ -73,16 +74,23 @@ public class AuctionClosingHelper {
         Bid firstBid = topBids.get(0);
         closingProcessor.processFirstRankWinner(auction, firstBid);
 
-        // 4. 2순위 후보 저장 (있는 경우)
+        // 4. 2순위 후보 저장 (있는 경우, 1순위의 90% 이상인 경우만)
         if (topBids.size() > 1) {
-            closingProcessor.saveSecondRankCandidate(auction, topBids.get(1));
+            Bid secondBid = topBids.get(1);
+            double threshold = firstBid.getAmount() * Winning.AUTO_TRANSFER_THRESHOLD;
+            if (secondBid.getAmount() >= threshold) {
+                closingProcessor.saveSecondRankCandidate(auction, secondBid);
+            } else {
+                log.debug("2순위 후보 미달 (90% 미만) - auctionId: {}, 1순위: {}, 2순위: {}",
+                        auctionId, firstBid.getAmount(), secondBid.getAmount());
+            }
         }
 
         // 5. 경매 저장
-        auctionRepository.save(auction);
+        Auction savedAuction = auctionRepository.save(auction);
 
-        // 6. Redis 캐시 상태 동기화 + 종료 대기 큐 제거
-        syncRedisAfterClosing(auctionId, AuctionStatus.ENDED);
+        // 6. Redis 캐시 전체 갱신 + 종료 대기 큐 제거
+        syncRedisAfterClosing(savedAuction);
 
         // 7. 종료 이벤트 발행
         eventPublisher.publishAuctionClosed(auctionId);
@@ -92,19 +100,19 @@ public class AuctionClosingHelper {
 
     /**
      * 경매 종료 후 Redis 상태를 동기화한다
-     * - 캐시의 status 필드를 업데이트하여 조회 시 정확한 상태 반환
+     * - 전체 캐시를 갱신하여 winnerId 등 모든 필드가 업데이트되도록 함
      * - 종료 대기 큐(Sorted Set)에서 제거하여 중복 처리 방지
      *
-     * @param auctionId 경매 ID
-     * @param status    종료 후 상태 (ENDED / FAILED)
+     * @param auction 종료된 경매
      */
-    private void syncRedisAfterClosing(Long auctionId, AuctionStatus status) {
+    private void syncRedisAfterClosing(Auction auction) {
         try {
-            auctionCachePort.updateStatus(auctionId, status);
-            auctionCachePort.removeFromClosingQueue(auctionId);
+            // 전체 캐시 갱신 (winnerId 포함)
+            auctionCachePort.saveToCache(auction);
+            auctionCachePort.removeFromClosingQueue(auction.getId());
         } catch (Exception e) {
             // Redis 동기화 실패는 로그만 남기고 진행 (RDB는 이미 업데이트됨)
-            log.warn("Redis 동기화 실패 - auctionId: {}, error: {}", auctionId, e.getMessage());
+            log.warn("Redis 동기화 실패 - auctionId: {}, error: {}", auction.getId(), e.getMessage());
         }
     }
 }
