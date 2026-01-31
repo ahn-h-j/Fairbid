@@ -50,6 +50,7 @@ public class NotificationRedisAdapter implements NotificationStoragePort {
             log.debug("알림 저장 완료 - userId: {}, notificationId: {}", userId, notification.getId());
         } catch (JsonProcessingException e) {
             log.error("알림 저장 실패 - userId: {}, error: {}", userId, e.getMessage());
+            throw new RuntimeException("알림 저장 중 직렬화 오류 발생", e);
         }
     }
 
