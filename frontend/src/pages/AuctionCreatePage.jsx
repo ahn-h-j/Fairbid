@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createAuction } from '../api/mutations';
 import Alert from '../components/Alert';
+import ImageUpload from '../components/ImageUpload';
 import Spinner from '../components/Spinner';
 import { CATEGORIES, DURATIONS } from '../utils/constants';
 import { formatPrice } from '../utils/formatters';
@@ -22,6 +23,8 @@ export default function AuctionCreatePage() {
     directTradeAvailable: true,
     deliveryAvailable: true,
     directTradeLocation: '',
+    // 이미지
+    imageUrls: [],
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -58,6 +61,14 @@ export default function AuctionCreatePage() {
     setError(null);
   };
 
+  /**
+   * 이미지 URL 배열 변경 핸들러
+   * @param {string[]} imageUrls
+   */
+  const handleImagesChange = (imageUrls) => {
+    setFormData((prev) => ({ ...prev, imageUrls }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationError = validate();
@@ -85,6 +96,8 @@ export default function AuctionCreatePage() {
         directTradeLocation: formData.directTradeAvailable
           ? formData.directTradeLocation.trim()
           : null,
+        // 이미지
+        imageUrls: formData.imageUrls.length > 0 ? formData.imageUrls : null,
       };
       const result = await createAuction(payload);
       setCreatedAuction(result);
@@ -139,6 +152,16 @@ export default function AuctionCreatePage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* 에러 메시지 */}
         {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
+
+        {/* 상품 이미지 섹션 */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">상품 이미지</h2>
+          <ImageUpload
+            images={formData.imageUrls}
+            onChange={handleImagesChange}
+            maxImages={5}
+          />
+        </div>
 
         {/* 기본 정보 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">

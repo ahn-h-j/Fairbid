@@ -8,6 +8,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import Timer from '../components/Timer';
 import StatusBadge from '../components/StatusBadge';
 import CategoryBadge from '../components/CategoryBadge';
+import ImageGallery from '../components/ImageGallery';
 import Alert from '../components/Alert';
 import Spinner from '../components/Spinner';
 import { BID_TYPES } from '../utils/constants';
@@ -160,6 +161,11 @@ export default function AuctionDetailPage() {
           </div>
         </div>
       ) : null}
+
+      {/* 상품 이미지 갤러리 */}
+      <div className="bg-white rounded-2xl p-4 ring-1 ring-black/[0.04]">
+        <ImageGallery images={auction.imageUrls} alt={auction.title} />
+      </div>
 
       {/* 경매 정보 헤더 */}
       <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04]">
