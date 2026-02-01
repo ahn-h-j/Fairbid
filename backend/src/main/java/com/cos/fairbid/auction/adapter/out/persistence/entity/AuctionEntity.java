@@ -7,6 +7,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -88,6 +90,13 @@ public class AuctionEntity {
     @Column(name = "direct_trade_location")
     private String directTradeLocation;
 
+    // 이미지 URL 목록 (별도 테이블로 저장)
+    @ElementCollection
+    @CollectionTable(name = "auction_image", joinColumns = @JoinColumn(name = "auction_id"))
+    @Column(name = "image_url")
+    @OrderColumn(name = "image_order")
+    private List<String> imageUrls;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -118,6 +127,7 @@ public class AuctionEntity {
             Boolean directTradeAvailable,
             Boolean deliveryAvailable,
             String directTradeLocation,
+            List<String> imageUrls,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {
@@ -141,6 +151,7 @@ public class AuctionEntity {
         this.directTradeAvailable = directTradeAvailable;
         this.deliveryAvailable = deliveryAvailable;
         this.directTradeLocation = directTradeLocation;
+        this.imageUrls = imageUrls;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
