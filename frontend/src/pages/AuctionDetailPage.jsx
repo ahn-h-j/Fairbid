@@ -29,6 +29,13 @@ export default function AuctionDetailPage() {
   const [bidMessage, setBidMessage] = useState(null);
   const [extensionNotice, setExtensionNotice] = useState(false);
 
+  // 입찰 여부 추적 (localStorage 기반으로 새로고침해도 유지)
+  const bidStorageKey = `bid_${auctionId}`;
+  const [hasBid, setHasBid] = useState(() => localStorage.getItem(bidStorageKey) === 'true');
+
+  // 이전에 1순위였는지 추적 (WebSocket으로 밀렸을 때 감지용)
+  const [wasFirstRank, setWasFirstRank] = useState(false);
+
   // 입찰 메시지 자동 해제 (3초)
   useEffect(() => {
     if (!bidMessage) return;
@@ -43,6 +50,13 @@ export default function AuctionDetailPage() {
     return () => clearTimeout(timer);
   }, [extensionNotice]);
 
+  // 1순위 상태 추적 (API 응답 기준)
+  useEffect(() => {
+    if (auction?.userBidRank === 1) {
+      setWasFirstRank(true);
+    }
+  }, [auction?.userBidRank]);
+
   // WebSocket: 입찰 업데이트 수신 시 SWR 캐시 직접 업데이트
   const handleBidUpdate = useCallback((msg) => {
     mutate((prev) => {
@@ -52,6 +66,18 @@ export default function AuctionDetailPage() {
         ? msg.currentPrice < prev.instantBuyPrice * 0.9
         : false;
 
+      // 현재 사용자의 입찰 순위 계산 (1순위 / 1순위 아님)
+      let userBidRank = null;
+      if (user?.userId && msg.topBidderId) {
+        const isFirstRank = String(msg.topBidderId) === String(user.userId);
+        userBidRank = isFirstRank ? 1 : null;
+
+        // 이전에 1순위였으면 wasFirstRank 업데이트
+        if (prev.userBidRank === 1 && !isFirstRank) {
+          setWasFirstRank(true);
+        }
+      }
+
       return {
         ...prev,
         currentPrice: msg.currentPrice,
@@ -60,13 +86,14 @@ export default function AuctionDetailPage() {
         bidIncrement: msg.bidIncrement,
         totalBidCount: msg.totalBidCount,
         instantBuyEnabled,
+        userBidRank,
       };
     }, { revalidate: false });
 
     if (msg.extended) {
       setExtensionNotice(true);
     }
-  }, [mutate]);
+  }, [mutate, user?.userId]);
 
   // WebSocket: 경매 종료 수신 - 서버에서 최신 데이터(winnerId, userWinningRank 등) 다시 가져오기
   const handleAuctionClosed = useCallback(() => {
@@ -94,6 +121,12 @@ export default function AuctionDetailPage() {
       await placeBid(auctionId, bidData);
       setBidMessage({ type: 'success', message: '입찰이 완료되었습니다!' });
       setBidAmount('');
+
+      // 입찰 성공 시 1순위로 낙관적 업데이트 (내가 입찰하면 1순위가 됨)
+      setHasBid(true);
+      setWasFirstRank(true);
+      localStorage.setItem(bidStorageKey, 'true');
+      mutate((prev) => prev ? { ...prev, userBidRank: 1 } : prev, { revalidate: false });
 
       // 즉시 구매 성공 시 상태를 낙관적으로 업데이트 (1시간 대기 상태)
       if (bidType === BID_TYPES.INSTANT_BUY) {
@@ -225,6 +258,39 @@ export default function AuctionDetailPage() {
           <span>경매 #{auction.id}</span>
         </div>
       </div>
+
+      {/* 입찰 순위 표시 (진행 중인 경매에서 입찰한 사용자) */}
+      {isBidding && user?.userId && (auction.userBidRank === 1 || hasBid || wasFirstRank) && (
+        <div className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl ring-1 animate-slide-up ${
+          auction.userBidRank === 1
+            ? 'bg-green-50 ring-green-200/60'
+            : 'bg-gray-50 ring-gray-200/60'
+        }`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+            auction.userBidRank === 1 ? 'bg-green-100' : 'bg-gray-100'
+          }`}>
+            <span className="text-lg">
+              {auction.userBidRank === 1 ? '🏆' : '📉'}
+            </span>
+          </div>
+          <div>
+            <p className={`text-[13px] font-semibold ${
+              auction.userBidRank === 1 ? 'text-green-800' : 'text-gray-700'
+            }`}>
+              {auction.userBidRank === 1
+                ? '회원님이 현재 1순위입니다'
+                : '1순위가 아닙니다'}
+            </p>
+            <p className={`text-[11px] mt-0.5 ${
+              auction.userBidRank === 1 ? 'text-green-600' : 'text-gray-500'
+            }`}>
+              {auction.userBidRank === 1
+                ? '다른 입찰자가 나타나면 알림을 받습니다'
+                : '더 높은 금액으로 입찰하여 1순위를 노려보세요'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 입찰 섹션 */}
       {isBidding ? (
