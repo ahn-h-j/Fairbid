@@ -93,7 +93,7 @@ public class AuctionEntity {
     // 이미지 URL 목록 (별도 테이블로 저장)
     @ElementCollection
     @CollectionTable(name = "auction_image", joinColumns = @JoinColumn(name = "auction_id"))
-    @Column(name = "image_url")
+    @Column(name = "image_url", length = 2048)
     @OrderColumn(name = "image_order")
     private List<String> imageUrls;
 
