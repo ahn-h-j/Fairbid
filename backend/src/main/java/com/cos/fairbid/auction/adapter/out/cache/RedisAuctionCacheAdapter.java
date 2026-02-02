@@ -4,6 +4,7 @@ import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.Category;
+import com.cos.fairbid.auction.domain.TopBidderInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -113,6 +114,52 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
         }
     }
 
+    // ============================
+    // 낙찰자 정보 조회 구현
+    // ============================
+
+    @Override
+    public Optional<TopBidderInfo> getTopBidderInfo(Long auctionId) {
+        String key = AUCTION_KEY_PREFIX + auctionId;
+
+        // topBidderId, topBidAmount 조회
+        List<Object> values = redisTemplate.opsForHash().multiGet(key, List.of("topBidderId", "topBidAmount"));
+
+        Long bidderId = parseLongOrNull(values.get(0));
+        Long bidAmount = parseLongOrNull(values.get(1));
+
+        // 입찰자 정보가 없으면 빈 Optional 반환
+        if (bidderId == null || bidAmount == null) {
+            log.debug("1순위 입찰자 정보 없음: auctionId={}", auctionId);
+            return Optional.empty();
+        }
+
+        TopBidderInfo info = new TopBidderInfo(bidderId, bidAmount);
+        log.debug("1순위 입찰자 조회: auctionId={}, bidderId={}, amount={}", auctionId, bidderId, bidAmount);
+        return Optional.of(info);
+    }
+
+    @Override
+    public Optional<TopBidderInfo> getSecondBidderInfo(Long auctionId) {
+        String key = AUCTION_KEY_PREFIX + auctionId;
+
+        // secondBidderId, secondBidAmount 조회
+        List<Object> values = redisTemplate.opsForHash().multiGet(key, List.of("secondBidderId", "secondBidAmount"));
+
+        Long bidderId = parseLongOrNull(values.get(0));
+        Long bidAmount = parseLongOrNull(values.get(1));
+
+        // 2순위 입찰자 정보가 없으면 빈 Optional 반환
+        if (bidderId == null || bidAmount == null) {
+            log.debug("2순위 입찰자 정보 없음: auctionId={}", auctionId);
+            return Optional.empty();
+        }
+
+        TopBidderInfo info = new TopBidderInfo(bidderId, bidAmount);
+        log.debug("2순위 입찰자 조회: auctionId={}, bidderId={}, amount={}", auctionId, bidderId, bidAmount);
+        return Optional.of(info);
+    }
+
     /**
      * Auction 도메인을 Redis Hash Map으로 변환
      */
@@ -155,7 +202,12 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
                 Map.entry("updatedAt", auction.getUpdatedAt() != null ? auction.getUpdatedAt().toString() : ""),
                 // 즉시 구매 관련 필드
                 Map.entry("instantBuyerId", auction.getInstantBuyerId() != null ? String.valueOf(auction.getInstantBuyerId()) : ""),
-                Map.entry("instantBuyActivatedTimeMs", instantBuyActivatedTimeMs)
+                Map.entry("instantBuyActivatedTimeMs", instantBuyActivatedTimeMs),
+                // 1순위, 2순위 입찰자 정보 (Lua 스크립트에서 갱신됨)
+                Map.entry("topBidderId", auction.getTopBidderId() != null ? String.valueOf(auction.getTopBidderId()) : ""),
+                Map.entry("topBidAmount", auction.getTopBidAmount() != null ? String.valueOf(auction.getTopBidAmount()) : ""),
+                Map.entry("secondBidderId", auction.getSecondBidderId() != null ? String.valueOf(auction.getSecondBidderId()) : ""),
+                Map.entry("secondBidAmount", auction.getSecondBidAmount() != null ? String.valueOf(auction.getSecondBidAmount()) : "")
         );
     }
 
@@ -193,6 +245,12 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
         Long instantBuyerId = parseLongOrNull(data.get("instantBuyerId"));
         LocalDateTime instantBuyActivatedTime = parseLocalDateTimeFromMs(data.get("instantBuyActivatedTimeMs"));
 
+        // 1순위, 2순위 입찰자 정보 (Lua 스크립트에서 갱신됨)
+        Long topBidderId = parseLongOrNull(data.get("topBidderId"));
+        Long topBidAmount = parseLongOrNull(data.get("topBidAmount"));
+        Long secondBidderId = parseLongOrNull(data.get("secondBidderId"));
+        Long secondBidAmount = parseLongOrNull(data.get("secondBidAmount"));
+
         // Auction 도메인 빌더를 통해 객체 생성
         return Auction.builder()
                 .id(auctionId)
@@ -215,6 +273,10 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
                 .updatedAt(updatedAt)
                 .instantBuyerId(instantBuyerId)
                 .instantBuyActivatedTime(instantBuyActivatedTime)
+                .topBidderId(topBidderId)
+                .topBidAmount(topBidAmount)
+                .secondBidderId(secondBidderId)
+                .secondBidAmount(secondBidAmount)
                 .build();
     }
 
