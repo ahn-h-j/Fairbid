@@ -75,7 +75,8 @@ public class BidAsyncService {
             bidRepository.save(bid);
 
             // 3. 이벤트 발행 (BidResult 기반, 최신 값 사용)
-            bidEventPublisher.publishBidPlaced(auctionId, result);
+            // 입찰 성공한 사람이 곧 1순위 입찰자(topBidderId)
+            bidEventPublisher.publishBidPlaced(auctionId, result, bidderId);
 
             log.debug("입찰 DB 영속화 완료: auctionId={}, bidderId={}, amount={}",
                     auctionId, bidderId, bidAmount);
@@ -110,7 +111,8 @@ public class BidAsyncService {
             bidRepository.save(bid);
 
             // 2. 이벤트 발행 (BidResult 기반, 최신 값 사용)
-            bidEventPublisher.publishBidPlaced(auctionId, result);
+            // 입찰 성공한 사람이 곧 1순위 입찰자(topBidderId)
+            bidEventPublisher.publishBidPlaced(auctionId, result, bidderId);
 
             log.debug("입찰 비동기 처리 완료: auctionId={}, bidderId={}, amount={}",
                     auctionId, bidderId, bidAmount);
