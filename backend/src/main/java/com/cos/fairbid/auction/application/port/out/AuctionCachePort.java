@@ -2,6 +2,7 @@ package com.cos.fairbid.auction.application.port.out;
 
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.TopBidderInfo;
 
 import java.util.List;
 import java.util.Optional;
@@ -76,4 +77,26 @@ public interface AuctionCachePort {
      * @param status    변경할 상태
      */
     void updateStatus(Long auctionId, AuctionStatus status);
+
+    // ============================
+    // 낙찰자 정보 조회 (Redis 기준)
+    // ============================
+
+    /**
+     * Redis에서 1순위 입찰자 정보를 조회한다
+     * 경매 종료 시 낙찰자 결정에 사용
+     *
+     * @param auctionId 경매 ID
+     * @return 1순위 입찰자 정보 (입찰이 없으면 빈 Optional)
+     */
+    Optional<TopBidderInfo> getTopBidderInfo(Long auctionId);
+
+    /**
+     * Redis에서 2순위 입찰자 정보를 조회한다
+     * 1순위 노쇼 시 2순위 승계에 사용
+     *
+     * @param auctionId 경매 ID
+     * @return 2순위 입찰자 정보 (없으면 빈 Optional)
+     */
+    Optional<TopBidderInfo> getSecondBidderInfo(Long auctionId);
 }
