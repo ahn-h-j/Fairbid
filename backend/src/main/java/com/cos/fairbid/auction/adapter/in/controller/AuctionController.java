@@ -81,6 +81,7 @@ public class AuctionController {
     /**
      * 경매 상세 조회 API
      * 인증된 사용자가 있으면 해당 사용자의 낙찰 순위 정보도 포함
+     * 진행 중인 경매에서는 현재 입찰 순위(1순위/2순위)도 포함
      *
      * @param auctionId 조회할 경매 ID
      * @return 경매 상세 정보
@@ -90,13 +91,13 @@ public class AuctionController {
             @PathVariable Long auctionId
     ) {
         Auction auction = getAuctionDetailUseCase.getAuctionDetail(auctionId);
+        Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
 
-        // 인증된 사용자가 있고 종료된 경매면 낙찰 정보 조회
+        // 낙찰 정보 (종료된 경매)
         Integer userWinningRank = null;
         String userWinningStatus = null;
 
         if (auction.getStatus() == AuctionStatus.ENDED) {
-            Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
             UserWinningInfo winningInfo = getUserWinningInfoUseCase.getUserWinningInfo(auctionId, currentUserId);
 
             if (winningInfo != null) {
@@ -105,7 +106,41 @@ public class AuctionController {
             }
         }
 
-        AuctionResponse response = AuctionResponse.from(auction, userWinningRank, userWinningStatus);
+        // 입찰 순위 (진행 중인 경매) - Redis에서 가져온 topBidderId, secondBidderId와 비교
+        Integer userBidRank = calculateUserBidRank(auction, currentUserId);
+
+        AuctionResponse response = AuctionResponse.from(auction, userWinningRank, userWinningStatus, userBidRank);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * 현재 사용자의 입찰 순위를 계산한다.
+     * Redis에 저장된 topBidderId, secondBidderId와 비교하여 순위 반환
+     *
+     * @param auction       경매 도메인 객체 (Redis에서 조회됨)
+     * @param currentUserId 현재 사용자 ID
+     * @return 1(1순위), 2(2순위), null(순위권 밖 또는 비로그인)
+     */
+    private Integer calculateUserBidRank(Auction auction, Long currentUserId) {
+        if (currentUserId == null) {
+            return null;
+        }
+
+        // 종료된 경매는 입찰 순위 표시 안 함 (낙찰 정보 사용)
+        if (auction.isEnded()) {
+            return null;
+        }
+
+        // 1순위 확인
+        if (currentUserId.equals(auction.getTopBidderId())) {
+            return 1;
+        }
+
+        // 2순위 확인
+        if (currentUserId.equals(auction.getSecondBidderId())) {
+            return 2;
+        }
+
+        return null;
     }
 }
