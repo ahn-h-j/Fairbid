@@ -49,6 +49,12 @@ public class Auction {
     private Boolean deliveryAvailable;              // 택배 가능 여부
     private String directTradeLocation;             // 직거래 희망 위치 (직거래 가능 시 필수)
 
+    // 1순위, 2순위 입찰자 정보 (Redis 캐시에서 관리, 낙찰자 결정에 사용)
+    private Long topBidderId;       // 현재 최고 입찰자 ID
+    private Long topBidAmount;      // 현재 최고 입찰 금액
+    private Long secondBidderId;    // 2순위 입찰자 ID
+    private Long secondBidAmount;   // 2순위 입찰 금액
+
     /**
      * 새로운 경매 생성을 위한 정적 팩토리 메서드
      *
