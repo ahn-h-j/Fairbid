@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * 이미지 갤러리 컴포넌트
@@ -10,6 +10,15 @@ import { useState } from 'react';
  */
 export default function ImageGallery({ images = [], alt = '상품 이미지' }) {
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // images 변경 시 activeIndex 범위 보정
+  useEffect(() => {
+    if (!images || images.length === 0) {
+      setActiveIndex(0);
+      return;
+    }
+    setActiveIndex((prev) => Math.min(prev, images.length - 1));
+  }, [images]);
 
   // 이미지가 없을 경우 플레이스홀더
   if (!images || images.length === 0) {

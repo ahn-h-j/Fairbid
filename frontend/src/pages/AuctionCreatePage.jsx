@@ -27,6 +27,7 @@ export default function AuctionCreatePage() {
     imageUrls: [],
   });
   const [submitting, setSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
   const [createdAuction, setCreatedAuction] = useState(null);
 
@@ -160,6 +161,7 @@ export default function AuctionCreatePage() {
             images={formData.imageUrls}
             onChange={handleImagesChange}
             maxImages={5}
+            onUploadingChange={setIsUploading}
           />
         </div>
 
@@ -366,7 +368,7 @@ export default function AuctionCreatePage() {
         {/* 제출 버튼 */}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || isUploading}
           className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[14px] font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all btn-press shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
         >
           {submitting ? (

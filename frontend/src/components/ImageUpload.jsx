@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Spinner from './Spinner';
 
 /**
@@ -8,13 +8,21 @@ import Spinner from './Spinner';
  * @param {string[]} props.images - 업로드된 이미지 URL 배열
  * @param {function} props.onChange - 이미지 배열 변경 시 호출되는 콜백
  * @param {number} [props.maxImages=5] - 최대 업로드 가능 이미지 수
+ * @param {function} [props.onUploadingChange] - 업로드 상태 변경 시 호출되는 콜백
  */
-export default function ImageUpload({ images = [], onChange, maxImages = 5 }) {
+export default function ImageUpload({ images = [], onChange, maxImages = 5, onUploadingChange }) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+  // stale closure 방지를 위한 최신 images 참조
+  const imagesRef = useRef(images);
+
+  // images 변경 시 ref 동기화
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
 
   // Cloudinary 설정
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -31,20 +39,17 @@ export default function ImageUpload({ images = [], onChange, maxImages = 5 }) {
     }
 
     const fileArray = Array.from(files);
-    const remainingSlots = maxImages - images.length;
+    const remainingSlots = maxImages - imagesRef.current.length;
 
     if (remainingSlots <= 0) {
       setError(`최대 ${maxImages}장까지 업로드 가능합니다.`);
       return;
     }
 
-    // 업로드 가능한 파일만 선택
-    const filesToUpload = fileArray.slice(0, remainingSlots);
-
-    // 이미지 파일만 필터링
-    const imageFiles = filesToUpload.filter((file) =>
-      file.type.startsWith('image/')
-    );
+    // 이미지 파일만 먼저 필터링 후 슬롯 수만큼 선택
+    const imageFiles = fileArray
+      .filter((file) => file.type.startsWith('image/'))
+      .slice(0, remainingSlots);
 
     if (imageFiles.length === 0) {
       setError('이미지 파일만 업로드 가능합니다.');
@@ -61,6 +66,7 @@ export default function ImageUpload({ images = [], onChange, maxImages = 5 }) {
 
     setError(null);
     setUploading(true);
+    onUploadingChange?.(true);
     setUploadProgress(0);
 
     const uploadedUrls = [];
@@ -97,10 +103,11 @@ export default function ImageUpload({ images = [], onChange, maxImages = 5 }) {
     }
 
     setUploading(false);
+    onUploadingChange?.(false);
     setUploadProgress(0);
 
     if (uploadedUrls.length > 0) {
-      onChange([...images, ...uploadedUrls]);
+      onChange([...imagesRef.current, ...uploadedUrls]);
     }
   };
 
