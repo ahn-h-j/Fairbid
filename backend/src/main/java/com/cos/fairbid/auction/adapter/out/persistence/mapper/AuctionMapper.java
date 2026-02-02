@@ -37,6 +37,7 @@ public class AuctionMapper {
                 .directTradeAvailable(auction.getDirectTradeAvailable())
                 .deliveryAvailable(auction.getDeliveryAvailable())
                 .directTradeLocation(auction.getDirectTradeLocation())
+                .imageUrls(auction.getImageUrls())
                 .createdAt(auction.getCreatedAt())
                 .updatedAt(auction.getUpdatedAt())
                 .build();
@@ -46,7 +47,6 @@ public class AuctionMapper {
      * Entity → Domain 변환
      */
     public Auction toDomain(AuctionEntity entity) {
-        // 이미지는 모킹 처리 (추후 구현)
         return Auction.reconstitute()
                 .id(entity.getId())
                 .sellerId(entity.getSellerId())
@@ -68,7 +68,7 @@ public class AuctionMapper {
                 .directTradeAvailable(entity.getDirectTradeAvailable())
                 .deliveryAvailable(entity.getDeliveryAvailable())
                 .directTradeLocation(entity.getDirectTradeLocation())
-                .imageUrls(Collections.emptyList())
+                .imageUrls(entity.getImageUrls() != null ? entity.getImageUrls() : Collections.emptyList())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

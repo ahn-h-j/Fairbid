@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createAuction } from '../api/mutations';
 import Alert from '../components/Alert';
+import ImageUpload from '../components/ImageUpload';
 import Spinner from '../components/Spinner';
 import { CATEGORIES, DURATIONS } from '../utils/constants';
 import { formatPrice } from '../utils/formatters';
@@ -22,8 +23,11 @@ export default function AuctionCreatePage() {
     directTradeAvailable: true,
     deliveryAvailable: true,
     directTradeLocation: '',
+    // 이미지
+    imageUrls: [],
   });
   const [submitting, setSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
   const [createdAuction, setCreatedAuction] = useState(null);
 
@@ -58,6 +62,14 @@ export default function AuctionCreatePage() {
     setError(null);
   };
 
+  /**
+   * 이미지 URL 배열 변경 핸들러
+   * @param {string[]} imageUrls
+   */
+  const handleImagesChange = (imageUrls) => {
+    setFormData((prev) => ({ ...prev, imageUrls }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationError = validate();
@@ -85,6 +97,8 @@ export default function AuctionCreatePage() {
         directTradeLocation: formData.directTradeAvailable
           ? formData.directTradeLocation.trim()
           : null,
+        // 이미지
+        imageUrls: formData.imageUrls.length > 0 ? formData.imageUrls : null,
       };
       const result = await createAuction(payload);
       setCreatedAuction(result);
@@ -139,6 +153,17 @@ export default function AuctionCreatePage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* 에러 메시지 */}
         {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
+
+        {/* 상품 이미지 섹션 */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">상품 이미지</h2>
+          <ImageUpload
+            images={formData.imageUrls}
+            onChange={handleImagesChange}
+            maxImages={5}
+            onUploadingChange={setIsUploading}
+          />
+        </div>
 
         {/* 기본 정보 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
@@ -343,7 +368,7 @@ export default function AuctionCreatePage() {
         {/* 제출 버튼 */}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || isUploading}
           className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[14px] font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all btn-press shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
         >
           {submitting ? (
