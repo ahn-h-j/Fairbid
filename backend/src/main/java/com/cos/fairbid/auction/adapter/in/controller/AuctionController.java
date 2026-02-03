@@ -115,11 +115,11 @@ public class AuctionController {
 
     /**
      * 현재 사용자의 입찰 순위를 계산한다.
-     * Redis에 저장된 topBidderId, secondBidderId와 비교하여 순위 반환
+     * Redis에 저장된 topBidderId와 비교하여 1순위 여부 반환
      *
      * @param auction       경매 도메인 객체 (Redis에서 조회됨)
      * @param currentUserId 현재 사용자 ID
-     * @return 1(1순위), 2(2순위), null(순위권 밖 또는 비로그인)
+     * @return 1(1순위), null(1순위 아님 또는 비로그인)
      */
     private Integer calculateUserBidRank(Auction auction, Long currentUserId) {
         if (currentUserId == null) {
@@ -134,11 +134,6 @@ public class AuctionController {
         // 1순위 확인
         if (currentUserId.equals(auction.getTopBidderId())) {
             return 1;
-        }
-
-        // 2순위 확인
-        if (currentUserId.equals(auction.getSecondBidderId())) {
-            return 2;
         }
 
         return null;
