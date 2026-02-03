@@ -105,7 +105,9 @@ if bidType == 'INSTANT_BUY' then
     local prevTopBidAmount = redis.call('HGET', auctionKey, 'topBidAmount')
     if prevTopBidderId and prevTopBidderId ~= '' and prevTopBidderId ~= bidderId then
         redis.call('HSET', auctionKey, 'secondBidderId', prevTopBidderId)
-        redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+        if prevTopBidAmount and prevTopBidAmount ~= '' then
+            redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+        end
     end
     redis.call('HSET', auctionKey, 'topBidderId', bidderId)
     redis.call('HSET', auctionKey, 'topBidAmount', instantBuyPrice)
@@ -182,7 +184,9 @@ local prevTopBidAmount = redis.call('HGET', auctionKey, 'topBidAmount')
 if prevTopBidderId and prevTopBidderId ~= '' and prevTopBidderId ~= bidderId then
     -- 기존 1순위가 존재하고, 현재 입찰자와 다르면 2순위로 이동
     redis.call('HSET', auctionKey, 'secondBidderId', prevTopBidderId)
-    redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+    if prevTopBidAmount and prevTopBidAmount ~= '' then
+        redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+    end
 end
 redis.call('HSET', auctionKey, 'topBidderId', bidderId)
 redis.call('HSET', auctionKey, 'topBidAmount', bidAmount)

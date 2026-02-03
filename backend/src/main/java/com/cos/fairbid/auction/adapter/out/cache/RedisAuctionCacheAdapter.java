@@ -125,6 +125,12 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
         // topBidderId, topBidAmount 조회
         List<Object> values = redisTemplate.opsForHash().multiGet(key, List.of("topBidderId", "topBidAmount"));
 
+        // multiGet은 키가 없으면 빈 리스트, 트랜잭션에서는 null 반환 가능
+        if (values == null || values.size() < 2) {
+            log.debug("1순위 입찰자 정보 없음: auctionId={}", auctionId);
+            return Optional.empty();
+        }
+
         Long bidderId = parseLongOrNull(values.get(0));
         Long bidAmount = parseLongOrNull(values.get(1));
 
@@ -145,6 +151,12 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
 
         // secondBidderId, secondBidAmount 조회
         List<Object> values = redisTemplate.opsForHash().multiGet(key, List.of("secondBidderId", "secondBidAmount"));
+
+        // multiGet은 키가 없으면 빈 리스트, 트랜잭션에서는 null 반환 가능
+        if (values == null || values.size() < 2) {
+            log.debug("2순위 입찰자 정보 없음: auctionId={}", auctionId);
+            return Optional.empty();
+        }
 
         Long bidderId = parseLongOrNull(values.get(0));
         Long bidAmount = parseLongOrNull(values.get(1));
