@@ -92,10 +92,11 @@ export default function AuctionListPage() {
               className="px-3 py-2.5 bg-gray-50 border-0 rounded-xl text-[13px] text-gray-600 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all cursor-pointer"
               aria-label="상태 필터"
             >
-              <option value="">전체 상태</option>
-              {Object.entries(STATUSES).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
+              {/* 기본값: 진행중인 경매 (BIDDING + INSTANT_BUY_PENDING) */}
+              <option value="">진행중</option>
+              <option value="ENDED">{STATUSES.ENDED.label}</option>
+              <option value="FAILED">{STATUSES.FAILED.label}</option>
+              <option value="CANCELLED">{STATUSES.CANCELLED.label}</option>
             </select>
 
             <select
