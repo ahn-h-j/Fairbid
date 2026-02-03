@@ -1,7 +1,7 @@
 package com.cos.fairbid.winning.application.service;
 
 import com.cos.fairbid.auction.domain.Auction;
-import com.cos.fairbid.bid.domain.Bid;
+import com.cos.fairbid.auction.domain.TopBidderInfo;
 import com.cos.fairbid.notification.application.port.out.PushNotificationPort;
 import com.cos.fairbid.trade.application.port.out.DeliveryInfoRepositoryPort;
 import com.cos.fairbid.trade.application.port.out.TradeRepositoryPort;
@@ -52,18 +52,21 @@ public class AuctionClosingProcessor {
     /**
      * 1순위 낙찰자를 처리한다
      *
-     * @param auction  종료할 경매
-     * @param firstBid 1순위 입찰
+     * @param auction      종료할 경매
+     * @param topBidder    1순위 입찰자 정보 (Redis에서 조회)
      */
-    public void processFirstRankWinner(Auction auction, Bid firstBid) {
+    public void processFirstRankWinner(Auction auction, TopBidderInfo topBidder) {
+        Long bidderId = topBidder.bidderId();
+        Long bidAmount = topBidder.bidAmount();
+
         // 1. 경매 종료 및 낙찰자 지정
-        auction.close(firstBid.getBidderId());
+        auction.close(bidderId);
 
         // 2. 1순위 Winning 저장
         Winning firstWinning = Winning.createFirstRank(
                 auction.getId(),
-                firstBid.getBidderId(),
-                firstBid.getAmount()
+                bidderId,
+                bidAmount
         );
         winningRepository.save(firstWinning);
 
@@ -72,8 +75,8 @@ public class AuctionClosingProcessor {
         Trade trade = Trade.create(
                 auction.getId(),
                 auction.getSellerId(),
-                firstBid.getBidderId(),
-                firstBid.getAmount(),
+                bidderId,
+                bidAmount,
                 Boolean.TRUE.equals(auction.getDirectTradeAvailable()),
                 Boolean.TRUE.equals(auction.getDeliveryAvailable())
         );
@@ -86,39 +89,42 @@ public class AuctionClosingProcessor {
         }
 
         log.debug("Trade 생성 완료 - auctionId: {}, buyerId: {}, method: {}",
-                auction.getId(), firstBid.getBidderId(), savedTrade.getMethod());
+                auction.getId(), bidderId, savedTrade.getMethod());
 
         // 5. 1순위 낙찰자에게 Push 알림
         pushNotificationPort.sendWinningNotification(
-                firstBid.getBidderId(),
+                bidderId,
                 auction.getId(),
                 auction.getTitle(),
-                firstBid.getAmount()
+                bidAmount
         );
     }
 
     /**
      * 2순위 후보를 저장한다
      *
-     * @param auction   경매
-     * @param secondBid 2순위 입찰
+     * @param auction       경매
+     * @param secondBidder  2순위 입찰자 정보 (Redis에서 조회)
      */
-    public void saveSecondRankCandidate(Auction auction, Bid secondBid) {
+    public void saveSecondRankCandidate(Auction auction, TopBidderInfo secondBidder) {
+        Long bidderId = secondBidder.bidderId();
+        Long bidAmount = secondBidder.bidAmount();
+
         Winning secondWinning = Winning.createSecondRank(
                 auction.getId(),
-                secondBid.getBidderId(),
-                secondBid.getAmount()
+                bidderId,
+                bidAmount
         );
         winningRepository.save(secondWinning);
 
         // 2순위에게 대기 알림 발송
         pushNotificationPort.sendSecondRankStandbyNotification(
-                secondBid.getBidderId(),
+                bidderId,
                 auction.getId(),
                 auction.getTitle(),
-                secondBid.getAmount()
+                bidAmount
         );
 
-        log.debug("2순위 후보 저장 - auctionId: {}, bidderId: {}", auction.getId(), secondBid.getBidderId());
+        log.debug("2순위 후보 저장 - auctionId: {}, bidderId: {}", auction.getId(), bidderId);
     }
 }

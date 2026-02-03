@@ -49,13 +49,16 @@ public record AuctionResponse(
         Integer userWinningRank,
 
         // 현재 사용자의 낙찰 상태 (PENDING_RESPONSE, RESPONDED, NO_SHOW, STANDBY, FAILED)
-        String userWinningStatus
+        String userWinningStatus,
+
+        // 현재 사용자의 입찰 순위 (진행 중인 경매에서 1: 1순위, null: 1순위 아님)
+        Integer userBidRank
 ) {
     /**
      * Domain → Response DTO 변환 (기본)
      */
     public static AuctionResponse from(Auction auction) {
-        return from(auction, null, null);
+        return from(auction, null, null, null);
     }
 
     /**
@@ -67,6 +70,19 @@ public record AuctionResponse(
      * @return 경매 응답 DTO
      */
     public static AuctionResponse from(Auction auction, Integer userWinningRank, String userWinningStatus) {
+        return from(auction, userWinningRank, userWinningStatus, null);
+    }
+
+    /**
+     * Domain → Response DTO 변환 (사용자 낙찰 정보 + 입찰 순위 포함)
+     *
+     * @param auction           경매 도메인 객체
+     * @param userWinningRank   현재 사용자의 낙찰 순위 (1, 2, 또는 null)
+     * @param userWinningStatus 현재 사용자의 낙찰 상태
+     * @param userBidRank       현재 사용자의 입찰 순위 (진행 중 경매에서 1, 2, 또는 null)
+     * @return 경매 응답 DTO
+     */
+    public static AuctionResponse from(Auction auction, Integer userWinningRank, String userWinningStatus, Integer userBidRank) {
         return AuctionResponse.builder()
                 // 기본 정보
                 .id(auction.getId())
@@ -98,6 +114,8 @@ public record AuctionResponse(
                 // 사용자 낙찰 순위 및 상태
                 .userWinningRank(userWinningRank)
                 .userWinningStatus(userWinningStatus)
+                // 사용자 입찰 순위 (진행 중 경매)
+                .userBidRank(userBidRank)
                 .build();
     }
 }

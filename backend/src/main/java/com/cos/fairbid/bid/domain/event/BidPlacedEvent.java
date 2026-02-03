@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 입찰 완료 이벤트
  * 입찰이 성공적으로 처리된 후 발행되며, 실시간 UI 업데이트에 활용
- * (현재가, 종료시간, 다음 입찰가, 총 입찰수 등 실시간 반영)
+ * (현재가, 종료시간, 다음 입찰가, 총 입찰수, 현재 1순위 입찰자 등 실시간 반영)
  */
 @Getter
 public class BidPlacedEvent {
@@ -19,6 +19,7 @@ public class BidPlacedEvent {
     private final Long nextMinBidPrice;
     private final Long bidIncrement;
     private final Integer totalBidCount;
+    private final Long topBidderId;
     private final LocalDateTime occurredAt;
 
     private BidPlacedEvent(
@@ -28,7 +29,8 @@ public class BidPlacedEvent {
             boolean extended,
             Long nextMinBidPrice,
             Long bidIncrement,
-            Integer totalBidCount
+            Integer totalBidCount,
+            Long topBidderId
     ) {
         this.auctionId = auctionId;
         this.currentPrice = currentPrice;
@@ -37,6 +39,7 @@ public class BidPlacedEvent {
         this.nextMinBidPrice = nextMinBidPrice;
         this.bidIncrement = bidIncrement;
         this.totalBidCount = totalBidCount;
+        this.topBidderId = topBidderId;
         this.occurredAt = LocalDateTime.now();
     }
 
@@ -50,6 +53,7 @@ public class BidPlacedEvent {
      * @param nextMinBidPrice  다음 최소 입찰 가능 금액
      * @param bidIncrement     입찰 단위 (가격 구간에 따라 재계산됨)
      * @param totalBidCount    총 입찰 횟수
+     * @param topBidderId      현재 1순위 입찰자 ID
      * @return BidPlacedEvent 인스턴스
      */
     public static BidPlacedEvent of(
@@ -59,7 +63,8 @@ public class BidPlacedEvent {
             boolean extended,
             Long nextMinBidPrice,
             Long bidIncrement,
-            Integer totalBidCount
+            Integer totalBidCount,
+            Long topBidderId
     ) {
         return new BidPlacedEvent(
                 auctionId,
@@ -68,7 +73,8 @@ public class BidPlacedEvent {
                 extended,
                 nextMinBidPrice,
                 bidIncrement,
-                totalBidCount
+                totalBidCount,
+                topBidderId
         );
     }
 }

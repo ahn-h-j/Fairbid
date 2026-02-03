@@ -100,6 +100,18 @@ if bidType == 'INSTANT_BUY' then
     redis.call('HSET', auctionKey, 'currentPrice', instantBuyPrice)
     local newTotalBidCount = redis.call('HINCRBY', auctionKey, 'totalBidCount', 1)
 
+    -- 5-6-1. 1순위 입찰자 정보 갱신 (기존 1순위 → 2순위로 이동)
+    local prevTopBidderId = redis.call('HGET', auctionKey, 'topBidderId')
+    local prevTopBidAmount = redis.call('HGET', auctionKey, 'topBidAmount')
+    if prevTopBidderId and prevTopBidderId ~= '' and prevTopBidderId ~= bidderId then
+        redis.call('HSET', auctionKey, 'secondBidderId', prevTopBidderId)
+        if prevTopBidAmount and prevTopBidAmount ~= '' then
+            redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+        end
+    end
+    redis.call('HSET', auctionKey, 'topBidderId', bidderId)
+    redis.call('HSET', auctionKey, 'topBidAmount', instantBuyPrice)
+
     -- 5-7. 입찰 단위 재계산
     local newBidIncrement
     if instantBuyPrice < 10000 then
@@ -166,11 +178,24 @@ if status == 'BIDDING' and scheduledEndTimeMs > 0 and currentTimeMs > 0 then
     end
 end
 
--- 8. 현재가 갱신 + 입찰수 증가
+-- 8. 1순위 입찰자 정보 갱신 (기존 1순위 → 2순위로 이동)
+local prevTopBidderId = redis.call('HGET', auctionKey, 'topBidderId')
+local prevTopBidAmount = redis.call('HGET', auctionKey, 'topBidAmount')
+if prevTopBidderId and prevTopBidderId ~= '' and prevTopBidderId ~= bidderId then
+    -- 기존 1순위가 존재하고, 현재 입찰자와 다르면 2순위로 이동
+    redis.call('HSET', auctionKey, 'secondBidderId', prevTopBidderId)
+    if prevTopBidAmount and prevTopBidAmount ~= '' then
+        redis.call('HSET', auctionKey, 'secondBidAmount', prevTopBidAmount)
+    end
+end
+redis.call('HSET', auctionKey, 'topBidderId', bidderId)
+redis.call('HSET', auctionKey, 'topBidAmount', bidAmount)
+
+-- 9. 현재가 갱신 + 입찰수 증가
 redis.call('HSET', auctionKey, 'currentPrice', bidAmount)
 local newTotalBidCount = redis.call('HINCRBY', auctionKey, 'totalBidCount', 1)
 
--- 9. 입찰 단위 재계산 (가격 구간별)
+-- 10. 입찰 단위 재계산 (가격 구간별)
 local newBidIncrement
 if bidAmount < 10000 then
     newBidIncrement = 500
@@ -187,8 +212,8 @@ else
 end
 redis.call('HSET', auctionKey, 'bidIncrement', newBidIncrement)
 
--- 10. 최종 종료 시간 조회 (연장됐을 수 있으므로)
+-- 11. 최종 종료 시간 조회 (연장됐을 수 있으므로)
 local finalScheduledEndTimeMs = tonumber(redis.call('HGET', auctionKey, 'scheduledEndTimeMs'))
 
--- 11. 성공 반환
+-- 12. 성공 반환
 return {1, bidAmount, newTotalBidCount, newBidIncrement, extended, extensionCount, finalScheduledEndTimeMs, instantBuyActivated}

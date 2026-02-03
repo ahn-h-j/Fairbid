@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 /**
  * WebSocket을 통해 클라이언트에 전송되는 입찰 업데이트 메시지
- * 경매 상세 페이지에서 실시간으로 현재가, 종료시간, 다음 입찰가, 입찰 단위, 총 입찰수를 갱신하는 데 사용
+ * 경매 상세 페이지에서 실시간으로 현재가, 종료시간, 다음 입찰가, 입찰 단위, 총 입찰수, 현재 1순위 입찰자를 갱신하는 데 사용
  *
  * @param auctionId        경매 ID
  * @param currentPrice     현재가 (입찰 후 갱신된 가격)
@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
  * @param nextMinBidPrice  다음 최소 입찰 가능 금액
  * @param bidIncrement     입찰 단위 (가격 구간에 따라 재계산됨)
  * @param totalBidCount    총 입찰 횟수
+ * @param topBidderId      현재 1순위 입찰자 ID
  * @param occurredAt       이벤트 발생 시간
  */
 public record BidUpdateMessage(
@@ -25,6 +26,7 @@ public record BidUpdateMessage(
         Long nextMinBidPrice,
         Long bidIncrement,
         Integer totalBidCount,
+        Long topBidderId,
         LocalDateTime occurredAt
 ) {
     /**
@@ -46,6 +48,7 @@ public record BidUpdateMessage(
                 event.getNextMinBidPrice(),
                 event.getBidIncrement(),
                 event.getTotalBidCount(),
+                event.getTopBidderId(),
                 event.getOccurredAt()
         );
     }

@@ -20,7 +20,7 @@ public class AuctionSpecification {
     /**
      * 검색 조건에 따른 Specification 생성
      *
-     * @param status  경매 상태 필터 (nullable)
+     * @param status  경매 상태 필터 (nullable - null이면 진행 중인 경매만 조회)
      * @param keyword 검색어 - 상품명 (nullable)
      * @return Specification
      */
@@ -30,7 +30,15 @@ public class AuctionSpecification {
 
             // status 필터링
             if (status != null) {
+                // 명시적으로 상태를 지정한 경우 해당 상태만 조회
                 predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            } else {
+                // status가 null이면 진행 중인 경매만 조회 (BIDDING, INSTANT_BUY_PENDING)
+                // 종료된 경매(ENDED, FAILED, CANCELLED)는 목록에서 제외
+                predicates.add(root.get("status").in(
+                        AuctionStatus.BIDDING,
+                        AuctionStatus.INSTANT_BUY_PENDING
+                ));
             }
 
             // keyword 검색 (title LIKE %keyword%)

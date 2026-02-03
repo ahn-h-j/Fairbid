@@ -60,7 +60,8 @@ public class BidService implements PlaceBidUseCase {
         Bid bid = Bid.create(command.auctionId(), command.bidderId(), result.newCurrentPrice(), command.bidType());
 
         // 4. 웹소켓 이벤트 발행 (실시간 알림) - BidResult에서 최신 값 사용
-        bidEventPublisher.publishBidPlaced(command.auctionId(), result);
+        // 입찰 성공한 사람이 곧 1순위 입찰자(topBidderId)
+        bidEventPublisher.publishBidPlaced(command.auctionId(), result, command.bidderId());
 
         // 5. RDB 동기화 (즉시 구매 여부에 따라 분기)
         if (Boolean.TRUE.equals(result.instantBuyActivated())) {

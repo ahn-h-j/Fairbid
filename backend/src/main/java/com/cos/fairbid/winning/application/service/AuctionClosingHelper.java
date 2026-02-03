@@ -4,9 +4,8 @@ import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.TopBidderInfo;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
-import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
-import com.cos.fairbid.bid.domain.Bid;
 import com.cos.fairbid.winning.application.port.out.AuctionClosedEventPublisherPort;
 import com.cos.fairbid.winning.domain.Winning;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Optional;
 
 /**
  * 경매 종료 헬퍼
@@ -31,7 +30,6 @@ public class AuctionClosingHelper {
 
     private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
-    private final BidRepositoryPort bidRepository;
     private final AuctionClosingProcessor closingProcessor;
     private final AuctionClosedEventPublisherPort eventPublisher;
 
@@ -54,11 +52,11 @@ public class AuctionClosingHelper {
             return;
         }
 
-        // 1. 상위 2개 입찰 조회
-        List<Bid> topBids = bidRepository.findTop2ByAuctionId(auctionId);
+        // 1. Redis에서 1순위 입찰자 정보 조회 (Single Source of Truth)
+        Optional<TopBidderInfo> topBidderOpt = auctionCachePort.getTopBidderInfo(auctionId);
 
-        // 2. 입찰이 없으면 유찰 처리
-        if (topBids.isEmpty()) {
+        // 2. 입찰자가 없으면 유찰 처리
+        if (topBidderOpt.isEmpty() || !topBidderOpt.get().isValid()) {
             closingProcessor.processNoWinner(auction);
             Auction savedAuction = auctionRepository.save(auction);
 
@@ -70,19 +68,20 @@ public class AuctionClosingHelper {
             return;
         }
 
-        // 3. 1순위 낙찰자 결정
-        Bid firstBid = topBids.get(0);
-        closingProcessor.processFirstRankWinner(auction, firstBid);
+        // 3. 1순위 낙찰자 결정 (Redis 기준)
+        TopBidderInfo topBidder = topBidderOpt.get();
+        closingProcessor.processFirstRankWinner(auction, topBidder);
 
         // 4. 2순위 후보 저장 (있는 경우, 1순위의 90% 이상인 경우만)
-        if (topBids.size() > 1) {
-            Bid secondBid = topBids.get(1);
-            double threshold = firstBid.getAmount() * Winning.AUTO_TRANSFER_THRESHOLD;
-            if (secondBid.getAmount() >= threshold) {
-                closingProcessor.saveSecondRankCandidate(auction, secondBid);
+        Optional<TopBidderInfo> secondBidderOpt = auctionCachePort.getSecondBidderInfo(auctionId);
+        if (secondBidderOpt.isPresent() && secondBidderOpt.get().isValid()) {
+            TopBidderInfo secondBidder = secondBidderOpt.get();
+            double threshold = topBidder.bidAmount() * Winning.AUTO_TRANSFER_THRESHOLD;
+            if (secondBidder.bidAmount() >= threshold) {
+                closingProcessor.saveSecondRankCandidate(auction, secondBidder);
             } else {
                 log.debug("2순위 후보 미달 (90% 미만) - auctionId: {}, 1순위: {}, 2순위: {}",
-                        auctionId, firstBid.getAmount(), secondBid.getAmount());
+                        auctionId, topBidder.bidAmount(), secondBidder.bidAmount());
             }
         }
 
@@ -95,7 +94,7 @@ public class AuctionClosingHelper {
         // 7. 종료 이벤트 발행
         eventPublisher.publishAuctionClosed(auctionId);
 
-        log.info("경매 종료 완료 - auctionId: {}, winnerId: {}", auctionId, firstBid.getBidderId());
+        log.info("경매 종료 완료 - auctionId: {}, winnerId: {}", auctionId, topBidder.bidderId());
     }
 
     /**
