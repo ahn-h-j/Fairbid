@@ -31,10 +31,16 @@ export default function AuctionDetailPage() {
 
   // 입찰 여부 추적 (localStorage 기반으로 새로고침해도 유지)
   const bidStorageKey = `bid_${auctionId}`;
-  const [hasBid, setHasBid] = useState(() => localStorage.getItem(bidStorageKey) === 'true');
+  const [hasBid, setHasBid] = useState(false);
 
   // 이전에 1순위였는지 추적 (WebSocket으로 밀렸을 때 감지용)
   const [wasFirstRank, setWasFirstRank] = useState(false);
+
+  // auctionId 변경 시 상태 재동기화
+  useEffect(() => {
+    setHasBid(localStorage.getItem(bidStorageKey) === 'true');
+    setWasFirstRank(false);
+  }, [bidStorageKey]);
 
   // 입찰 메시지 자동 해제 (3초)
   useEffect(() => {
