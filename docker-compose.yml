@@ -21,10 +21,10 @@ services:
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
-      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI:-}
-      NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-      COOKIE_SECURE: "false"
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI:-http://localhost:8080/api/v1/auth/oauth2/callback/kakao}
+      NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-http://localhost:8080/api/v1/auth/oauth2/callback/naver}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/v1/auth/oauth2/callback/google}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}
 
   # 프론트엔드 (nginx)
