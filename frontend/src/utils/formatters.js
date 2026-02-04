@@ -74,6 +74,30 @@ export function formatTransactionStatus(status) {
 }
 
 /**
+ * 숫자를 천단위 구분자가 있는 문자열로 변환 (입력 필드용)
+ * @param {string|number} value - 변환할 값
+ * @returns {string} 천단위 구분자가 추가된 문자열
+ */
+export function formatNumberInput(value) {
+  if (value === '' || value == null) return '';
+  // 숫자만 추출
+  const numericValue = String(value).replace(/[^0-9]/g, '');
+  if (numericValue === '') return '';
+  // 천단위 구분자 추가
+  return new Intl.NumberFormat('ko-KR').format(Number(numericValue));
+}
+
+/**
+ * 천단위 구분자가 있는 문자열에서 순수 숫자 추출
+ * @param {string} value - 천단위 구분자가 있는 문자열
+ * @returns {string} 숫자만 있는 문자열
+ */
+export function parseNumberInput(value) {
+  if (value === '' || value == null) return '';
+  return String(value).replace(/[^0-9]/g, '');
+}
+
+/**
  * 서버에서 반환한 날짜 문자열을 UTC Date 객체로 변환
  * 서버는 LocalDateTime을 타임존 없이 반환하므로, UTC로 해석한다.
  * @param {string} dateStr - 서버에서 반환한 날짜 문자열 (예: "2026-01-25T04:51:56")

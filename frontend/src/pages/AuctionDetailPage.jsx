@@ -12,7 +12,7 @@ import ImageGallery from '../components/ImageGallery';
 import Alert from '../components/Alert';
 import Spinner from '../components/Spinner';
 import { BID_TYPES } from '../utils/constants';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatNumberInput, parseNumberInput } from '../utils/formatters';
 
 /**
  * 경매 상세 페이지
@@ -329,11 +329,10 @@ export default function AuctionDetailPage() {
           <form onSubmit={handleDirectBid} className="flex gap-2">
             <div className="relative flex-1">
               <input
-                type="number"
-                value={bidAmount}
-                onChange={(e) => setBidAmount(e.target.value)}
+                type="text"
+                value={formatNumberInput(bidAmount)}
+                onChange={(e) => setBidAmount(parseNumberInput(e.target.value))}
                 placeholder={`최소 ${formatPrice(auction.nextMinBidPrice)}`}
-                min={auction.nextMinBidPrice}
                 className="w-full pl-4 pr-10 py-3 bg-gray-50 border-0 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 input-glow transition-all"
                 disabled={bidLoading}
                 inputMode="numeric"

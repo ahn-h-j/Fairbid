@@ -5,7 +5,7 @@ import Alert from '../components/Alert';
 import ImageUpload from '../components/ImageUpload';
 import Spinner from '../components/Spinner';
 import { CATEGORIES, DURATIONS } from '../utils/constants';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatNumberInput, parseNumberInput } from '../utils/formatters';
 
 /**
  * 경매 등록 페이지
@@ -34,6 +34,15 @@ export default function AuctionCreatePage() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setError(null);
+  };
+
+  // 금액 입력 핸들러 (천단위 구분자 처리)
+  const handlePriceChange = (e) => {
+    const { name, value } = e.target;
+    // 숫자만 추출하여 저장
+    const numericValue = parseNumberInput(value);
+    setFormData((prev) => ({ ...prev, [name]: numericValue }));
     setError(null);
   };
 
@@ -239,10 +248,9 @@ export default function AuctionCreatePage() {
                 <input
                   id="startPrice"
                   name="startPrice"
-                  type="number"
-                  min="1"
-                  value={formData.startPrice}
-                  onChange={handleChange}
+                  type="text"
+                  value={formatNumberInput(formData.startPrice)}
+                  onChange={handlePriceChange}
                   placeholder="0"
                   className="w-full pl-4 pr-10 py-3 bg-gray-50 border-0 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 input-glow transition-all"
                   required
@@ -261,10 +269,9 @@ export default function AuctionCreatePage() {
                 <input
                   id="instantBuyPrice"
                   name="instantBuyPrice"
-                  type="number"
-                  min="1"
-                  value={formData.instantBuyPrice}
-                  onChange={handleChange}
+                  type="text"
+                  value={formatNumberInput(formData.instantBuyPrice)}
+                  onChange={handlePriceChange}
                   placeholder="0"
                   className="w-full pl-4 pr-10 py-3 bg-gray-50 border-0 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 input-glow transition-all"
                   inputMode="numeric"
