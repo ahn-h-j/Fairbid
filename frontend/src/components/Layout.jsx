@@ -113,29 +113,34 @@ export default function Layout() {
                 </Link>
               )}
 
-              {/* 인증 영역: 로그인 상태에 따라 분기 */}
-              <div className="flex items-center gap-2 border-l border-gray-200/60 pl-3 ml-2">
+            </nav>
+            )}
+
+            {/* 인증 영역: 모바일/PC 모두 표시 */}
+            {!isOnboardingRequired && (
+              <div className="flex items-center gap-2 sm:border-l sm:border-gray-200/60 sm:pl-3 sm:ml-2">
                 {authState === AUTH_STATE.LOADING ? (
                   /* 로딩 중에는 빈 공간 (깜빡임 방지) */
-                  <div className="w-16 h-8" />
+                  <div className="w-8 h-8" />
                 ) : isLoggedIn ? (
-                  /* 로그인 상태: 알림 + 닉네임 드롭다운 */
+                  /* 로그인 상태: 알림 (+ PC에서만 닉네임 드롭다운) */
                   <>
                     <NotificationDropdown />
-                    <UserDropdown />
+                    <div className="hidden sm:block">
+                      <UserDropdown />
+                    </div>
                   </>
                 ) : (
-                  /* 비로그인 상태: 로그인 버튼 */
+                  /* 비로그인 상태: 로그인 버튼 (PC에서만) */
                   <Link
                     to="/login"
                     state={{ from: location.pathname + location.search + location.hash }}
-                    className="text-[13px] font-semibold px-4 py-2 text-white bg-gradient-to-r from-blue-500 to-violet-600 rounded-xl shadow-sm shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow duration-200"
+                    className="hidden sm:block text-[13px] font-semibold px-4 py-2 text-white bg-gradient-to-r from-blue-500 to-violet-600 rounded-xl shadow-sm shadow-blue-500/20 hover:shadow-blue-500/40 transition-shadow duration-200"
                   >
                     로그인
                   </Link>
                 )}
               </div>
-            </nav>
             )}
           </div>
         </div>
