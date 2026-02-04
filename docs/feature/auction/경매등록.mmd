@@ -26,7 +26,7 @@ participant Redis as Redis
         Policy-->>Domain: bidIncrement
 
         Domain->>Domain: endTime 계산 (24h/48h)
-        Domain->>Domain: status = ACTIVE
+        Domain->>Domain: status = BIDDING
     end
 
     rect rgb(240, 255, 240)

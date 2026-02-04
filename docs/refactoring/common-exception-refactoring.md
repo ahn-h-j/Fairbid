@@ -1,47 +1,51 @@
 # Common 모듈 예외 처리 리팩토링
 
-## 1. 개요
-
-도메인 예외 클래스들의 중복을 제거하고, GlobalExceptionHandler를 개선하여 유지보수성과 안정성을 향상시킴.
+> 📅 작업일: 2026-01-XX
+> 🎯 목표: 중복된 예외 핸들러 통합, 문자열 기반 검증을 타입 기반으로 개선
 
 ---
 
-## 2. 리팩토링 전 문제점
+## Before / After 요약
 
-### 2.1 도메인 예외 중복 (GlobalExceptionHandler)
+| 항목 | Before | After |
+|------|--------|-------|
+| 예외 핸들러 | 6개 (동일 패턴 반복) | 1개 (통합) |
+| Enum 검증 | 문자열 비교 (`contains`) | 타입 기반 (`targetType.isEnum()`) |
+| HTTP 상태 코드 | Handler에서 결정 | 각 예외 클래스에서 결정 |
 
-**문제점**:
-- 5개 도메인 예외가 거의 동일한 패턴으로 처리됨
-- 새로운 도메인 예외 추가 시 핸들러 메서드도 추가해야 함
+---
+
+## 1. 문제점 (Before)
+
+### 1.1 예외 핸들러 중복 - 동일 패턴 6번 반복
 
 ```java
-// Before - 이 패턴이 5번 반복
+// GlobalExceptionHandler.java - 이 패턴이 6번 반복됨
 @ExceptionHandler(InvalidAuctionException.class)
-public ResponseEntity<ApiResponse<Void>> handleInvalidAuctionException(InvalidAuctionException e) {
+public ResponseEntity<ApiResponse<Void>> handleInvalidAuctionException(
+        InvalidAuctionException e) {
     log.warn("InvalidAuctionException: {}", e.getMessage());
     return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST)
+            .status(HttpStatus.BAD_REQUEST)  // 여기만 다름
             .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
 }
 
 @ExceptionHandler(AuctionNotFoundException.class)
-public ResponseEntity<ApiResponse<Void>> handleAuctionNotFoundException(AuctionNotFoundException e) {
+public ResponseEntity<ApiResponse<Void>> handleAuctionNotFoundException(
+        AuctionNotFoundException e) {
     log.warn("AuctionNotFoundException: {}", e.getMessage());
     return ResponseEntity
             .status(HttpStatus.NOT_FOUND)  // 여기만 다름
             .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
 }
-// ... 3개 더
+
+// ... 4개 더 (BidTooLowException, InvalidBidException, ...)
 ```
 
-### 2.2 문자열 기반 Enum 검증 (불안정)
-
-**문제점**:
-- `causeMessage.contains("Category")` 방식으로 enum 타입 판별
-- 문자열 비교에 의존하여 리팩토링 시 오류 발생 가능
+### 1.2 Enum 검증 - 문자열 비교 (불안정)
 
 ```java
-// Before - 문자열 기반 판별 (불안정)
+// 문자열 포함 여부로 Enum 타입 판별 - 리팩토링 시 오류 가능
 if (causeMessage.contains("Category")) {
     String validValues = Arrays.stream(Category.values())...
 } else if (causeMessage.contains("AuctionDuration")) {
@@ -51,24 +55,18 @@ if (causeMessage.contains("Category")) {
 }
 ```
 
-### 2.3 응답 생성 코드 반복
-
-**문제점**:
-- `ResponseEntity.status().body()` 패턴이 모든 핸들러에서 반복
-- 응답 형식 변경 시 모든 메서드 수정 필요
-
 ---
 
-## 3. 리팩토링 내용
+## 2. 해결책 (After)
 
-### 3.1 DomainException 베이스 클래스 생성
+### 2.1 DomainException 베이스 클래스
 
-모든 도메인 예외가 상속받는 추상 클래스 생성.
+모든 도메인 예외가 상속, HTTP 상태 코드를 각 예외가 결정:
 
 ```java
-// common/exception/DomainException.java
 @Getter
 public abstract class DomainException extends RuntimeException {
+
     private final String errorCode;
 
     protected DomainException(String errorCode, String message) {
@@ -76,27 +74,18 @@ public abstract class DomainException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
-    /**
-     * HTTP 상태 코드를 반환한다
-     * 각 예외 클래스에서 오버라이드하여 적절한 상태 코드 지정
-     */
+    // 각 예외 클래스에서 오버라이드
     public abstract HttpStatus getStatus();
 }
 ```
 
-### 3.2 기존 예외 클래스 수정
-
-각 도메인 예외가 DomainException을 상속하고 `getStatus()` 구현.
+### 2.2 도메인 예외 클래스 - DomainException 상속
 
 ```java
 // Before
 public class InvalidAuctionException extends RuntimeException {
     private final String errorCode;
-
-    private InvalidAuctionException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
-    }
+    // ...
 }
 
 // After
@@ -108,56 +97,21 @@ public class InvalidAuctionException extends DomainException {
 
     @Override
     public HttpStatus getStatus() {
-        return HttpStatus.BAD_REQUEST;
+        return HttpStatus.BAD_REQUEST;  // 예외가 자신의 상태 코드 결정
     }
 }
 ```
 
-### 3.3 GlobalExceptionHandler 단일 핸들러로 통합
-
-5개의 개별 핸들러를 1개로 통합.
+### 2.3 GlobalExceptionHandler - 단일 핸들러로 통합
 
 ```java
-// After - 단일 핸들러
+// After - 6개 → 1개로 통합
 @ExceptionHandler(DomainException.class)
 public ResponseEntity<ApiResponse<Void>> handleDomainException(DomainException e) {
     log.warn("{}: {}", e.getClass().getSimpleName(), e.getMessage());
     return errorResponse(e.getStatus(), e.getErrorCode(), e.getMessage());
 }
-```
 
-### 3.4 문자열 기반 → 타입 기반 Enum 검증
-
-`InvalidFormatException`에서 타입 정보를 직접 추출.
-
-```java
-// Before - 문자열 기반 (불안정)
-if (causeMessage.contains("Category")) { ... }
-
-// After - 타입 기반 (안정)
-if (cause instanceof InvalidFormatException invalidFormat) {
-    Class<?> targetType = invalidFormat.getTargetType();
-    if (targetType != null && targetType.isEnum()) {
-        String description = ENUM_DESCRIPTIONS.getOrDefault(enumType, "값");
-        String validValues = getEnumValidValues(enumType);
-        message = "유효하지 않은 " + description + "입니다. 허용 값: " + validValues;
-    }
-}
-```
-
-### 3.5 유틸리티 메서드 추출
-
-Enum 값 조회와 응답 생성 로직을 메서드로 분리.
-
-```java
-// Enum 값 조회 유틸리티
-private String getEnumValidValues(Class<? extends Enum<?>> enumClass) {
-    return Arrays.stream(enumClass.getEnumConstants())
-            .map(Enum::name)
-            .collect(Collectors.joining(", "));
-}
-
-// 응답 생성 헬퍼
 private ResponseEntity<ApiResponse<Void>> errorResponse(
         HttpStatus status, String errorCode, String message) {
     return ResponseEntity
@@ -166,92 +120,58 @@ private ResponseEntity<ApiResponse<Void>> errorResponse(
 }
 ```
 
----
+### 2.4 Enum 검증 - 타입 기반으로 개선
 
-## 4. 파일 변경 요약
+```java
+// After - 타입 정보 직접 사용 (안정적)
+if (cause instanceof InvalidFormatException invalidFormat) {
+    Class<?> targetType = invalidFormat.getTargetType();
+    if (targetType != null && targetType.isEnum()) {
+        String validValues = getEnumValidValues((Class<? extends Enum<?>>) targetType);
+        message = "유효하지 않은 값입니다. 허용 값: " + validValues;
+    }
+}
 
-### 4.1 신규 파일 (1개)
-
-| 파일 경로 | 역할 |
-|----------|------|
-| `common/exception/DomainException.java` | 도메인 예외 베이스 클래스 |
-
-### 4.2 수정 파일 (8개)
-
-| 파일 경로 | 변경 내용 |
-|----------|----------|
-| `auction/domain/exception/InvalidAuctionException.java` | DomainException 상속, `getStatus()` 구현 |
-| `auction/domain/exception/AuctionNotFoundException.java` | DomainException 상속, `getStatus()` 구현 |
-| `bid/domain/exception/AuctionEndedException.java` | DomainException 상속, `getStatus()` 구현 |
-| `bid/domain/exception/BidTooLowException.java` | DomainException 상속, `getStatus()` 구현 |
-| `bid/domain/exception/InvalidBidException.java` | DomainException 상속, `getStatus()` 구현 |
-| `bid/domain/exception/SelfBidNotAllowedException.java` | DomainException 상속, `getStatus()` 구현 |
-| `winning/domain/exception/WinningNotFoundException.java` | DomainException 상속, `getStatus()` 구현, errorCode 추가 |
-| `common/exception/GlobalExceptionHandler.java` | 단일 핸들러 통합, 유틸리티 메서드 추출 |
-
----
-
-## 5. 예외별 HTTP 상태 코드 매핑
-
-| 예외 클래스 | HTTP 상태 코드 | 설명 |
-|------------|---------------|------|
-| `InvalidAuctionException` | 400 BAD_REQUEST | 경매 검증 실패 |
-| `AuctionNotFoundException` | 404 NOT_FOUND | 경매 없음 |
-| `AuctionEndedException` | 400 BAD_REQUEST | 종료된 경매 |
-| `BidTooLowException` | 400 BAD_REQUEST | 입찰가 부족 |
-| `InvalidBidException` | 400 BAD_REQUEST | 입찰 검증 실패 |
-| `SelfBidNotAllowedException` | 403 FORBIDDEN | 본인 경매 입찰 |
-| `WinningNotFoundException` | 404 NOT_FOUND | 낙찰 정보 없음 |
-
----
-
-## 6. 구조 다이어그램
-
-### 리팩토링 전
-
-```
-GlobalExceptionHandler
-    ├── handleInvalidAuctionException()     → BAD_REQUEST
-    ├── handleAuctionNotFoundException()    → NOT_FOUND
-    ├── handleAuctionEndedException()       → BAD_REQUEST
-    ├── handleBidTooLowException()          → BAD_REQUEST
-    ├── handleInvalidBidException()         → BAD_REQUEST
-    └── handleSelfBidNotAllowedException()  → FORBIDDEN
-```
-
-### 리팩토링 후
-
-```
-DomainException (abstract)
-    ├── getErrorCode()
-    └── getStatus() ← 각 예외가 구현
-            │
-            ├── InvalidAuctionException    → BAD_REQUEST
-            ├── AuctionNotFoundException   → NOT_FOUND
-            ├── AuctionEndedException      → BAD_REQUEST
-            ├── BidTooLowException         → BAD_REQUEST
-            ├── InvalidBidException        → BAD_REQUEST
-            ├── SelfBidNotAllowedException → FORBIDDEN
-            └── WinningNotFoundException   → NOT_FOUND
-
-GlobalExceptionHandler
-    └── handleDomainException(DomainException e)
-            → e.getStatus() 사용
+private String getEnumValidValues(Class<? extends Enum<?>> enumClass) {
+    return Arrays.stream(enumClass.getEnumConstants())
+            .map(Enum::name)
+            .collect(Collectors.joining(", "));
+}
 ```
 
 ---
 
-## 7. 확장성
+## 3. 개선 효과
+
+| 측면 | 개선 내용 |
+|------|----------|
+| **DRY** | 중복 핸들러 6개 → 1개 |
+| **OCP** | 새 예외 추가 시 Handler 수정 불필요 |
+| **안정성** | 문자열 비교 → 타입 기반으로 리팩토링 내성 강화 |
+
+---
+
+## 4. 예외별 HTTP 상태 코드 매핑
+
+| 예외 클래스 | HTTP 상태 | 설명 |
+|------------|----------|------|
+| `InvalidAuctionException` | 400 | 경매 검증 실패 |
+| `AuctionNotFoundException` | 404 | 경매 없음 |
+| `AuctionEndedException` | 400 | 종료된 경매 |
+| `BidTooLowException` | 400 | 입찰가 부족 |
+| `InvalidBidException` | 400 | 입찰 검증 실패 |
+| `SelfBidNotAllowedException` | 403 | 본인 경매 입찰 |
+| `WinningNotFoundException` | 404 | 낙찰 정보 없음 |
+
+---
+
+## 5. 확장 예시
 
 새로운 도메인 예외 추가 시:
 
 ```java
-// 1. DomainException 상속한 예외 클래스 생성
+// 1. DomainException 상속한 예외 클래스만 생성
 public class PaymentFailedException extends DomainException {
-
-    private PaymentFailedException(String errorCode, String message) {
-        super(errorCode, message);
-    }
 
     @Override
     public HttpStatus getStatus() {
@@ -263,19 +183,28 @@ public class PaymentFailedException extends DomainException {
     }
 }
 
-// 2. GlobalExceptionHandler 수정 불필요 - 자동으로 처리됨
+// 2. GlobalExceptionHandler 수정 불필요 - 자동으로 처리됨 ✓
 ```
 
 ---
 
-## 8. 검증
+## 6. 파일 변경 요약
 
-```bash
-# Cucumber 테스트 실행
-./gradlew test --tests "com.cos.fairbid.cucumber.CucumberTestRunner"
+### 신규 파일 (1개)
 
-# 전체 빌드
-./gradlew build
-```
+| 파일 | 역할 |
+|------|------|
+| `common/exception/DomainException.java` | 도메인 예외 베이스 클래스 |
 
-모든 테스트 통과 확인 완료.
+### 수정 파일 (8개)
+
+| 파일 | 변경 |
+|------|------|
+| `InvalidAuctionException.java` | DomainException 상속, `getStatus()` 구현 |
+| `AuctionNotFoundException.java` | DomainException 상속, `getStatus()` 구현 |
+| `AuctionEndedException.java` | DomainException 상속, `getStatus()` 구현 |
+| `BidTooLowException.java` | DomainException 상속, `getStatus()` 구현 |
+| `InvalidBidException.java` | DomainException 상속, `getStatus()` 구현 |
+| `SelfBidNotAllowedException.java` | DomainException 상속, `getStatus()` 구현 |
+| `WinningNotFoundException.java` | DomainException 상속, `getStatus()` 구현 |
+| `GlobalExceptionHandler.java` | 단일 핸들러 통합, 타입 기반 검증 |
