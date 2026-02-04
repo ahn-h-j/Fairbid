@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useAuth, AUTH_STATE } from '../contexts/AuthContext';
 import UserDropdown from './UserDropdown';
 import NotificationDropdown from './NotificationDropdown';
@@ -7,6 +7,7 @@ import NotificationDropdown from './NotificationDropdown';
  * 앱 전체 레이아웃 컴포넌트
  * 글래스 모피즘 헤더 + 그라데이션 배경 + 메인 콘텐츠 영역
  * 인증 상태에 따라 헤더 우측 UI가 변경된다.
+ * 온보딩 미완료 시 /onboarding 외 페이지 접근을 차단한다.
  */
 export default function Layout() {
   const location = useLocation();
@@ -16,6 +17,12 @@ export default function Layout() {
 
   const isLoggedIn =
     authState === AUTH_STATE.AUTHENTICATED || authState === AUTH_STATE.ONBOARDING_REQUIRED;
+
+  // 온보딩 필요 상태인데 /onboarding이 아니면 강제 리다이렉트
+  const isOnboardingRequired = authState === AUTH_STATE.ONBOARDING_REQUIRED;
+  if (isOnboardingRequired && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -42,7 +49,8 @@ export default function Layout() {
               </div>
             </Link>
 
-            {/* 네비게이션 */}
+            {/* 네비게이션: 온보딩 중에는 숨김 */}
+            {!isOnboardingRequired && (
             <nav className="flex items-center gap-1">
               <Link
                 to="/"
@@ -128,6 +136,7 @@ export default function Layout() {
                 )}
               </div>
             </nav>
+            )}
           </div>
         </div>
       </header>
