@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../api/client';
+import { formatPhoneInput } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 
 /**
@@ -275,7 +276,7 @@ export default function MyPage() {
               <input
                 type="tel"
                 value={addressForm.recipientPhone}
-                onChange={(e) => setAddressForm({ ...addressForm, recipientPhone: e.target.value })}
+                onChange={(e) => setAddressForm({ ...addressForm, recipientPhone: formatPhoneInput(e.target.value) })}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                 placeholder="010-1234-5678"
               />

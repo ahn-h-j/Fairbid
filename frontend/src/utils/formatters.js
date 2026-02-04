@@ -98,6 +98,28 @@ export function parseNumberInput(value) {
 }
 
 /**
+ * 전화번호에 하이픈 자동 추가 (입력 필드용)
+ * @param {string} value - 입력값
+ * @returns {string} 하이픈이 추가된 전화번호
+ */
+export function formatPhoneInput(value) {
+  if (!value) return '';
+  // 숫자만 추출
+  const numbers = value.replace(/[^0-9]/g, '');
+  // 최대 11자리
+  const limited = numbers.slice(0, 11);
+
+  // 하이픈 추가
+  if (limited.length <= 3) {
+    return limited;
+  } else if (limited.length <= 7) {
+    return `${limited.slice(0, 3)}-${limited.slice(3)}`;
+  } else {
+    return `${limited.slice(0, 3)}-${limited.slice(3, 7)}-${limited.slice(7)}`;
+  }
+}
+
+/**
  * 서버에서 반환한 날짜 문자열을 UTC Date 객체로 변환
  * 서버는 LocalDateTime을 타임존 없이 반환하므로, UTC로 해석한다.
  * @param {string} dateStr - 서버에서 반환한 날짜 문자열 (예: "2026-01-25T04:51:56")
