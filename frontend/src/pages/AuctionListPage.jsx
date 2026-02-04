@@ -4,6 +4,7 @@ import { useAuctions } from '../api/useAuctions';
 import AuctionCard from '../components/AuctionCard';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
+import SplashScreen from '../components/SplashScreen';
 import { CATEGORIES, STATUSES } from '../utils/constants';
 
 /**
@@ -11,6 +12,17 @@ import { CATEGORIES, STATUSES } from '../utils/constants';
  * 필터(상태, 카테고리), 정렬, 검색, 페이지네이션을 URL 쿼리 파라미터로 관리한다.
  */
 export default function AuctionListPage() {
+  // 세션당 한 번만 스플래시 표시 (sessionStorage 사용)
+  const [showSplash, setShowSplash] = useState(() => {
+    return !sessionStorage.getItem('fairbid_splash_shown');
+  });
+
+  // 스플래시 완료 처리
+  const handleSplashComplete = () => {
+    sessionStorage.setItem('fairbid_splash_shown', 'true');
+    setShowSplash(false);
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const keywordParam = searchParams.get('keyword') || '';
   const [searchInput, setSearchInput] = useState(keywordParam);
@@ -49,6 +61,11 @@ export default function AuctionListPage() {
     e.preventDefault();
     updateParams({ keyword: searchInput });
   };
+
+  // 스플래시 화면 표시 중이면 스플래시만 렌더링
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

@@ -37,7 +37,7 @@ export default function Layout() {
         <div className="max-w-6xl mx-auto px-5 sm:px-8" style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left, 0px))', paddingRight: 'max(1.25rem, env(safe-area-inset-right, 0px))' }}>
           <div className="flex items-center justify-between h-[56px] sm:h-[64px]">
             {/* 로고 */}
-            <Link to="/" className="flex items-center gap-3 group">
+            <Link to="/auctions" className="flex items-center gap-3 group">
               <div className="relative w-9 h-9 bg-gradient-to-br from-blue-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow duration-300">
                 <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -49,18 +49,20 @@ export default function Layout() {
               </div>
             </Link>
 
-            {/* 네비게이션: 온보딩 중에는 숨김, 모바일에서는 하단 탭 바 사용 */}
-            {!isOnboardingRequired && (
-            <nav className="hidden sm:flex items-center gap-1">
+            {/* 네비게이션 + 인증 영역 (오른쪽) */}
+            <div className="flex items-center">
+              {/* 네비게이션: 온보딩 중에는 숨김, 모바일에서는 하단 탭 바 사용 */}
+              {!isOnboardingRequired && (
+              <nav className="hidden sm:flex items-center gap-1">
               <Link
-                to="/"
+                to="/auctions"
                 className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
-                  isActive('/')
+                  isActive('/auctions')
                     ? 'text-blue-600 bg-blue-50/80'
                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/60'
                 }`}
               >
-                {isActive('/') && (
+                {isActive('/auctions') && (
                   <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-blue-500 rounded-full" />
                 )}
                 <span className="hidden sm:inline">경매 </span>목록
@@ -113,11 +115,11 @@ export default function Layout() {
                 </Link>
               )}
 
-            </nav>
-            )}
+              </nav>
+              )}
 
-            {/* 인증 영역: 모바일/PC 모두 표시 */}
-            {!isOnboardingRequired && (
+              {/* 인증 영역: 모바일/PC 모두 표시 */}
+              {!isOnboardingRequired && (
               <div className="flex items-center gap-2 sm:border-l sm:border-gray-200/60 sm:pl-3 sm:ml-2">
                 {authState === AUTH_STATE.LOADING ? (
                   /* 로딩 중에는 빈 공간 (깜빡임 방지) */
@@ -141,7 +143,8 @@ export default function Layout() {
                   </Link>
                 )}
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -155,17 +158,17 @@ export default function Layout() {
       {!isOnboardingRequired && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden glass border-t border-white/60" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-around h-16 px-2">
-            {/* 홈 */}
+            {/* 경매 목록 */}
             <Link
-              to="/"
+              to="/auctions"
               className={`flex flex-col items-center justify-center flex-1 py-2 ${
-                isActive('/') ? 'text-blue-600' : 'text-gray-400'
+                isActive('/auctions') ? 'text-blue-600' : 'text-gray-400'
               }`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <span className="text-[10px] font-medium mt-1">홈</span>
+              <span className="text-[10px] font-medium mt-1">경매</span>
             </Link>
 
             {/* 등록 */}

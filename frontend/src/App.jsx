@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
-import SplashScreen from './components/SplashScreen';
+import LandingPage from './pages/LandingPage';
 import AuctionListPage from './pages/AuctionListPage';
 import AuctionDetailPage from './pages/AuctionDetailPage';
 import AuctionCreatePage from './pages/AuctionCreatePage';
@@ -23,29 +22,18 @@ import UserManagePage from './pages/admin/UserManagePage';
 /**
  * 앱 루트 컴포넌트
  * AuthProvider로 인증 상태를 전역 관리하고, React Router v7로 SPA 라우팅을 구성한다.
- * 초기 접속 시 스플래시 화면을 표시한다.
  */
 export default function App() {
-  // 세션당 한 번만 스플래시 표시 (sessionStorage 사용)
-  const [showSplash, setShowSplash] = useState(() => {
-    return !sessionStorage.getItem('fairbid_splash_shown');
-  });
-
-  // 스플래시 완료 처리
-  const handleSplashComplete = () => {
-    sessionStorage.setItem('fairbid_splash_shown', 'true');
-    setShowSplash(false);
-  };
-
   return (
     <BrowserRouter>
-      {/* 스플래시 화면 (세션당 최초 1회만 표시) */}
-      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <AuthProvider>
         <Routes>
+          {/* 랜딩 페이지 (Layout 없이) */}
+          <Route path="/" element={<LandingPage />} />
+
           <Route element={<Layout />}>
             {/* 공개 라우트 */}
-            <Route path="/" element={<AuctionListPage />} />
+            <Route path="/auctions" element={<AuctionListPage />} />
             <Route path="/auctions/:id" element={<AuctionDetailPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
