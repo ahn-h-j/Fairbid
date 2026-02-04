@@ -357,8 +357,18 @@ export default function MyPage() {
         )}
       </section>
 
-      {/* 회원 탈퇴 */}
-      <div className="text-center pb-8">
+      {/* 로그아웃 & 회원 탈퇴 */}
+      <div className="flex flex-col items-center gap-3 pb-8">
+        <button
+          type="button"
+          onClick={async () => {
+            await logout();
+            navigate('/', { replace: true });
+          }}
+          className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+        >
+          로그아웃
+        </button>
         <button
           type="button"
           onClick={() => setShowDeleteModal(true)}

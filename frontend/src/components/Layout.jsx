@@ -49,9 +49,9 @@ export default function Layout() {
               </div>
             </Link>
 
-            {/* 네비게이션: 온보딩 중에는 숨김 */}
+            {/* 네비게이션: 온보딩 중에는 숨김, 모바일에서는 하단 탭 바 사용 */}
             {!isOnboardingRequired && (
-            <nav className="flex items-center gap-1">
+            <nav className="hidden sm:flex items-center gap-1">
               <Link
                 to="/"
                 className={`relative text-[13px] font-semibold px-4 py-2 rounded-xl transition-colors duration-200 ${
@@ -142,9 +142,99 @@ export default function Layout() {
       </header>
 
       {/* 메인 콘텐츠 */}
-      <main className="max-w-6xl mx-auto px-5 sm:px-8 py-8">
+      <main className="max-w-6xl mx-auto px-5 sm:px-8 py-8 pb-24 sm:pb-8">
         <Outlet />
       </main>
+
+      {/* 모바일 하단 탭 바: 온보딩 중에는 숨김 */}
+      {!isOnboardingRequired && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden glass border-t border-white/60" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="flex items-center justify-around h-16 px-2">
+            {/* 홈 */}
+            <Link
+              to="/"
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${
+                isActive('/') ? 'text-blue-600' : 'text-gray-400'
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="text-[10px] font-medium mt-1">홈</span>
+            </Link>
+
+            {/* 등록 */}
+            <Link
+              to="/auctions/create"
+              className={`flex flex-col items-center justify-center flex-1 py-2 ${
+                isActive('/auctions/create') ? 'text-blue-600' : 'text-gray-400'
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="text-[10px] font-medium mt-1">등록</span>
+            </Link>
+
+            {/* 거래 (로그인 시) */}
+            {isLoggedIn && (
+              <Link
+                to="/trades"
+                className={`flex flex-col items-center justify-center flex-1 py-2 ${
+                  location.pathname.startsWith('/trades') ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span className="text-[10px] font-medium mt-1">거래</span>
+              </Link>
+            )}
+
+            {/* 관리자 (ADMIN일 때) */}
+            {user?.role === 'ADMIN' && (
+              <Link
+                to="/admin"
+                className={`flex flex-col items-center justify-center flex-1 py-2 ${
+                  location.pathname.startsWith('/admin') ? 'text-violet-600' : 'text-gray-400'
+                }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-[10px] font-medium mt-1">관리</span>
+              </Link>
+            )}
+
+            {/* 마이페이지 / 로그인 */}
+            {isLoggedIn ? (
+              <Link
+                to="/mypage"
+                className={`flex flex-col items-center justify-center flex-1 py-2 ${
+                  isActive('/mypage') ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-[10px] font-medium mt-1">MY</span>
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                state={{ from: location.pathname + location.search + location.hash }}
+                className="flex flex-col items-center justify-center flex-1 py-2 text-gray-400"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                <span className="text-[10px] font-medium mt-1">로그인</span>
+              </Link>
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
