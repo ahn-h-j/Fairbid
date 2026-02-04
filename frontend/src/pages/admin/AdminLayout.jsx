@@ -31,9 +31,30 @@ export default function AdminLayout() {
   ];
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)]">
-      {/* 사이드바 */}
-      <aside className="w-56 bg-white/80 backdrop-blur-sm border-r border-gray-200/60 flex-shrink-0">
+    <div className="flex flex-col sm:flex-row min-h-[calc(100vh-64px)]">
+      {/* 모바일: 상단 수평 탭 */}
+      <nav className="sm:hidden flex items-center gap-1 p-3 bg-white/80 backdrop-blur-sm border-b border-gray-200/60 overflow-x-auto">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) =>
+              `flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold whitespace-nowrap transition-colors ${
+                isActive
+                  ? 'bg-violet-100 text-violet-700'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`
+            }
+          >
+            <item.icon className="w-4 h-4" />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* PC: 사이드바 */}
+      <aside className="hidden sm:block w-56 bg-white/80 backdrop-blur-sm border-r border-gray-200/60 flex-shrink-0">
         <nav className="p-4 space-y-1">
           <div className="px-3 py-2 mb-4">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">관리자</h2>
@@ -59,7 +80,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* 메인 콘텐츠 */}
-      <main className="flex-1 p-6 bg-gray-50/50">
+      <main className="flex-1 p-4 sm:p-6 bg-gray-50/50">
         <Outlet />
       </main>
     </div>

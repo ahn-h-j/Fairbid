@@ -65,7 +65,7 @@ export default function UserManagePage() {
       </div>
 
       {/* 검색 */}
-      <form onSubmit={handleSearch} className="flex gap-3">
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           type="text"
           value={keyword}
@@ -88,8 +88,42 @@ export default function UserManagePage() {
         </div>
       )}
 
-      {/* 테이블 */}
-      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 overflow-hidden">
+      {/* 모바일: 카드 리스트 */}
+      <div className="sm:hidden space-y-3">
+        {loading ? (
+          <div className="py-12 text-center"><LoadingSpinner /></div>
+        ) : users.length === 0 ? (
+          <div className="py-12 text-center text-gray-400 text-sm">유저가 없습니다</div>
+        ) : (
+          users.map((user) => (
+            <div key={user.id} className="bg-white rounded-xl p-4 ring-1 ring-gray-100 shadow-sm">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{user.nickname || '-'}</span>
+                    {!user.isOnboarded && (
+                      <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">미완료</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">#{user.id} · {user.email}</p>
+                </div>
+                <StatusBadge isBlocked={user.isBlocked} isActive={user.isActive} />
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <ProviderBadge provider={user.provider} />
+                <RoleBadge role={user.role} />
+                {user.warningCount > 0 && (
+                  <span className="text-red-600 font-semibold">경고 {user.warningCount}/3</span>
+                )}
+                <span className="text-gray-400 ml-auto">{formatDate(user.createdAt)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* PC: 테이블 */}
+      <div className="hidden sm:block bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">

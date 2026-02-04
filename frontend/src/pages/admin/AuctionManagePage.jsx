@@ -119,7 +119,7 @@ export default function AuctionManagePage() {
       </div>
 
       {/* 검색/필터 */}
-      <form onSubmit={handleSearch} className="flex gap-3">
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           type="text"
           value={keyword}
@@ -127,23 +127,25 @@ export default function AuctionManagePage() {
           placeholder="경매 제목 검색..."
           className="flex-1 px-4 py-2.5 bg-white rounded-xl ring-1 ring-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
-        <select
-          value={status}
-          onChange={handleStatusChange}
-          className="px-4 py-2.5 bg-white rounded-xl ring-1 ring-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="">전체 상태</option>
-          <option value="BIDDING">진행중</option>
-          <option value="ENDED">낙찰</option>
-          <option value="FAILED">유찰</option>
-          <option value="CANCELLED">취소</option>
-        </select>
-        <button
-          type="submit"
-          className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
-        >
-          검색
-        </button>
+        <div className="flex gap-2">
+          <select
+            value={status}
+            onChange={handleStatusChange}
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-white rounded-xl ring-1 ring-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">전체 상태</option>
+            <option value="BIDDING">진행중</option>
+            <option value="ENDED">낙찰</option>
+            <option value="FAILED">유찰</option>
+            <option value="CANCELLED">취소</option>
+          </select>
+          <button
+            type="submit"
+            className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+          >
+            검색
+          </button>
+        </div>
       </form>
 
       {/* 에러 표시 */}
@@ -184,8 +186,66 @@ export default function AuctionManagePage() {
         </div>
       )}
 
-      {/* 테이블 */}
-      <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 overflow-hidden">
+      {/* 모바일: 카드 리스트 */}
+      <div className="sm:hidden space-y-3">
+        {loading ? (
+          <div className="py-12 text-center"><LoadingSpinner /></div>
+        ) : auctions.length === 0 ? (
+          <div className="py-12 text-center text-gray-400 text-sm">경매가 없습니다</div>
+        ) : (
+          auctions.map((auction) => (
+            <div key={auction.id} className="bg-white rounded-xl p-4 ring-1 ring-gray-100 shadow-sm">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{auction.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">#{auction.id} · {auction.sellerNickname}</p>
+                </div>
+                <StatusBadge status={auction.status} />
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <div>
+                  <span className="text-gray-500">현재가</span>
+                  <span className="font-semibold text-gray-900 ml-1">{auction.currentPrice.toLocaleString()}원</span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  입찰 {auction.totalBidCount} · 연장 {auction.extensionCount || 0}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                <Link
+                  to={`/auctions/${auction.id}`}
+                  className="flex-1 py-2 text-center bg-indigo-50 text-indigo-600 text-xs font-medium rounded-lg"
+                >
+                  보기
+                </Link>
+                {auction.status === 'ENDED' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleCheckWinningStatus(auction.id)}
+                      disabled={noShowLoading === auction.id}
+                      className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg disabled:opacity-50"
+                    >
+                      상태
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleForceNoShow(auction.id)}
+                      disabled={noShowLoading === auction.id}
+                      className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-medium rounded-lg disabled:opacity-50"
+                    >
+                      {noShowLoading === auction.id ? '...' : '노쇼'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* PC: 테이블 */}
+      <div className="hidden sm:block bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 border-b border-gray-100">
