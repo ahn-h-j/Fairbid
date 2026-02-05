@@ -235,18 +235,11 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 인증되지 않은 사용자 예외 처리
-     * SecurityUtils.getCurrentUserId()에서 발생
-     * HTTP 401 Unauthorized
+     * 잘못된 상태 예외 처리
+     * HTTP 500 Internal Server Error
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalStateException(IllegalStateException e) {
-        // 인증 관련 메시지인 경우 401 반환
-        if (e.getMessage() != null && e.getMessage().contains("인증된 사용자")) {
-            log.warn("Unauthorized access attempt: {}", e.getMessage());
-            return errorResponse(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "로그인이 필요합니다.");
-        }
-        // 그 외는 500 처리
         log.error("IllegalStateException: {}", e.getMessage());
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다.");
     }
