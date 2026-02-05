@@ -62,7 +62,7 @@
 **시나리오**:
 ```bash
 # Redis 강제 종료
-docker kill fairbid-redis
+docker kill redis-master
 
 # 서비스 요청
 curl -X POST http://localhost:8080/api/bids
@@ -91,10 +91,14 @@ services:
   
   redis-slave-1:
     image: redis:7
+    ports:
+      - "6380:6379"
     command: redis-server --replicaof redis-master 6379
-  
+
   redis-slave-2:
     image: redis:7
+    ports:
+      - "6381:6379"
     command: redis-server --replicaof redis-master 6379
 ```
 
@@ -173,17 +177,27 @@ services:
     
   sentinel-1:
     image: redis:7
+    ports:
+      - "26379:26379"
     command: redis-sentinel /etc/sentinel.conf
     volumes:
       - ./sentinel.conf:/etc/sentinel.conf
-      
+
   sentinel-2:
     image: redis:7
+    ports:
+      - "26380:26379"
     command: redis-sentinel /etc/sentinel.conf
-    
+    volumes:
+      - ./sentinel.conf:/etc/sentinel.conf
+
   sentinel-3:
     image: redis:7
+    ports:
+      - "26381:26379"
     command: redis-sentinel /etc/sentinel.conf
+    volumes:
+      - ./sentinel.conf:/etc/sentinel.conf
 ```
 ```
 # sentinel.conf

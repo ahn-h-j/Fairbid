@@ -9,7 +9,7 @@ participant Redis as Redis
 
     Note over User, Redis: [인앱 알림 시스템]<br/>- Redis 저장 (24시간 TTL)<br/>- UUID 기반 알림 ID<br/>- 최신순 정렬, 최대 50개
 
-    Note over User, Redis: [알림 유형 (NotificationType)]<br/>WINNING - 낙찰 축하<br/>TRANSFER - 2순위 승계<br/>FAILED - 경매 유찰<br/>RESPONSE_REMINDER - 응답 기한 임박<br/>SECOND_RANK_STANDBY - 2순위 후보 등록<br/>NO_SHOW_PENALTY - 노쇼 처리<br/>METHOD_SELECTED - 거래 방식 선택<br/>ARRANGEMENT_PROPOSED - 거래 일정 제안<br/>ARRANGEMENT_COUNTER_PROPOSED - 역제안<br/>ARRANGEMENT_ACCEPTED - 일정 수락<br/>DELIVERY_ADDRESS_SUBMITTED - 배송지 제출<br/>DELIVERY_SHIPPED - 발송 완료<br/>TRADE_COMPLETED - 거래 완료
+    Note over User, Redis: [알림 유형 (NotificationType)]<br/>WINNING - 낙찰 축하<br/>TRANSFER - 2순위 승계<br/>FAILED - 경매 유찰<br/>RESPONSE_REMINDER - 응답 기한 임박<br/>SECOND_RANK_STANDBY - 2순위 후보 등록<br/>NO_SHOW_PENALTY - 노쇼 처리<br/>METHOD_SELECTED - 거래 방식 선택<br/>ARRANGEMENT_PROPOSED - 거래 일정 제안<br/>ARRANGEMENT_COUNTER_PROPOSED - 역제안<br/>ARRANGEMENT_ACCEPTED - 일정 수락<br/>DELIVERY_ADDRESS_SUBMITTED - 배송지 제출<br/>DELIVERY_SHIPPED - 발송 완료<br/>TRADE_COMPLETED - 거래 완료<br/>PAYMENT_CONFIRMED - 입금 완료<br/>PAYMENT_VERIFIED - 입금 확인<br/>PAYMENT_REJECTED - 미입금 처리
 
     %% 알림 목록 조회
     rect rgb(235, 245, 255)

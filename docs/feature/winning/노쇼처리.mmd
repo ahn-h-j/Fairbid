@@ -13,7 +13,7 @@ actor User1 as 1순위 (노쇼)
 actor User2 as 2순위
 
     Note over Sched: 주기적 실행 (Scheduled)
-    Note over Sched, User2: [비즈니스 규칙]<br/>- 낙찰 후 24시간 내 거래 조율 응답 필수<br/>- 미응답 시 노쇼 처리 (1회 경고)<br/>- 3회 누적 경고 시 계정 차단<br/>- 1순위 노쇼 시 2순위 자동 승계 (12시간 기한)
+    Note over Sched, User2: [비즈니스 규칙]<br/>- 낙찰 후 24시간 내 거래 조율 응답 필수<br/>- 미응답 시 노쇼 처리 (1회 경고)<br/>- 3회 누적 경고 시 계정 차단<br/>- 1순위 노쇼 시 2순위 자동 승계 (12시간 기한)<br/>- 2순위 승계 조건: 입찰가 ≥ 1순위 입찰가 × 90%
 
     Sched->>Svc: processExpiredPayments()
 
