@@ -13,6 +13,7 @@ import com.cos.fairbid.user.domain.User;
  * @param provider        OAuth Provider (KAKAO, NAVER, GOOGLE)
  * @param stats           거래 통계 (판매/구매 완료 수, 총 거래 금액)
  * @param shippingAddress 저장된 배송지 정보
+ * @param bankAccount     저장된 계좌 정보 (판매 대금 수령용)
  */
 public record UserProfileResponse(
         String email,
@@ -21,7 +22,8 @@ public record UserProfileResponse(
         int warningCount,
         OAuthProvider provider,
         TradeStats stats,
-        ShippingAddress shippingAddress
+        ShippingAddress shippingAddress,
+        BankAccount bankAccount
 ) {
     /**
      * 거래 통계 DTO
@@ -52,6 +54,16 @@ public record UserProfileResponse(
     }
 
     /**
+     * 계좌 정보 DTO (판매 대금 수령용)
+     */
+    public record BankAccount(
+            String bankName,
+            String accountNumber,
+            String accountHolder
+    ) {
+    }
+
+    /**
      * User 도메인 객체에서 응답 DTO를 생성한다. (stats 없이)
      */
     public static UserProfileResponse from(User user) {
@@ -73,6 +85,15 @@ public record UserProfileResponse(
             );
         }
 
+        BankAccount bank = null;
+        if (user.hasBankAccount()) {
+            bank = new BankAccount(
+                    user.getBankName(),
+                    user.getAccountNumber(),
+                    user.getAccountHolder()
+            );
+        }
+
         return new UserProfileResponse(
                 user.getEmail(),
                 user.getNickname(),
@@ -80,7 +101,8 @@ public record UserProfileResponse(
                 user.getWarningCount(),
                 user.getProvider(),
                 stats,
-                shipping
+                shipping,
+                bank
         );
     }
 }
