@@ -78,4 +78,14 @@ public class TradePersistenceAdapter implements TradeRepositoryPort {
     public long sumCompletedAmount(Long userId) {
         return tradeJpaRepository.sumCompletedAmount(userId);
     }
+
+    @Override
+    public long sumCompletedSalesAmount(Long userId) {
+        return tradeJpaRepository.sumCompletedSalesAmount(userId);
+    }
+
+    @Override
+    public long sumCompletedPurchaseAmount(Long userId) {
+        return tradeJpaRepository.sumCompletedPurchaseAmount(userId);
+    }
 }
