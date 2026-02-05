@@ -32,6 +32,15 @@ export default function MyPage() {
   });
   const [addressError, setAddressError] = useState('');
 
+  // 계좌 수정 상태
+  const [isEditingBank, setIsEditingBank] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bankName: '',
+    accountNumber: '',
+    accountHolder: '',
+  });
+  const [bankError, setBankError] = useState('');
+
   const nicknameInputRef = useRef(null);
 
   // 프로필 정보 로드
@@ -43,6 +52,10 @@ export default function MyPage() {
         // 배송지 정보가 있으면 폼에 설정
         if (data.shippingAddress) {
           setAddressForm(data.shippingAddress);
+        }
+        // 계좌 정보가 있으면 폼에 설정
+        if (data.bankAccount) {
+          setBankForm(data.bankAccount);
         }
       } catch {
         // 프로필 로드 실패 시 기본값 사용
@@ -115,6 +128,26 @@ export default function MyPage() {
     }
   };
 
+  /** 계좌 저장 */
+  const saveBankAccount = async () => {
+    if (!bankForm.bankName || !bankForm.accountNumber || !bankForm.accountHolder) {
+      setBankError('은행명, 계좌번호, 예금주는 필수입니다.');
+      return;
+    }
+
+    try {
+      await apiRequest('/users/me/bank-account', {
+        method: 'PUT',
+        body: JSON.stringify(bankForm),
+      });
+      setProfile((prev) => (prev ? { ...prev, bankAccount: bankForm } : prev));
+      setIsEditingBank(false);
+      setBankError('');
+    } catch (err) {
+      setBankError(err.message || '저장에 실패했습니다.');
+    }
+  };
+
   /** 회원 탈퇴 처리 */
   const handleDeleteAccount = async () => {
     setDeleteError('');
@@ -122,7 +155,7 @@ export default function MyPage() {
       await apiRequest('/users/me', { method: 'DELETE' });
       setShowDeleteModal(false);
       await logout();
-      navigate('/', { replace: true });
+      navigate('/auctions', { replace: true });
     } catch (err) {
       setDeleteError(err.message || '탈퇴에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
@@ -361,13 +394,99 @@ export default function MyPage() {
         )}
       </section>
 
+      {/* 계좌 관리 섹션 */}
+      <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">판매 계좌</h2>
+          {!isEditingBank && (
+            <button
+              type="button"
+              onClick={() => setIsEditingBank(true)}
+              className="text-xs text-blue-500 hover:text-blue-700"
+            >
+              {profile?.bankAccount ? '수정' : '등록'}
+            </button>
+          )}
+        </div>
+
+        {isEditingBank ? (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">은행명</label>
+              <input
+                type="text"
+                value={bankForm.bankName}
+                onChange={(e) => setBankForm({ ...bankForm, bankName: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="카카오뱅크"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">계좌번호</label>
+              <input
+                type="text"
+                value={bankForm.accountNumber}
+                onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="3333-12-3456789"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">예금주</label>
+              <input
+                type="text"
+                value={bankForm.accountHolder}
+                onChange={(e) => setBankForm({ ...bankForm, accountHolder: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="홍길동"
+              />
+            </div>
+            {bankError && (
+              <p className="text-xs text-red-600">{bankError}</p>
+            )}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={saveBankAccount}
+                className="flex-1 py-2 text-sm font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600"
+              >
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingBank(false);
+                  setBankError('');
+                  if (profile?.bankAccount) {
+                    setBankForm(profile.bankAccount);
+                  } else {
+                    setBankForm({ bankName: '', accountNumber: '', accountHolder: '' });
+                  }
+                }}
+                className="flex-1 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        ) : profile?.bankAccount ? (
+          <div className="text-sm text-gray-700 space-y-1">
+            <p className="font-semibold">{profile.bankAccount.bankName}</p>
+            <p>{profile.bankAccount.accountNumber}</p>
+            <p className="text-gray-500">{profile.bankAccount.accountHolder}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">등록된 계좌가 없습니다. 판매 시 구매자에게 계좌를 알려주려면 등록해주세요.</p>
+        )}
+      </section>
+
       {/* 로그아웃 & 회원 탈퇴 */}
       <div className="flex flex-col items-center gap-3 pb-8">
         <button
           type="button"
           onClick={async () => {
             await logout();
-            navigate('/', { replace: true });
+            navigate('/auctions', { replace: true });
           }}
           className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
         >
