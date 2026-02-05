@@ -1,0 +1,110 @@
+sequenceDiagram
+autonumber
+actor User as 사용자
+participant Ctrl as NotificationController
+participant UC as NotificationQueryUseCase
+participant Svc as NotificationService
+participant Cache as RedisNotificationAdapter
+participant Redis as Redis
+
+    Note over User, Redis: [인앱 알림 시스템]<br/>- Redis 저장 (24시간 TTL)<br/>- UUID 기반 알림 ID<br/>- 최신순 정렬, 최대 50개
+
+    Note over User, Redis: [알림 유형 (NotificationType)]<br/>WINNING - 낙찰 축하<br/>TRANSFER - 2순위 승계<br/>FAILED - 경매 유찰<br/>RESPONSE_REMINDER - 응답 기한 임박<br/>SECOND_RANK_STANDBY - 2순위 후보 등록<br/>NO_SHOW_PENALTY - 노쇼 처리<br/>METHOD_SELECTED - 거래 방식 선택<br/>ARRANGEMENT_PROPOSED - 거래 일정 제안<br/>ARRANGEMENT_COUNTER_PROPOSED - 역제안<br/>ARRANGEMENT_ACCEPTED - 일정 수락<br/>DELIVERY_ADDRESS_SUBMITTED - 배송지 제출<br/>DELIVERY_SHIPPED - 발송 완료<br/>TRADE_COMPLETED - 거래 완료<br/>PAYMENT_CONFIRMED - 입금 완료<br/>PAYMENT_VERIFIED - 입금 확인<br/>PAYMENT_REJECTED - 미입금 처리
+
+    %% 알림 목록 조회
+    rect rgb(235, 245, 255)
+        Note over User, Redis: [1. 내 알림 목록 조회]
+        User->>Ctrl: GET /api/v1/notifications
+
+        Ctrl->>UC: getNotifications(userId)
+        UC->>Svc: getNotifications(userId)
+
+        Svc->>Cache: findByUserId(userId)
+        Cache->>Redis: ZREVRANGE notification:user:{userId} 0 49
+        Note right of Redis: Sorted Set에서<br/>최신순 50개 조회
+
+        Redis-->>Cache: List<notificationId>
+
+        loop 각 알림 ID
+            Cache->>Redis: HGETALL notification:{id}
+            Redis-->>Cache: InAppNotification
+        end
+
+        Cache-->>Svc: List<InAppNotification>
+        Svc-->>UC: List<InAppNotification>
+        UC-->>Ctrl: List<InAppNotification>
+
+        Note right of Ctrl: [응답 필드]<br/>- id: 알림 ID<br/>- type: 알림 유형<br/>- title: 제목<br/>- body: 본문<br/>- auctionId: 경매 ID (선택)<br/>- tradeId: 거래 ID (선택)<br/>- read: 읽음 여부<br/>- createdAt: 생성 시간
+        Ctrl-->>User: 200 OK (List<NotificationResponse>)
+    end
+
+    %% 읽지 않은 알림 개수
+    rect rgb(255, 240, 240)
+        Note over User, Redis: [2. 읽지 않은 알림 개수]
+        User->>Ctrl: GET /api/v1/notifications/count
+
+        Ctrl->>UC: countUnread(userId)
+        UC->>Svc: countUnread(userId)
+
+        Svc->>Cache: countUnread(userId)
+        Cache->>Redis: ZREVRANGE notification:user:{userId} 0 49
+        Note right of Redis: 모든 알림 조회 후<br/>read=false인 것만 카운트
+
+        Redis-->>Cache: List<notificationId>
+        Cache->>Cache: 읽지 않은 알림 필터링
+        Cache-->>Svc: count
+
+        Svc-->>UC: count
+        UC-->>Ctrl: count
+        Ctrl-->>User: 200 OK { "unreadCount": 5 }
+    end
+
+    %% 알림 읽음 처리
+    rect rgb(240, 255, 240)
+        Note over User, Redis: [3. 알림 읽음 처리]
+        User->>Ctrl: POST /api/v1/notifications/{notificationId}/read
+
+        Ctrl->>UC: markAsRead(userId, notificationId)
+        UC->>Svc: markAsRead(userId, notificationId)
+
+        Svc->>Cache: markAsRead(userId, notificationId)
+        Cache->>Redis: HGET notification:{id} userId
+        Note right of Redis: 본인 알림인지 확인
+
+        Redis-->>Cache: 알림 소유자 ID
+
+        alt 본인 알림
+            Cache->>Redis: HSET notification:{id} read true
+            Redis-->>Cache: OK
+        else 타인 알림
+            Cache-->>Svc: throw ForbiddenException
+        end
+
+        Cache-->>Svc: void
+        Svc-->>UC: void
+        UC-->>Ctrl: void
+        Ctrl-->>User: 200 OK
+    end
+
+    %% 알림 생성 (내부)
+    rect rgb(255, 250, 230)
+        Note over Svc, Redis: [알림 생성 (내부 프로세스)]
+
+        participant Publisher as EventPublisher
+        participant Adapter as NotificationAdapter
+
+        Publisher->>Adapter: send(InAppNotification)
+
+        Adapter->>Adapter: UUID 생성
+        Adapter->>Adapter: NotificationType.getTitle()
+        Adapter->>Adapter: NotificationType.formatBody(auctionTitle, amount)
+
+        Adapter->>Redis: HSET notification:{id} fields...
+        Note right of Redis: userId, type, title, body<br/>auctionId, tradeId, read=false<br/>createdAt
+
+        Adapter->>Redis: ZADD notification:user:{userId} {timestamp} {id}
+        Note right of Redis: 사용자별 알림 목록 인덱스
+
+        Adapter->>Redis: EXPIRE notification:{id} 86400
+        Note right of Redis: 24시간 TTL
+    end

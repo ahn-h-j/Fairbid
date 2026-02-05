@@ -1,22 +1,26 @@
 # Auction 도메인 Policy 분리 리팩토링
 
-## 1. 개요
-
-Auction 도메인의 책임 과다 문제를 해결하기 위해 입찰 단위 계산과 연장 로직을 별도 Policy 클래스로 분리함.
+> 📅 작업일: 2026-01-XX
+> 🎯 목표: 입찰 단위/연장 로직을 Policy 클래스로 분리하여 SRP 준수
 
 ---
 
-## 2. 리팩토링 전 문제점
+## Before / After 요약
 
-### 2.1 입찰 단위 계산 (Auction.java:106-120)
+| 항목 | Before | After |
+|------|--------|-------|
+| 입찰 단위 계산 | Auction 내 7개 if-else 체인 | `PriceBracket` Enum + `BidIncrementPolicy` |
+| 연장 로직 | Auction 내 하드코딩 상수 | `AuctionExtensionPolicy` |
+| 매직 넘버 | 코드 곳곳에 분산 | Enum/상수로 중앙 집중화 |
 
-**문제점**:
-- 7개 구간의 if-else 체인
-- 매직 넘버 하드코딩
-- 가격 구간 변경 시 코드 수정 필요
+---
+
+## 1. 문제점 (Before)
+
+### 입찰 단위 계산 - 7개 if-else 체인
 
 ```java
-// Before
+// Auction.java - 매직 넘버 + 긴 분기문
 public static Long calculateBidIncrement(Long price) {
     if (price < 10_000L) {
         return 500L;
@@ -34,19 +38,16 @@ public static Long calculateBidIncrement(Long price) {
 }
 ```
 
-### 2.2 연장 로직
-
-**문제점**:
-- 연장 구간(5분), 연장 시간(5분) 등 상수가 분산
-- 할증 계산 로직이 Auction에 직접 구현
+**문제:**
+- 가격 구간 추가/수정 시 코드 직접 수정 필요
+- 매직 넘버로 의미 파악 어려움
+- 테스트하기 어려운 구조
 
 ---
 
-## 3. 리팩토링 내용
+## 2. 해결책 (After)
 
-### 3.1 PriceBracket Enum 생성
-
-가격 구간과 입찰 단위를 Enum으로 추상화.
+### 2.1 PriceBracket Enum - 가격 구간 테이블화
 
 ```java
 public enum PriceBracket {
@@ -56,6 +57,9 @@ public enum PriceBracket {
     UNDER_500K(500_000L, 5_000L),
     UNDER_1M(1_000_000L, 10_000L),
     OVER_1M(Long.MAX_VALUE, 30_000L);
+
+    private final Long upperBound;
+    private final Long increment;
 
     public static Long getIncrementForPrice(Long price) {
         return Arrays.stream(values())
@@ -67,73 +71,51 @@ public enum PriceBracket {
 }
 ```
 
-**장점**:
-- 가격 구간 추가/수정 시 Enum만 변경
-- 테이블 형태로 구간 한눈에 파악 가능
-
-### 3.2 BidIncrementPolicy 생성
-
-입찰 단위 계산 및 할증 로직을 담당하는 정책 클래스.
+### 2.2 BidIncrementPolicy - 입찰 단위 + 할증 계산
 
 ```java
 public class BidIncrementPolicy {
-    private static final int EXTENSION_SURCHARGE_INTERVAL = 3;
-    private static final double SURCHARGE_RATE = 0.5;
+    private static final int EXTENSION_SURCHARGE_INTERVAL = 3;  // N회마다 할증
+    private static final double SURCHARGE_RATE = 0.5;           // 50% 할증
 
-    // 기본 입찰 단위 계산
-    public static Long calculateBaseIncrement(Long currentPrice);
+    public static Long calculateBaseIncrement(Long currentPrice) {
+        return PriceBracket.getIncrementForPrice(currentPrice);
+    }
 
-    // 할증 적용된 입찰 단위 계산
-    public static Long calculateAdjustedIncrement(Long baseIncrement, int extensionCount);
-
-    // 최종 입찰 단위 계산 (기본 + 할증)
-    public static Long calculateFinalIncrement(Long currentPrice, int extensionCount);
+    public static Long calculateAdjustedIncrement(Long baseIncrement, int extensionCount) {
+        int surchargeMultiplier = extensionCount / EXTENSION_SURCHARGE_INTERVAL;
+        double multiplier = 1 + (SURCHARGE_RATE * surchargeMultiplier);
+        return Math.round(baseIncrement * multiplier);
+    }
 }
 ```
 
-### 3.3 AuctionExtensionPolicy 생성
-
-연장 관련 규칙을 담당하는 정책 클래스.
+### 2.3 AuctionExtensionPolicy - 연장 규칙
 
 ```java
 public class AuctionExtensionPolicy {
-    private static final int EXTENSION_THRESHOLD_MINUTES = 5;
-    private static final int EXTENSION_DURATION_MINUTES = 5;
+    private static final int EXTENSION_THRESHOLD_MINUTES = 5;  // 종료 N분 전
+    private static final int EXTENSION_DURATION_MINUTES = 5;   // N분 연장
 
-    // 연장 구간 여부 확인
-    public static boolean isInExtensionPeriod(LocalDateTime scheduledEndTime, LocalDateTime now);
+    public static boolean isInExtensionPeriod(LocalDateTime endTime, LocalDateTime now) {
+        LocalDateTime threshold = endTime.minusMinutes(EXTENSION_THRESHOLD_MINUTES);
+        return now.isAfter(threshold) && now.isBefore(endTime);
+    }
 
-    // 연장된 종료 시간 계산
-    public static LocalDateTime calculateExtendedEndTime(LocalDateTime now);
+    public static LocalDateTime calculateExtendedEndTime(LocalDateTime now) {
+        return now.plusMinutes(EXTENSION_DURATION_MINUTES);
+    }
 }
 ```
 
-### 3.4 Auction 도메인 수정
-
-Policy 클래스에 위임하도록 변경.
+### 2.4 Auction 도메인 - Policy에 위임
 
 ```java
-// Before
-public static Long calculateBidIncrement(Long price) {
-    if (price < 10_000L) return 500L;
-    // ... 7개 분기
-}
-
-// After
+// After - 한 줄로 단순화
 public static Long calculateBidIncrement(Long price) {
     return BidIncrementPolicy.calculateBaseIncrement(price);
 }
-```
 
-```java
-// Before
-public boolean isInExtensionPeriod() {
-    LocalDateTime now = LocalDateTime.now();
-    LocalDateTime extensionThreshold = scheduledEndTime.minusMinutes(5);
-    return now.isAfter(extensionThreshold) && now.isBefore(scheduledEndTime);
-}
-
-// After
 public boolean isInExtensionPeriod() {
     return AuctionExtensionPolicy.isInExtensionPeriod(scheduledEndTime, LocalDateTime.now());
 }
@@ -141,92 +123,48 @@ public boolean isInExtensionPeriod() {
 
 ---
 
-## 4. 파일 변경 요약
+## 3. 개선 효과
 
-### 4.1 신규 파일 (3개)
-
-| 파일 경로 | 역할 |
-|----------|------|
-| `auction/domain/policy/PriceBracket.java` | 가격 구간별 입찰 단위 Enum |
-| `auction/domain/policy/BidIncrementPolicy.java` | 입찰 단위 + 할증 계산 정책 |
-| `auction/domain/policy/AuctionExtensionPolicy.java` | 연장 구간/시간 계산 정책 |
-
-### 4.2 수정 파일 (1개)
-
-| 파일 경로 | 변경 내용 |
-|----------|----------|
-| `auction/domain/Auction.java` | Policy에 위임, if-else 체인 제거 |
+| 측면 | 개선 내용 |
+|------|----------|
+| **확장성** | 가격 구간 추가 시 Enum에 한 줄만 추가 |
+| **가독성** | 비즈니스 규칙이 테이블 형태로 한눈에 파악 |
+| **테스트** | Policy 클래스 단위 테스트 용이 |
+| **SRP** | Auction은 경매 상태만, Policy는 계산 규칙만 담당 |
 
 ---
 
-## 5. 구조 다이어그램
+## 4. 파일 구조
 
 ```
 auction/domain/
-├── Auction.java
-│   ├── calculateBidIncrement() ──→ BidIncrementPolicy
-│   ├── getAdjustedBidIncrement() ──→ BidIncrementPolicy
-│   ├── isInExtensionPeriod() ──→ AuctionExtensionPolicy
-│   └── extend() ──→ AuctionExtensionPolicy
-│
+├── Auction.java              # Policy에 위임
 └── policy/
-    ├── PriceBracket.java (Enum)
-    ├── BidIncrementPolicy.java
-    └── AuctionExtensionPolicy.java
+    ├── PriceBracket.java         # 가격 구간 Enum
+    ├── BidIncrementPolicy.java   # 입찰 단위 계산
+    └── AuctionExtensionPolicy.java # 연장 규칙
 ```
 
 ---
 
-## 6. 비즈니스 규칙 상수 정리
+## 5. 비즈니스 규칙 정리
 
-### 입찰 단위 (PriceBracket)
+### 입찰 단위
 
-| 현재 가격 구간 | 입찰 단위 |
-|--------------|----------|
-| 1만 원 미만 | +500원 |
-| 1만 ~ 5만 원 미만 | +1,000원 |
-| 5만 ~ 10만 원 미만 | +3,000원 |
-| 10만 ~ 50만 원 미만 | +5,000원 |
-| 50만 ~ 100만 원 미만 | +10,000원 |
-| 100만 원 이상 | +30,000원 |
+| 현재 가격 | 입찰 단위 |
+|----------|----------|
+| ~1만 원 | +500원 |
+| 1만~5만 원 | +1,000원 |
+| 5만~10만 원 | +3,000원 |
+| 10만~50만 원 | +5,000원 |
+| 50만~100만 원 | +10,000원 |
+| 100만 원~ | +30,000원 |
 
-### 할증 규칙 (BidIncrementPolicy)
+### 연장/할증 규칙
 
-| 상수 | 값 | 설명 |
-|-----|---|------|
-| EXTENSION_SURCHARGE_INTERVAL | 3 | N회마다 할증 적용 |
-| SURCHARGE_RATE | 0.5 | 할증 비율 (50%) |
-
-### 연장 규칙 (AuctionExtensionPolicy)
-
-| 상수 | 값 | 설명 |
-|-----|---|------|
-| EXTENSION_THRESHOLD_MINUTES | 5 | 종료 N분 전부터 연장 구간 |
-| EXTENSION_DURATION_MINUTES | 5 | 연장 시간 |
-
----
-
-## 7. 검토 후 적용하지 않은 항목
-
-분석 과정에서 발견되었으나 적용하지 않기로 결정한 항목들.
-
-| 항목 | 사유 |
-|-----|------|
-| 이미지 기능 리팩토링 | 현재 모킹 상태로 유지. 실제 이미지 기능 구현 전까지 변경 불필요 |
-| DTO Projection 적용 | Todo에 추가하여 별도 작업으로 분리. 현재 리팩토링 범위 외 |
-| 동시성 처리 변경 | 분석 결과, 락 + 트랜잭션 구조가 이미 정확함. 변경 불필요 |
-| `LocalDateTime.now()` 주입 | 테스트 용이성을 위해 고려했으나, 현재 테스트에서 문제 없음 |
-
----
-
-## 8. 검증
-
-```bash
-# Cucumber 테스트 실행
-./gradlew test --tests "com.cos.fairbid.cucumber.CucumberTestRunner"
-
-# 전체 빌드
-./gradlew build
-```
-
-모든 테스트 통과 확인 완료.
+| 규칙 | 값 |
+|-----|---|
+| 연장 구간 | 종료 5분 전 |
+| 연장 시간 | +5분 |
+| 할증 주기 | 3회마다 |
+| 할증 비율 | +50% |

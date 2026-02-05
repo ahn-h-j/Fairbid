@@ -8,8 +8,8 @@ participant Port as AuctionRepository (Port)
 participant Adapter as AuctionPersistenceAdapter
 participant RDB as MySQL
 
-    Buyer->>Ctrl: GET /api/v1/auctions?page=0&size=20&status=ACTIVE&keyword=아이폰
-    Note right of Buyer: [Query Parameters]<br/>page: 페이지 번호 (기본 0)<br/>size: 페이지 크기 (기본 20)<br/>status: ACTIVE, CLOSED 등<br/>keyword: 검색어 (선택)
+    Buyer->>Ctrl: GET /api/v1/auctions?page=0&size=20&status=BIDDING&keyword=아이폰
+    Note right of Buyer: [Query Parameters]<br/>page: 페이지 번호 (기본 0)<br/>size: 페이지 크기 (기본 20)<br/>status: BIDDING, INSTANT_BUY_PENDING,<br/>ENDED, FAILED, CANCELLED<br/>keyword: 검색어 (선택)
 
     Ctrl->>UC: getAuctionList(query)
     UC->>Svc: getAuctionList(status, keyword, pageable)

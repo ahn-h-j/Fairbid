@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
  * - GET  /api/v1/users/me → 내 프로필 조회
  * - PUT  /api/v1/users/me → 닉네임 수정 + JWT 재발급
  * - PUT  /api/v1/users/me/shipping-address → 배송지 수정
+ * - PUT  /api/v1/users/me/bank-account → 계좌 정보 수정
  * - DELETE /api/v1/users/me → 회원 탈퇴
  * - GET  /api/v1/users/me/auctions → 내 판매 목록 (커서 페이지네이션)
  * - GET  /api/v1/users/me/bids → 내 입찰 목록 (커서 페이지네이션)
@@ -48,6 +49,7 @@ public class UserController {
     private final GetMyProfileUseCase getMyProfileUseCase;
     private final UpdateNicknameUseCase updateNicknameUseCase;
     private final UpdateShippingAddressUseCase updateShippingAddressUseCase;
+    private final UpdateBankAccountUseCase updateBankAccountUseCase;
     private final DeactivateAccountUseCase deactivateAccountUseCase;
     private final GetMyAuctionsUseCase getMyAuctionsUseCase;
     private final GetMyBidsUseCase getMyBidsUseCase;
@@ -109,7 +111,8 @@ public class UserController {
         var stats = new UserProfileResponse.TradeStats(
                 tradeStats.completedSales(),
                 tradeStats.completedPurchases(),
-                tradeStats.totalAmount()
+                tradeStats.totalSalesAmount(),
+                tradeStats.totalPurchaseAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
@@ -225,7 +228,40 @@ public class UserController {
         var stats = new UserProfileResponse.TradeStats(
                 tradeStats.completedSales(),
                 tradeStats.completedPurchases(),
-                tradeStats.totalAmount()
+                tradeStats.totalSalesAmount(),
+                tradeStats.totalPurchaseAmount()
+        );
+
+        return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
+    }
+
+    /**
+     * 계좌 정보를 수정한다.
+     * 판매자가 판매 대금을 수령할 계좌를 등록/수정한다.
+     *
+     * @param request 계좌 수정 요청
+     * @return 수정된 프로필 정보
+     */
+    @PutMapping("/me/bank-account")
+    @RequireOnboarding
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateBankAccount(
+            @Valid @RequestBody UpdateBankAccountRequest request) {
+
+        Long userId = SecurityUtils.getCurrentUserId();
+        User user = updateBankAccountUseCase.updateBankAccount(
+                userId,
+                request.bankName(),
+                request.accountNumber(),
+                request.accountHolder()
+        );
+
+        // 거래 통계 조회 (UseCase를 통해 접근)
+        var tradeStats = getTradeStatsUseCase.getTradeStats(userId);
+        var stats = new UserProfileResponse.TradeStats(
+                tradeStats.completedSales(),
+                tradeStats.completedPurchases(),
+                tradeStats.totalSalesAmount(),
+                tradeStats.totalPurchaseAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));

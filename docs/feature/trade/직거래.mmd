@@ -1,0 +1,108 @@
+sequenceDiagram
+autonumber
+actor Seller as 판매자
+actor Buyer as 구매자 (낙찰자)
+participant Ctrl as DirectTradeController
+participant Svc as DirectTradeService
+participant InfoRepo as DirectTradeInfoRepository
+participant TradeRepo as TradeRepository
+participant RDB as MySQL
+participant Noti as NotificationPort
+
+    Note over Seller, Noti: [직거래 상태 흐름]<br/>PENDING → PROPOSED → ACCEPTED
+
+    Note over Seller, Noti: [전제 조건]<br/>- 거래 방식이 DIRECT_TRADE로 선택됨<br/>- DirectTradeInfo 레코드 생성됨 (status=PENDING)<br/>- 만남 장소는 경매 등록 시 설정된 값 사용
+
+    %% 시간 제안 (판매자)
+    rect rgb(235, 245, 255)
+        Note over Seller, RDB: [1단계: 시간 제안 (판매자)]
+        Seller->>Ctrl: POST /api/v1/trades/{tradeId}/direct/propose
+        Note right of Seller: { meetingDate: "2024-01-15",<br/>  meetingTime: "14:00" }
+
+        Ctrl->>Svc: propose(tradeId, userId, date, time)
+
+        Svc->>InfoRepo: findByTradeId(tradeId)
+        InfoRepo->>RDB: SELECT * FROM direct_trade_infos<br/>WHERE trade_id = ?
+        RDB-->>Svc: DirectTradeInfo
+
+        Svc->>Svc: 검증
+        Note right of Svc: 1. 판매자 권한 확인<br/>2. 상태가 PENDING인지<br/>3. 날짜/시간 유효성
+
+        Svc->>InfoRepo: update(proposedDate, proposedTime)
+        InfoRepo->>RDB: UPDATE direct_trade_infos<br/>SET proposed_date = ?,<br/>proposed_time = ?,<br/>status = 'PROPOSED',<br/>proposer_id = ?
+
+        Svc->>Noti: notify(buyerId, ARRANGEMENT_PROPOSED)
+        Noti-->>Buyer: "거래 일정이 제안되었습니다"
+
+        Svc-->>Ctrl: DirectTradeInfo
+        Ctrl-->>Seller: 200 OK (DirectTradeInfoResponse)
+    end
+
+    %% 제안 수락 또는 역제안 (구매자)
+    rect rgb(255, 240, 240)
+        Note over Buyer, RDB: [2단계: 수락 또는 역제안 (구매자)]
+
+        alt 제안 수락
+            Buyer->>Ctrl: POST /api/v1/trades/{tradeId}/direct/accept
+            Ctrl->>Svc: accept(tradeId, userId)
+
+            Svc->>Svc: 검증
+            Note right of Svc: 1. 상대방(수락 권한) 확인<br/>2. 상태가 PROPOSED인지
+
+            Svc->>InfoRepo: accept()
+            InfoRepo->>RDB: UPDATE direct_trade_infos<br/>SET status = 'ACCEPTED',<br/>confirmed_date = proposed_date,<br/>confirmed_time = proposed_time
+
+            Svc->>TradeRepo: updateStatus(ARRANGED)
+            TradeRepo->>RDB: UPDATE trades<br/>SET status = 'ARRANGED'
+
+            Svc->>Noti: notify(sellerId, ARRANGEMENT_ACCEPTED)
+            Noti-->>Seller: "거래 일정이 확정되었습니다"
+
+            Svc-->>Ctrl: DirectTradeInfo
+            Ctrl-->>Buyer: 200 OK (DirectTradeInfoResponse)
+
+        else 역제안
+            Buyer->>Ctrl: POST /api/v1/trades/{tradeId}/direct/counter
+            Note right of Buyer: { meetingDate: "2024-01-16",<br/>  meetingTime: "15:00" }
+
+            Ctrl->>Svc: counterPropose(tradeId, userId, date, time)
+
+            Svc->>Svc: 검증
+            Note right of Svc: 1. 상대방(역제안 권한) 확인<br/>2. 상태가 PROPOSED인지
+
+            Svc->>InfoRepo: counterPropose()
+            InfoRepo->>RDB: UPDATE direct_trade_infos<br/>SET proposed_date = ?,<br/>proposed_time = ?,<br/>proposer_id = ?
+            Note right of RDB: proposer_id 변경됨<br/>(역제안자가 새 제안자)
+
+            Svc->>Noti: notify(sellerId, ARRANGEMENT_COUNTER_PROPOSED)
+            Noti-->>Seller: "다른 일정이 역제안되었습니다"
+
+            Svc-->>Ctrl: DirectTradeInfo
+            Ctrl-->>Buyer: 200 OK (DirectTradeInfoResponse)
+        end
+    end
+
+    %% 역제안 후 수락 (판매자)
+    rect rgb(240, 255, 240)
+        Note over Seller, RDB: [3단계: 역제안 수락 (판매자)]
+
+        Seller->>Ctrl: POST /api/v1/trades/{tradeId}/direct/accept
+        Ctrl->>Svc: accept(tradeId, userId)
+
+        Svc->>Svc: 검증
+        Note right of Svc: 역제안 받은 사람만 수락 가능
+
+        Svc->>InfoRepo: accept()
+        InfoRepo->>RDB: UPDATE direct_trade_infos<br/>SET status = 'ACCEPTED'
+
+        Svc->>TradeRepo: updateStatus(ARRANGED)
+        TradeRepo->>RDB: UPDATE trades<br/>SET status = 'ARRANGED'
+
+        Svc->>Noti: notify(buyerId, ARRANGEMENT_ACCEPTED)
+        Noti-->>Buyer: "거래 일정이 확정되었습니다"
+
+        Svc-->>Ctrl: DirectTradeInfo
+        Ctrl-->>Seller: 200 OK (DirectTradeInfoResponse)
+    end
+
+    Note over Seller, Buyer: [이후 거래 완료]<br/>POST /api/v1/trades/{tradeId}/complete

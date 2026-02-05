@@ -13,6 +13,7 @@ import com.cos.fairbid.user.domain.User;
  * @param provider        OAuth Provider (KAKAO, NAVER, GOOGLE)
  * @param stats           거래 통계 (판매/구매 완료 수, 총 거래 금액)
  * @param shippingAddress 저장된 배송지 정보
+ * @param bankAccount     저장된 계좌 정보 (판매 대금 수령용)
  */
 public record UserProfileResponse(
         String email,
@@ -21,19 +22,22 @@ public record UserProfileResponse(
         int warningCount,
         OAuthProvider provider,
         TradeStats stats,
-        ShippingAddress shippingAddress
+        ShippingAddress shippingAddress,
+        BankAccount bankAccount
 ) {
     /**
      * 거래 통계 DTO
      *
-     * @param totalSales     완료된 판매 수
-     * @param totalPurchases 완료된 구매 수
-     * @param totalAmount    총 거래 금액
+     * @param totalSales          완료된 판매 수
+     * @param totalPurchases      완료된 구매 수
+     * @param totalSalesAmount    총 판매 금액
+     * @param totalPurchaseAmount 총 구매 금액
      */
     public record TradeStats(
             int totalSales,
             int totalPurchases,
-            long totalAmount
+            long totalSalesAmount,
+            long totalPurchaseAmount
     ) {
     }
 
@@ -46,6 +50,16 @@ public record UserProfileResponse(
             String postalCode,
             String address,
             String addressDetail
+    ) {
+    }
+
+    /**
+     * 계좌 정보 DTO (판매 대금 수령용)
+     */
+    public record BankAccount(
+            String bankName,
+            String accountNumber,
+            String accountHolder
     ) {
     }
 
@@ -71,6 +85,15 @@ public record UserProfileResponse(
             );
         }
 
+        BankAccount bank = null;
+        if (user.hasBankAccount()) {
+            bank = new BankAccount(
+                    user.getBankName(),
+                    user.getAccountNumber(),
+                    user.getAccountHolder()
+            );
+        }
+
         return new UserProfileResponse(
                 user.getEmail(),
                 user.getNickname(),
@@ -78,7 +101,8 @@ public record UserProfileResponse(
                 user.getWarningCount(),
                 user.getProvider(),
                 stats,
-                shipping
+                shipping,
+                bank
         );
     }
 }

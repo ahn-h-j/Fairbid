@@ -31,8 +31,8 @@ public class AdminAuctionService implements ManageAuctionUseCase {
 
     @Override
     public Page<AdminAuctionResult> getAuctionList(AuctionStatus status, String keyword, Pageable pageable) {
-        // 1. 경매 목록 조회
-        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, keyword, pageable);
+        // 1. 경매 목록 조회 (관리자 페이지에서는 카테고리 필터 없음)
+        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, null, keyword, pageable);
 
         // 2. 판매자 ID 수집
         Set<Long> sellerIds = auctions.getContent().stream()

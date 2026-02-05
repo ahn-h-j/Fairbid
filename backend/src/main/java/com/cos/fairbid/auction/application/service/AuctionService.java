@@ -8,6 +8,7 @@ import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.event.AuctionCreatedEvent;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
@@ -101,13 +102,14 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
      * 경매 목록을 조회한다
      *
      * @param status   경매 상태 필터 (nullable)
+     * @param category 카테고리 필터 (nullable)
      * @param keyword  검색어 - 상품명 (nullable)
      * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
      */
     @Override
-    public Page<Auction> getAuctionList(AuctionStatus status, String keyword, Pageable pageable) {
-        return auctionRepository.findAll(status, keyword, pageable);
+    public Page<Auction> getAuctionList(AuctionStatus status, Category category, String keyword, Pageable pageable) {
+        return auctionRepository.findAll(status, category, keyword, pageable);
     }
 
     /**

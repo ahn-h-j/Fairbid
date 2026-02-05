@@ -50,4 +50,14 @@ public interface TradeRepositoryPort {
      * 사용자의 총 거래 금액을 조회한다 (판매 + 구매)
      */
     long sumCompletedAmount(Long userId);
+
+    /**
+     * 사용자의 총 판매 금액을 조회한다
+     */
+    long sumCompletedSalesAmount(Long userId);
+
+    /**
+     * 사용자의 총 구매 금액을 조회한다
+     */
+    long sumCompletedPurchaseAmount(Long userId);
 }

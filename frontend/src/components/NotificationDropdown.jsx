@@ -49,6 +49,9 @@ export default function NotificationDropdown() {
       'DELIVERY_ADDRESS_SUBMITTED',
       'DELIVERY_SHIPPED',
       'TRADE_COMPLETED',
+      'PAYMENT_CONFIRMED',
+      'PAYMENT_VERIFIED',
+      'PAYMENT_REJECTED',
     ];
 
     if (tradeRelatedTypes.includes(notification.type) && notification.tradeId) {

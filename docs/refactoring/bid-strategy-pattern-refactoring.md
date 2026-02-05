@@ -1,21 +1,26 @@
-# Bid 모듈 전략 패턴 리팩토링
+# Bid 도메인 전략 패턴 리팩토링
 
-## 1. 개요
-
-Bid 도메인의 입찰 금액 계산 로직을 BidType enum에 전략 패턴으로 분리하고, 입찰 검증 로직을 강화함.
+> 📅 작업일: 2026-01-XX
+> 🎯 목표: 입찰 유형별 금액 계산 로직을 전략 패턴으로 분리하여 OCP 준수
 
 ---
 
-## 2. 리팩토링 전 문제점
+## Before / After 요약
 
-### 2.1 입찰 금액 계산 (Bid.java:63-74)
+| 항목 | Before | After |
+|------|--------|-------|
+| 입찰 금액 계산 | if-else 분기 | `BidType` Enum 전략 패턴 |
+| 새 입찰 방식 추가 | 코드 수정 필요 (OCP 위반) | Enum 상수만 추가 |
+| bidderId 검증 | NPE 발생 가능 | 명시적 null 체크 |
 
-**문제점**:
-- if-else 분기로 입찰 유형 처리
-- 새로운 입찰 방식 추가 시 코드 수정 필요 (OCP 위반)
+---
+
+## 1. 문제점 (Before)
+
+### 1.1 입찰 금액 계산 - if-else 분기
 
 ```java
-// Before
+// Bid.java - 입찰 유형별 분기문
 public static Long determineBidAmount(BidType bidType, Long requestedAmount, Auction auction) {
     if (bidType == BidType.ONE_TOUCH) {
         return auction.getMinBidAmount();
@@ -27,19 +32,19 @@ public static Long determineBidAmount(BidType bidType, Long requestedAmount, Auc
 }
 ```
 
-### 2.2 입찰 검증 (Auction.validateBidEligibility)
+**문제:**
+- 새로운 입찰 방식 추가 시 if-else 추가 필요 (OCP 위반)
+- 입찰 유형 로직이 Bid 클래스에 분산
 
-**문제점**:
-- bidderId가 null일 경우 NPE 발생 가능
-- 명시적인 예외 처리 부재
+### 1.2 입찰자 검증 - NPE 가능
 
 ```java
-// Before
+// Auction.java - bidderId null 시 NPE
 public void validateBidEligibility(Long bidderId) {
     if (isEnded()) {
         throw AuctionEndedException.forBid(this.id);
     }
-    // bidderId가 null이면 여기서 NPE 발생
+    // bidderId가 null이면 여기서 NPE 발생!
     if (this.sellerId.equals(bidderId)) {
         throw SelfBidNotAllowedException.forAuction(this.id, this.sellerId);
     }
@@ -48,11 +53,11 @@ public void validateBidEligibility(Long bidderId) {
 
 ---
 
-## 3. 리팩토링 내용
+## 2. 해결책 (After)
 
-### 3.1 BidType 전략 패턴 적용
+### 2.1 BidType Enum - 전략 패턴 적용
 
-각 입찰 유형이 자신의 금액 계산 로직을 직접 구현.
+각 입찰 유형이 자신의 금액 계산 로직을 직접 구현:
 
 ```java
 public enum BidType {
@@ -72,47 +77,36 @@ public enum BidType {
             }
             return requestedAmount;
         }
+    },
+
+    INSTANT_BUY {
+        @Override
+        public Long calculateAmount(Long requestedAmount, Auction auction) {
+            Long instantBuyPrice = auction.getInstantBuyPrice();
+            if (instantBuyPrice == null) {
+                throw InstantBuyException.notAvailable(auction.getId());
+            }
+            return instantBuyPrice;
+        }
     };
 
     public abstract Long calculateAmount(Long requestedAmount, Auction auction);
 }
 ```
 
-**장점**:
-- 새로운 입찰 방식 추가 시 enum 상수만 추가
-- 각 유형의 로직이 해당 enum에 캡슐화
-- if-else 분기 제거
-
-### 3.2 Bid.determineBidAmount() 단순화
-
-BidType에 위임하여 한 줄로 단순화.
+### 2.2 Bid.determineBidAmount() - 단순화
 
 ```java
-// After
+// After - 한 줄로 위임
 public static Long determineBidAmount(BidType bidType, Long requestedAmount, Auction auction) {
     return bidType.calculateAmount(requestedAmount, auction);
 }
 ```
 
-### 3.3 InvalidBidException 팩토리 메서드 추가
-
-입찰자 ID 누락 시 사용할 예외 메서드 추가.
+### 2.3 Auction.validateBidEligibility() - null 체크 추가
 
 ```java
-public static InvalidBidException bidderIdRequired() {
-    return new InvalidBidException(
-            "BIDDER_ID_REQUIRED",
-            "입찰자 ID는 필수입니다."
-    );
-}
-```
-
-### 3.4 Auction.validateBidEligibility() null 체크 추가
-
-bidderId null 검사를 명시적으로 추가.
-
-```java
-// After
+// After - 명시적 null 검증
 public void validateBidEligibility(Long bidderId) {
     if (bidderId == null) {
         throw InvalidBidException.bidderIdRequired();
@@ -130,89 +124,45 @@ public void validateBidEligibility(Long bidderId) {
 
 ---
 
-## 4. 파일 변경 요약
+## 3. 개선 효과
 
-### 4.1 수정 파일 (4개)
-
-| 파일 경로 | 변경 내용 |
-|----------|----------|
-| `bid/domain/BidType.java` | 전략 패턴 적용, `calculateAmount()` 추상 메서드 추가 |
-| `bid/domain/Bid.java` | if-else 제거, BidType에 위임 |
-| `bid/domain/exception/InvalidBidException.java` | `bidderIdRequired()` 팩토리 메서드 추가 |
-| `auction/domain/Auction.java` | `validateBidEligibility()`에 null 체크 추가 |
+| 측면 | 개선 내용 |
+|------|----------|
+| **OCP** | 새 입찰 방식 추가 시 Enum 상수만 추가, 기존 코드 수정 없음 |
+| **캡슐화** | 각 유형의 로직이 해당 Enum에 캡슐화 |
+| **안정성** | NPE 대신 명시적 예외로 디버깅 용이 |
 
 ---
 
-## 5. 구조 다이어그램
+## 4. 확장 예시
 
-### 리팩토링 전
-
-```
-BidService
-    └── Bid.determineBidAmount()
-            ├── if (ONE_TOUCH) → auction.getMinBidAmount()
-            └── if (DIRECT) → requestedAmount
-```
-
-### 리팩토링 후
-
-```
-BidService
-    └── Bid.determineBidAmount()
-            └── BidType.calculateAmount()  // 전략 패턴
-                    ├── ONE_TOUCH.calculateAmount()
-                    └── DIRECT.calculateAmount()
-```
-
----
-
-## 6. 확장 예시
-
-새로운 입찰 방식 (예: 자동 상향 입찰) 추가 시:
+새로운 입찰 방식 추가 시 (예: 자동 상향 입찰):
 
 ```java
 public enum BidType {
     ONE_TOUCH { ... },
     DIRECT { ... },
+    INSTANT_BUY { ... },
 
-    // 새로운 입찰 방식 추가
+    // 새로운 입찰 방식 - Enum 상수만 추가
     AUTO_INCREMENT {
         @Override
         public Long calculateAmount(Long requestedAmount, Auction auction) {
-            // 자동 상향 입찰 로직
-            Long minBid = auction.getMinBidAmount();
-            Long increment = auction.getBidIncrement();
-            return minBid + increment;  // 예시
+            return auction.getMinBidAmount() + auction.getBidIncrement();
         }
     };
 }
 ```
 
-기존 코드 수정 없이 enum 상수만 추가하면 됨.
+**기존 코드 수정 없이 확장 완료** ✓
 
 ---
 
-## 7. 검토 후 적용하지 않은 항목
+## 5. 파일 변경
 
-분석 과정에서 발견되었으나 적용하지 않기로 결정한 항목들.
-
-| 항목 | 사유 |
-|-----|------|
-| 하드코딩된 bidderId | User 인증 모킹 상태. 실제 User 기능 구현 전까지 유지 |
-| 불필요해 보이는 save() 호출 | 분석 결과, 문제 없음. 명시적 저장으로 가독성 유지 |
-| DTO → Command 변환 패턴 변경 | 프로젝트 전체에서 일관되게 사용 중. 패턴 유지 |
-| 즉시구매 기능 검증 로직 추가 | 현재 비활성화 상태. 활성화 시점에 검증 로직 추가 예정 |
-
----
-
-## 8. 검증
-
-```bash
-# Cucumber 테스트 실행
-./gradlew test --tests "com.cos.fairbid.cucumber.CucumberTestRunner"
-
-# 전체 빌드
-./gradlew build
-```
-
-모든 테스트 통과 확인 완료.
+| 파일 | 변경 내용 |
+|------|----------|
+| `BidType.java` | `calculateAmount()` 추상 메서드 + 각 유형별 구현 |
+| `Bid.java` | if-else 제거, BidType에 위임 |
+| `Auction.java` | `validateBidEligibility()`에 null 체크 추가 |
+| `InvalidBidException.java` | `bidderIdRequired()` 팩토리 메서드 추가 |

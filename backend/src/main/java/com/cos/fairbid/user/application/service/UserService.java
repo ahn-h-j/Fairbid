@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseCase,
         GetMyProfileUseCase, UpdateNicknameUseCase, DeactivateAccountUseCase,
-        UpdateShippingAddressUseCase, GetTradeStatsUseCase {
+        UpdateShippingAddressUseCase, UpdateBankAccountUseCase, GetTradeStatsUseCase {
 
     private final LoadUserPort loadUserPort;
     private final SaveUserPort saveUserPort;
@@ -180,8 +180,26 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
         return new TradeStats(
                 tradeRepositoryPort.countCompletedSales(userId),
                 tradeRepositoryPort.countCompletedPurchases(userId),
-                tradeRepositoryPort.sumCompletedAmount(userId)
+                tradeRepositoryPort.sumCompletedSalesAmount(userId),
+                tradeRepositoryPort.sumCompletedPurchaseAmount(userId)
         );
+    }
+
+    /**
+     * 계좌 정보를 수정한다.
+     * 판매자가 판매 대금을 수령할 계좌를 등록/수정한다.
+     */
+    @Override
+    @Transactional
+    public User updateBankAccount(Long userId, String bankName, String accountNumber, String accountHolder) {
+        User user = loadUserPort.findById(userId)
+                .orElseThrow(() -> UserNotFoundException.withId(userId));
+
+        user.updateBankAccount(bankName, accountNumber, accountHolder);
+        user = saveUserPort.save(user);
+        log.info("계좌 정보 수정: userId={}", userId);
+
+        return user;
     }
 
     /**

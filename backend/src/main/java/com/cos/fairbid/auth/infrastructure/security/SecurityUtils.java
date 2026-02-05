@@ -1,5 +1,6 @@
 package com.cos.fairbid.auth.infrastructure.security;
 
+import com.cos.fairbid.common.exception.UnauthorizedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -18,12 +19,12 @@ public final class SecurityUtils {
      * 인증되지 않은 상태에서 호출하면 예외가 발생한다.
      *
      * @return 현재 사용자 ID
-     * @throws IllegalStateException 인증되지 않은 상태에서 호출 시
+     * @throws UnauthorizedException 인증되지 않은 상태에서 호출 시
      */
     public static Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
-            throw new IllegalStateException("인증된 사용자 정보를 찾을 수 없습니다.");
+            throw UnauthorizedException.notAuthenticated();
         }
         return userDetails.getUserId();
     }

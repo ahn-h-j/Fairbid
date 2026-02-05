@@ -229,7 +229,7 @@ public class Auction {
 
         // 본인 경매 입찰 불가 확인
         if (this.sellerId.equals(bidderId)) {
-            throw SelfBidNotAllowedException.forAuction(this.id, this.sellerId);
+            throw SelfBidNotAllowedException.create();
         }
     }
 

@@ -138,6 +138,33 @@ public class FcmPushNotificationAdapter implements PushNotificationPort {
         saveInAppNotificationWithTrade(userId, type, title, body, auctionId, tradeId);
     }
 
+    @Override
+    public void sendPaymentConfirmedNotification(Long sellerId, Long auctionId, Long tradeId, String auctionTitle) {
+        NotificationType type = NotificationType.PAYMENT_CONFIRMED;
+        String title = type.getTitle();
+        String body = type.formatBody(auctionTitle, null);
+        fcmClient.send(sellerId, title, body, type, auctionId);
+        saveInAppNotificationWithTrade(sellerId, type, title, body, auctionId, tradeId);
+    }
+
+    @Override
+    public void sendPaymentVerifiedNotification(Long buyerId, Long auctionId, Long tradeId, String auctionTitle) {
+        NotificationType type = NotificationType.PAYMENT_VERIFIED;
+        String title = type.getTitle();
+        String body = type.formatBody(auctionTitle, null);
+        fcmClient.send(buyerId, title, body, type, auctionId);
+        saveInAppNotificationWithTrade(buyerId, type, title, body, auctionId, tradeId);
+    }
+
+    @Override
+    public void sendPaymentRejectedNotification(Long buyerId, Long auctionId, Long tradeId, String auctionTitle) {
+        NotificationType type = NotificationType.PAYMENT_REJECTED;
+        String title = type.getTitle();
+        String body = type.formatBody(auctionTitle, null);
+        fcmClient.send(buyerId, title, body, type, auctionId);
+        saveInAppNotificationWithTrade(buyerId, type, title, body, auctionId, tradeId);
+    }
+
     /**
      * 인앱 알림을 Redis에 저장한다
      */

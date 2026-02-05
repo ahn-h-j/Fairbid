@@ -124,6 +124,114 @@ public class DeliveryService implements DeliveryUseCase {
     }
 
     @Override
+    public DeliveryInfo confirmPayment(Long tradeId, Long userId) {
+        Trade trade = findTradeOrThrow(tradeId);
+
+        // 구매자만 입금 확인 가능
+        if (!trade.isBuyer(userId)) {
+            throw NotTradeParticipantException.notBuyer(userId, tradeId);
+        }
+
+        // 택배 거래만 입금 확인 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
+        }
+
+        // 배송 정보 조회
+        DeliveryInfo deliveryInfo = deliveryInfoRepositoryPort.findByTradeId(tradeId)
+                .orElseThrow(() -> new IllegalStateException("배송 정보가 없습니다."));
+
+        // 입금 확인 처리
+        deliveryInfo.confirmPayment();
+        DeliveryInfo savedInfo = deliveryInfoRepositoryPort.save(deliveryInfo);
+
+        // 판매자에게 입금 완료 알림
+        auctionRepositoryPort.findById(trade.getAuctionId()).ifPresent(auction -> {
+            pushNotificationPort.sendPaymentConfirmedNotification(
+                    trade.getSellerId(),
+                    auction.getId(),
+                    tradeId,
+                    auction.getTitle()
+            );
+        });
+
+        log.info("입금 완료 처리 - tradeId: {}, buyerId: {}", tradeId, userId);
+        return savedInfo;
+    }
+
+    @Override
+    public DeliveryInfo verifyPayment(Long tradeId, Long userId) {
+        Trade trade = findTradeOrThrow(tradeId);
+
+        // 판매자만 입금 확인 가능
+        if (!trade.isSeller(userId)) {
+            throw NotTradeParticipantException.notSeller(userId, tradeId);
+        }
+
+        // 택배 거래만 입금 확인 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
+        }
+
+        // 배송 정보 조회
+        DeliveryInfo deliveryInfo = deliveryInfoRepositoryPort.findByTradeId(tradeId)
+                .orElseThrow(() -> new IllegalStateException("배송 정보가 없습니다."));
+
+        // 입금 확인 처리
+        deliveryInfo.verifyPayment();
+        DeliveryInfo savedInfo = deliveryInfoRepositoryPort.save(deliveryInfo);
+
+        // 구매자에게 입금 확인 알림
+        auctionRepositoryPort.findById(trade.getAuctionId()).ifPresent(auction -> {
+            pushNotificationPort.sendPaymentVerifiedNotification(
+                    trade.getBuyerId(),
+                    auction.getId(),
+                    tradeId,
+                    auction.getTitle()
+            );
+        });
+
+        log.info("입금 확인 완료 - tradeId: {}, sellerId: {}", tradeId, userId);
+        return savedInfo;
+    }
+
+    @Override
+    public DeliveryInfo rejectPayment(Long tradeId, Long userId) {
+        Trade trade = findTradeOrThrow(tradeId);
+
+        // 판매자만 미입금 처리 가능
+        if (!trade.isSeller(userId)) {
+            throw NotTradeParticipantException.notSeller(userId, tradeId);
+        }
+
+        // 택배 거래만 미입금 처리 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
+        }
+
+        // 배송 정보 조회
+        DeliveryInfo deliveryInfo = deliveryInfoRepositoryPort.findByTradeId(tradeId)
+                .orElseThrow(() -> new IllegalStateException("배송 정보가 없습니다."));
+
+        // 미입금 처리
+        deliveryInfo.rejectPayment();
+        DeliveryInfo savedInfo = deliveryInfoRepositoryPort.save(deliveryInfo);
+
+        // 구매자에게 미입금 알림
+        auctionRepositoryPort.findById(trade.getAuctionId()).ifPresent(auction -> {
+            pushNotificationPort.sendPaymentRejectedNotification(
+                    trade.getBuyerId(),
+                    auction.getId(),
+                    tradeId,
+                    auction.getTitle()
+            );
+        });
+
+        log.info("미입금 처리 - tradeId: {}, sellerId: {}", tradeId, userId);
+        return savedInfo;
+    }
+
+    @Override
     public DeliveryInfo confirmDelivery(Long tradeId, Long userId) {
         Trade trade = findTradeOrThrow(tradeId);
 

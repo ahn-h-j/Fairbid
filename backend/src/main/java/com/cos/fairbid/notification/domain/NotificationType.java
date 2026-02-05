@@ -154,7 +154,7 @@ public enum NotificationType {
 
         @Override
         public String formatBody(String auctionTitle, Long amount) {
-            return String.format("[%s] 구매자가 배송지를 입력했습니다. 발송을 진행해주세요.", auctionTitle);
+            return String.format("[%s] 구매자가 배송지를 입력했습니다. 구매자의 입금을 기다려주세요.", auctionTitle);
         }
     },
 
@@ -185,6 +185,51 @@ public enum NotificationType {
         @Override
         public String formatBody(String auctionTitle, Long amount) {
             return String.format("[%s] 거래가 성공적으로 완료되었습니다. 이용해주셔서 감사합니다.", auctionTitle);
+        }
+    },
+
+    /**
+     * 입금 완료됨 (판매자에게)
+     */
+    PAYMENT_CONFIRMED {
+        @Override
+        public String getTitle() {
+            return "구매자가 입금을 완료했습니다";
+        }
+
+        @Override
+        public String formatBody(String auctionTitle, Long amount) {
+            return String.format("[%s] 구매자가 입금 완료를 알렸습니다. 계좌를 확인해주세요.", auctionTitle);
+        }
+    },
+
+    /**
+     * 판매자가 입금을 확인함 (구매자에게)
+     */
+    PAYMENT_VERIFIED {
+        @Override
+        public String getTitle() {
+            return "입금이 확인되었습니다";
+        }
+
+        @Override
+        public String formatBody(String auctionTitle, Long amount) {
+            return String.format("[%s] 판매자가 입금을 확인했습니다. 곧 상품이 발송됩니다.", auctionTitle);
+        }
+    },
+
+    /**
+     * 판매자가 입금을 거절함 (구매자에게)
+     */
+    PAYMENT_REJECTED {
+        @Override
+        public String getTitle() {
+            return "입금이 확인되지 않았습니다";
+        }
+
+        @Override
+        public String formatBody(String auctionTitle, Long amount) {
+            return String.format("[%s] 판매자가 입금을 확인하지 못했습니다. 입금 후 다시 입금 완료를 눌러주세요.", auctionTitle);
         }
     };
 

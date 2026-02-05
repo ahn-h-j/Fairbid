@@ -2,6 +2,7 @@ package com.cos.fairbid.auction.adapter.out.persistence.repository;
 
 import com.cos.fairbid.auction.adapter.out.persistence.entity.AuctionEntity;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -20,11 +21,12 @@ public class AuctionSpecification {
     /**
      * 검색 조건에 따른 Specification 생성
      *
-     * @param status  경매 상태 필터 (nullable - null이면 진행 중인 경매만 조회)
-     * @param keyword 검색어 - 상품명 (nullable)
+     * @param status   경매 상태 필터 (nullable - null이면 진행 중인 경매만 조회)
+     * @param category 카테고리 필터 (nullable)
+     * @param keyword  검색어 - 상품명 (nullable)
      * @return Specification
      */
-    public static Specification<AuctionEntity> withCondition(AuctionStatus status, String keyword) {
+    public static Specification<AuctionEntity> withCondition(AuctionStatus status, Category category, String keyword) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -39,6 +41,11 @@ public class AuctionSpecification {
                         AuctionStatus.BIDDING,
                         AuctionStatus.INSTANT_BUY_PENDING
                 ));
+            }
+
+            // category 필터링
+            if (category != null) {
+                predicates.add(criteriaBuilder.equal(root.get("category"), category));
             }
 
             // keyword 검색 (title LIKE %keyword%)

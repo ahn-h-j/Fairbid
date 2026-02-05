@@ -16,14 +16,16 @@ public interface GetTradeStatsUseCase {
     /**
      * 거래 통계 결과
      *
-     * @param completedSales     완료된 판매 수
-     * @param completedPurchases 완료된 구매 수
-     * @param totalAmount        총 거래 금액
+     * @param completedSales      완료된 판매 수
+     * @param completedPurchases  완료된 구매 수
+     * @param totalSalesAmount    총 판매 금액
+     * @param totalPurchaseAmount 총 구매 금액
      */
     record TradeStats(
             int completedSales,
             int completedPurchases,
-            long totalAmount
+            long totalSalesAmount,
+            long totalPurchaseAmount
     ) {
     }
 }

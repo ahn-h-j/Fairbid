@@ -10,6 +10,7 @@ import com.cos.fairbid.auction.application.port.in.GetUserWinningInfoUseCase;
 import com.cos.fairbid.auction.application.port.in.GetUserWinningInfoUseCase.UserWinningInfo;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auth.infrastructure.security.SecurityUtils;
 import com.cos.fairbid.common.annotation.RequireOnboarding;
 import com.cos.fairbid.common.response.ApiResponse;
@@ -62,6 +63,7 @@ public class AuctionController {
      * 경매 목록 조회 API
      *
      * @param status   경매 상태 필터 (선택)
+     * @param category 카테고리 필터 (선택)
      * @param keyword  검색어 - 상품명 (선택)
      * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
@@ -69,10 +71,11 @@ public class AuctionController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AuctionListResponse>>> getAuctionList(
             @RequestParam(required = false) AuctionStatus status,
+            @RequestParam(required = false) Category category,
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, keyword, pageable);
+        Page<Auction> auctions = getAuctionListUseCase.getAuctionList(status, category, keyword, pageable);
         Page<AuctionListResponse> response = auctions.map(AuctionListResponse::from);
 
         return ResponseEntity.ok(ApiResponse.success(response));
