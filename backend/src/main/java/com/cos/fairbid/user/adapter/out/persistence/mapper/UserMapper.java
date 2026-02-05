@@ -35,6 +35,9 @@ public class UserMapper {
                 .shippingPostalCode(user.getShippingPostalCode())
                 .shippingAddress(user.getShippingAddress())
                 .shippingAddressDetail(user.getShippingAddressDetail())
+                .bankName(user.getBankName())
+                .accountNumber(user.getAccountNumber())
+                .accountHolder(user.getAccountHolder())
                 .build();
     }
 
@@ -63,6 +66,9 @@ public class UserMapper {
                 .shippingPostalCode(entity.getShippingPostalCode())
                 .shippingAddress(entity.getShippingAddress())
                 .shippingAddressDetail(entity.getShippingAddressDetail())
+                .bankName(entity.getBankName())
+                .accountNumber(entity.getAccountNumber())
+                .accountHolder(entity.getAccountHolder())
                 .build();
     }
 }

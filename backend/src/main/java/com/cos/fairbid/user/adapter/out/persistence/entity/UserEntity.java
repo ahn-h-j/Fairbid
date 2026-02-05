@@ -83,13 +83,24 @@ public class UserEntity {
     @Column(name = "shipping_address_detail", length = 200)
     private String shippingAddressDetail;
 
+    // 계좌 정보 (판매 대금 수령용)
+    @Column(name = "bank_name", length = 50)
+    private String bankName;
+
+    @Column(name = "account_number", length = 50)
+    private String accountNumber;
+
+    @Column(name = "account_holder", length = 50)
+    private String accountHolder;
+
     @Builder
     public UserEntity(Long id, String email, String nickname, String phoneNumber,
                       OAuthProvider provider, String providerId, UserRole role,
                       Integer warningCount, Boolean isActive,
                       LocalDateTime createdAt, LocalDateTime updatedAt,
                       String shippingRecipientName, String shippingPhone,
-                      String shippingPostalCode, String shippingAddress, String shippingAddressDetail) {
+                      String shippingPostalCode, String shippingAddress, String shippingAddressDetail,
+                      String bankName, String accountNumber, String accountHolder) {
         this.id = id;
         this.email = email;
         this.nickname = nickname;
@@ -106,5 +117,8 @@ public class UserEntity {
         this.shippingPostalCode = shippingPostalCode;
         this.shippingAddress = shippingAddress;
         this.shippingAddressDetail = shippingAddressDetail;
+        this.bankName = bankName;
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
     }
 }
