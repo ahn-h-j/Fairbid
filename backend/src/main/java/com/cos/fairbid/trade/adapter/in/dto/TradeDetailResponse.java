@@ -34,7 +34,29 @@ public class TradeDetailResponse {
     // 배송 정보 (택배인 경우)
     private DeliveryInfoResponse deliveryInfo;
 
+    // 판매자 계좌 정보 (택배 거래 시 입금용, 구매자에게만 노출)
+    private SellerBankAccount sellerBankAccount;
+
+    @Getter
+    @Builder
+    public static class SellerBankAccount {
+        private String bankName;
+        private String accountNumber;
+        private String accountHolder;
+    }
+
+    /**
+     * 판매자 계좌 없이 생성 (기본)
+     */
     public static TradeDetailResponse from(Trade trade, DirectTradeInfo directTradeInfo, DeliveryInfo deliveryInfo) {
+        return from(trade, directTradeInfo, deliveryInfo, null);
+    }
+
+    /**
+     * 판매자 계좌 정보 포함하여 생성
+     */
+    public static TradeDetailResponse from(Trade trade, DirectTradeInfo directTradeInfo, DeliveryInfo deliveryInfo,
+                                           SellerBankAccount sellerBankAccount) {
         return TradeDetailResponse.builder()
                 .id(trade.getId())
                 .auctionId(trade.getAuctionId())
@@ -48,6 +70,7 @@ public class TradeDetailResponse {
                 .completedAt(trade.getCompletedAt())
                 .directTradeInfo(directTradeInfo != null ? DirectTradeInfoResponse.from(directTradeInfo) : null)
                 .deliveryInfo(deliveryInfo != null ? DeliveryInfoResponse.from(deliveryInfo) : null)
+                .sellerBankAccount(sellerBankAccount)
                 .build();
     }
 }

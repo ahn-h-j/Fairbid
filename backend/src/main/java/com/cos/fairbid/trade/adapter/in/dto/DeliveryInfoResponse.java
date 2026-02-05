@@ -22,6 +22,8 @@ public class DeliveryInfoResponse {
     private String courierCompany;
     private String trackingNumber;
     private DeliveryStatus status;
+    private boolean paymentConfirmed;
+    private boolean paymentVerified;
 
     public static DeliveryInfoResponse from(DeliveryInfo info) {
         return DeliveryInfoResponse.builder()
@@ -35,6 +37,8 @@ public class DeliveryInfoResponse {
                 .courierCompany(info.getCourierCompany())
                 .trackingNumber(info.getTrackingNumber())
                 .status(info.getStatus())
+                .paymentConfirmed(info.isPaymentConfirmed())
+                .paymentVerified(info.isPaymentVerified())
                 .build();
     }
 }
