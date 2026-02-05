@@ -25,6 +25,8 @@ public class DeliveryInfoMapper {
                 .courierCompany(info.getCourierCompany())
                 .trackingNumber(info.getTrackingNumber())
                 .status(info.getStatus())
+                .paymentConfirmed(info.isPaymentConfirmed())
+                .paymentVerified(info.isPaymentVerified())
                 .build();
     }
 
@@ -43,6 +45,8 @@ public class DeliveryInfoMapper {
                 .courierCompany(entity.getCourierCompany())
                 .trackingNumber(entity.getTrackingNumber())
                 .status(entity.getStatus())
+                .paymentConfirmed(entity.isPaymentConfirmed())
+                .paymentVerified(entity.isPaymentVerified())
                 .build();
     }
 }
