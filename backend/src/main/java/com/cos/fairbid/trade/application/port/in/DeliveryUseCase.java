@@ -66,4 +66,44 @@ public interface DeliveryUseCase {
      * @throws com.cos.fairbid.trade.domain.exception.NotTradeParticipantException 구매자가 아닌 경우
      */
     DeliveryInfo confirmDelivery(Long tradeId, Long userId);
+
+    /**
+     * 입금 완료를 확인한다 (구매자)
+     * 구매자가 판매자 계좌로 입금 완료 후 호출한다.
+     * 판매자에게 입금 완료 알림이 발송된다.
+     *
+     * @param tradeId 거래 ID
+     * @param userId  요청자 ID (구매자)
+     * @return 업데이트된 배송 정보
+     * @throws com.cos.fairbid.trade.domain.exception.TradeNotFoundException 거래가 없는 경우
+     * @throws com.cos.fairbid.trade.domain.exception.NotTradeParticipantException 구매자가 아닌 경우
+     */
+    DeliveryInfo confirmPayment(Long tradeId, Long userId);
+
+    /**
+     * 입금을 확인한다 (판매자)
+     * 구매자가 입금 완료를 알린 후, 판매자가 실제 입금을 확인할 때 호출한다.
+     * 입금 확인 후에만 발송(ship)이 가능하다.
+     * 구매자에게 입금 확인 알림이 발송된다.
+     *
+     * @param tradeId 거래 ID
+     * @param userId  요청자 ID (판매자)
+     * @return 업데이트된 배송 정보
+     * @throws com.cos.fairbid.trade.domain.exception.TradeNotFoundException 거래가 없는 경우
+     * @throws com.cos.fairbid.trade.domain.exception.NotTradeParticipantException 판매자가 아닌 경우
+     */
+    DeliveryInfo verifyPayment(Long tradeId, Long userId);
+
+    /**
+     * 입금을 거절한다 (판매자)
+     * 구매자가 입금 완료를 알렸지만 실제로 입금되지 않은 경우 호출한다.
+     * paymentConfirmed가 false로 되돌아가며, 구매자에게 미입금 알림이 발송된다.
+     *
+     * @param tradeId 거래 ID
+     * @param userId  요청자 ID (판매자)
+     * @return 업데이트된 배송 정보
+     * @throws com.cos.fairbid.trade.domain.exception.TradeNotFoundException 거래가 없는 경우
+     * @throws com.cos.fairbid.trade.domain.exception.NotTradeParticipantException 판매자가 아닌 경우
+     */
+    DeliveryInfo rejectPayment(Long tradeId, Long userId);
 }
