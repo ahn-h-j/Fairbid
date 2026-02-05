@@ -180,7 +180,8 @@ public class UserService implements CompleteOnboardingUseCase, CheckNicknameUseC
         return new TradeStats(
                 tradeRepositoryPort.countCompletedSales(userId),
                 tradeRepositoryPort.countCompletedPurchases(userId),
-                tradeRepositoryPort.sumCompletedAmount(userId)
+                tradeRepositoryPort.sumCompletedSalesAmount(userId),
+                tradeRepositoryPort.sumCompletedPurchaseAmount(userId)
         );
     }
 
