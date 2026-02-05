@@ -437,12 +437,13 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
 
   // 계좌 등록 처리
   const handleSubmitBankAccount = async () => {
-    await apiRequest('/users/me/bank-account', {
+    const result = await apiRequest('/users/me/bank-account', {
       method: 'PUT',
       body: JSON.stringify(bankAccountForm),
     });
-    // 로컬 상태 업데이트 (뷰 전환)
+    // API 성공 후에만 로컬 상태 업데이트 (뷰 전환)
     setSavedBankAccount({ ...bankAccountForm });
+    return result;
   };
 
   // 저장된 배송지 사용 토글
