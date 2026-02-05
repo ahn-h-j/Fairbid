@@ -132,6 +132,11 @@ public class DeliveryService implements DeliveryUseCase {
             throw NotTradeParticipantException.notBuyer(userId, tradeId);
         }
 
+        // 택배 거래만 입금 확인 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
+        }
+
         // 배송 정보 조회
         DeliveryInfo deliveryInfo = deliveryInfoRepositoryPort.findByTradeId(tradeId)
                 .orElseThrow(() -> new IllegalStateException("배송 정보가 없습니다."));
@@ -163,6 +168,11 @@ public class DeliveryService implements DeliveryUseCase {
             throw NotTradeParticipantException.notSeller(userId, tradeId);
         }
 
+        // 택배 거래만 입금 확인 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
+        }
+
         // 배송 정보 조회
         DeliveryInfo deliveryInfo = deliveryInfoRepositoryPort.findByTradeId(tradeId)
                 .orElseThrow(() -> new IllegalStateException("배송 정보가 없습니다."));
@@ -192,6 +202,11 @@ public class DeliveryService implements DeliveryUseCase {
         // 판매자만 미입금 처리 가능
         if (!trade.isSeller(userId)) {
             throw NotTradeParticipantException.notSeller(userId, tradeId);
+        }
+
+        // 택배 거래만 미입금 처리 가능
+        if (trade.getMethod() != TradeMethod.DELIVERY) {
+            throw InvalidTradeStatusException.notDelivery(tradeId);
         }
 
         // 배송 정보 조회
