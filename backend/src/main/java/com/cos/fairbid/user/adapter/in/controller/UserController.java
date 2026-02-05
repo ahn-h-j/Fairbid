@@ -109,7 +109,8 @@ public class UserController {
         var stats = new UserProfileResponse.TradeStats(
                 tradeStats.completedSales(),
                 tradeStats.completedPurchases(),
-                tradeStats.totalAmount()
+                tradeStats.totalSalesAmount(),
+                tradeStats.totalPurchaseAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));
@@ -225,7 +226,8 @@ public class UserController {
         var stats = new UserProfileResponse.TradeStats(
                 tradeStats.completedSales(),
                 tradeStats.completedPurchases(),
-                tradeStats.totalAmount()
+                tradeStats.totalSalesAmount(),
+                tradeStats.totalPurchaseAmount()
         );
 
         return ResponseEntity.ok(ApiResponse.success(UserProfileResponse.from(user, stats)));

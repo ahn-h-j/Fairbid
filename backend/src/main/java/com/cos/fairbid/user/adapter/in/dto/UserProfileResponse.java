@@ -26,14 +26,16 @@ public record UserProfileResponse(
     /**
      * 거래 통계 DTO
      *
-     * @param totalSales     완료된 판매 수
-     * @param totalPurchases 완료된 구매 수
-     * @param totalAmount    총 거래 금액
+     * @param totalSales          완료된 판매 수
+     * @param totalPurchases      완료된 구매 수
+     * @param totalSalesAmount    총 판매 금액
+     * @param totalPurchaseAmount 총 구매 금액
      */
     public record TradeStats(
             int totalSales,
             int totalPurchases,
-            long totalAmount
+            long totalSalesAmount,
+            long totalPurchaseAmount
     ) {
     }
 
