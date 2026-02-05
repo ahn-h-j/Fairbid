@@ -38,7 +38,7 @@ export default function UserDropdown() {
   const handleLogout = async () => {
     setIsOpen(false);
     await logout();
-    navigate('/', { replace: true });
+    navigate('/auctions', { replace: true });
   };
 
   return (

@@ -67,7 +67,7 @@ export default function LoginPage() {
   // 이미 로그인된 상태면 적절한 페이지로 리다이렉트
   useEffect(() => {
     if (authState === AUTH_STATE.AUTHENTICATED) {
-      navigate('/', { replace: true });
+      navigate('/auctions', { replace: true });
     } else if (authState === AUTH_STATE.ONBOARDING_REQUIRED) {
       navigate('/onboarding', { replace: true });
     }
@@ -78,7 +78,7 @@ export default function LoginPage() {
    * 이전 페이지 URL을 저장하고 서버 OAuth 엔드포인트로 이동한다.
    */
   const handleLogin = (providerId) => {
-    const redirectPath = location.state?.from || '/';
+    const redirectPath = location.state?.from || '/auctions';
     localStorage.setItem('redirectAfterLogin', redirectPath);
     window.location.href = `/api/v1/auth/oauth2/${providerId}`;
   };
