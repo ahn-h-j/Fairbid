@@ -139,7 +139,11 @@ export default function AuctionDetailPage() {
         mutate((prev) => prev ? { ...prev, status: 'INSTANT_BUY_PENDING', instantBuyEnabled: false } : prev, { revalidate: false });
       }
     } catch (err) {
-      setBidMessage({ type: 'error', message: err.message || '입찰에 실패했습니다.' });
+      // 비로그인 상태에서 401 에러 발생 시 로그인 필요 메시지 표시
+      const message = err.status === 401 || err.code === 'TOKEN_EXPIRED'
+        ? '로그인이 필요합니다.'
+        : err.message || '입찰에 실패했습니다.';
+      setBidMessage({ type: 'error', message });
     } finally {
       setBidLoading(false);
     }

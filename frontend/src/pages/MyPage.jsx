@@ -237,9 +237,13 @@ export default function MyPage() {
             <p className="text-2xl font-bold text-violet-600">{profile?.stats?.totalPurchases ?? 0}</p>
             <p className="text-xs text-gray-500 mt-1">구매 완료</p>
           </div>
-          <div className="bg-green-50 rounded-xl p-4 text-center col-span-2">
-            <p className="text-2xl font-bold text-green-600">{formatPrice(profile?.stats?.totalAmount)}원</p>
-            <p className="text-xs text-gray-500 mt-1">총 거래 금액</p>
+          <div className="bg-blue-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-blue-600">{formatPrice(profile?.stats?.totalSalesAmount)}원</p>
+            <p className="text-xs text-gray-500 mt-1">판매 금액</p>
+          </div>
+          <div className="bg-violet-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-violet-600">{formatPrice(profile?.stats?.totalPurchaseAmount)}원</p>
+            <p className="text-xs text-gray-500 mt-1">구매 금액</p>
           </div>
         </div>
       </section>

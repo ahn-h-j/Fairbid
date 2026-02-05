@@ -15,7 +15,7 @@ import { apiRequest } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
 import Alert from '../components/Alert';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatPhoneInput, formatPhone } from '../utils/formatters';
 
 /**
  * 거래 상세 페이지
@@ -469,7 +469,7 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
               </div>
               {useSavedAddress && (
                 <div className="bg-blue-50 rounded-xl p-3 text-[13px] text-blue-700">
-                  <p className="font-semibold">{savedAddress.recipientName} ({savedAddress.recipientPhone})</p>
+                  <p className="font-semibold">{savedAddress.recipientName} ({formatPhone(savedAddress.recipientPhone)})</p>
                   <p className="mt-0.5">{savedAddress.postalCode && `[${savedAddress.postalCode}] `}{savedAddress.address}</p>
                   {savedAddress.addressDetail && <p>{savedAddress.addressDetail}</p>}
                 </div>
@@ -491,7 +491,7 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
                 type="tel"
                 placeholder="연락처 (010-0000-0000)"
                 value={addressForm.recipientPhone}
-                onChange={(e) => setAddressForm(prev => ({ ...prev, recipientPhone: e.target.value }))}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, recipientPhone: formatPhoneInput(e.target.value) }))}
                 className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
               <input
@@ -545,7 +545,7 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
           <div className="bg-gray-50 rounded-xl p-4 space-y-1">
             <p className="text-[13px] text-gray-600">📍 {deliveryInfo.address} {deliveryInfo.addressDetail}</p>
             <p className="text-[13px] text-gray-600">👤 {deliveryInfo.recipientName}</p>
-            <p className="text-[13px] text-gray-600">📞 {deliveryInfo.recipientPhone}</p>
+            <p className="text-[13px] text-gray-600">📞 {formatPhone(deliveryInfo.recipientPhone)}</p>
           </div>
           <h4 className="text-[13px] font-semibold text-gray-700 pt-2">송장 정보 입력</h4>
           <div className="space-y-3">
@@ -635,7 +635,7 @@ function ArrangedUI({ trade, isSeller, onAction, submitting }) {
           </div>
           <div className="bg-gray-50 rounded-xl p-4 space-y-1">
             <p className="text-[13px] font-semibold text-gray-700">배송지</p>
-            <p className="text-[13px] text-gray-600">👤 {trade.deliveryInfo.recipientName} ({trade.deliveryInfo.recipientPhone})</p>
+            <p className="text-[13px] text-gray-600">👤 {trade.deliveryInfo.recipientName} ({formatPhone(trade.deliveryInfo.recipientPhone)})</p>
             <p className="text-[13px] text-gray-600">📍 {trade.deliveryInfo.address} {trade.deliveryInfo.addressDetail}</p>
           </div>
         </div>
