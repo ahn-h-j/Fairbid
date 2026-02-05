@@ -2,6 +2,7 @@ package com.cos.fairbid.auction.application.port.out;
 
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -42,11 +43,12 @@ public interface AuctionRepositoryPort {
      * 검색 조건에 따라 경매 목록을 페이지네이션하여 조회한다
      *
      * @param status   경매 상태 필터 (nullable)
+     * @param category 카테고리 필터 (nullable)
      * @param keyword  검색어 - 상품명 (nullable)
      * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
      */
-    Page<Auction> findAll(AuctionStatus status, String keyword, Pageable pageable);
+    Page<Auction> findAll(AuctionStatus status, Category category, String keyword, Pageable pageable);
 
     /**
      * 경매의 현재가, 입찰수, 입찰단위를 직접 업데이트한다
