@@ -33,6 +33,11 @@ public class User {
     private String shippingAddress;
     private String shippingAddressDetail;
 
+    // 계좌 정보 (판매 대금 수령용)
+    private String bankName;
+    private String accountNumber;
+    private String accountHolder;
+
     private static final int MAX_WARNING_COUNT = 3;
 
     // ========== 팩토리 메서드 ==========
@@ -174,5 +179,28 @@ public class User {
      */
     public boolean hasShippingAddress() {
         return shippingRecipientName != null && shippingAddress != null;
+    }
+
+    /**
+     * 계좌 정보를 업데이트한다.
+     * 판매자가 판매 대금을 수령할 계좌를 등록한다.
+     *
+     * @param bankName      은행명
+     * @param accountNumber 계좌번호
+     * @param accountHolder 예금주
+     */
+    public void updateBankAccount(String bankName, String accountNumber, String accountHolder) {
+        this.bankName = bankName;
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
+    }
+
+    /**
+     * 계좌가 등록되어 있는지 확인한다.
+     *
+     * @return 계좌 등록 여부
+     */
+    public boolean hasBankAccount() {
+        return bankName != null && accountNumber != null && accountHolder != null;
     }
 }
