@@ -142,14 +142,20 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
 
-        // 토큰 갱신 (Token Rotation 적용)
-        RefreshTokenUseCase.TokenResult result = refreshTokenUseCase.refresh(refreshToken);
+        try {
+            // 토큰 갱신 (Token Rotation 적용)
+            RefreshTokenUseCase.TokenResult result = refreshTokenUseCase.refresh(refreshToken);
 
-        // 새 Refresh Token 쿠키 설정
-        cookieUtils.setRefreshTokenCookie(response, result.newRefreshToken());
+            // 새 Refresh Token 쿠키 설정
+            cookieUtils.setRefreshTokenCookie(response, result.newRefreshToken());
 
-        // Access Token + onboarded 정보 응답 (ApiResponse로 래핑)
-        return ResponseEntity.ok(ApiResponse.success(new TokenResponse(result.accessToken(), result.onboarded())));
+            // Access Token + onboarded 정보 응답 (ApiResponse로 래핑)
+            return ResponseEntity.ok(ApiResponse.success(new TokenResponse(result.accessToken(), result.onboarded())));
+        } catch (Exception e) {
+            // 토큰 갱신 실패 시 쿠키 제거 → 브라우저가 만료된 토큰으로 재시도하는 무한 루프 방지
+            cookieUtils.clearRefreshTokenCookie(response);
+            throw e;
+        }
     }
 
     /**
