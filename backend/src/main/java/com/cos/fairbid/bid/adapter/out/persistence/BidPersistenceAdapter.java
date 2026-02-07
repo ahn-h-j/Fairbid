@@ -35,4 +35,9 @@ public class BidPersistenceAdapter implements BidRepositoryPort {
                 .map(bidMapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public long countAll() {
+        return jpaBidRepository.count();
+    }
 }

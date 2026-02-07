@@ -26,4 +26,12 @@ public interface BidRepositoryPort {
      * @return 상위 2개 입찰 목록 (금액 내림차순)
      */
     List<Bid> findTop2ByAuctionId(Long auctionId);
+
+    /**
+     * 전체 입찰 건수를 조회한다
+     * Redis-RDB 정합성 모니터링에 사용
+     *
+     * @return 전체 입찰 건수
+     */
+    long countAll();
 }
