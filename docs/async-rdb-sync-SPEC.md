@@ -1,5 +1,7 @@
 # 비동기 RDB 동기화 테스트 Specification
 
+> ⚠️ **이 문서는 향후 진행할 테스트의 계획서입니다. 아직 실행 전이며, 실행 후 별도 결과 문서를 작성할 예정입니다.**
+
 > 동기 → @Async → Message Queue 단계별 문제 해결 과정을 테스트로 증명하고, 데이터 기반으로 최적의 아키텍처를 선택한다.
 
 ---
@@ -8,43 +10,56 @@
 
 ### Problem Statement
 
-현재 동기 방식의 입찰 플로우에서 **장애 상황 시 데이터 불일치** 문제가 있다:
+현재 동기 방식의 입찰 플로우에서 **장애 전파로 인한 전체 서비스 마비** 문제가 있다:
 
 ```
-[동기 방식 문제]
-1. Redis Lua 스크립트 실행 (트랜잭션 밖, 즉시 반영) ✅
-2. RDB write (트랜잭션 안) ❌ 실패
-3. HTTP 500 반환
+[동기 방식의 진짜 문제: 장애 전파]
 
-→ 사용자: "입찰 실패했네"
-→ Redis: 입찰 반영됨
-→ 다른 사용자: WebSocket으로 입찰 알림 받음
-→ 결과: Redis-RDB 불일치 + 사용자 혼란
+@Transactional (클래스 레벨)
+public Bid placeBid(...) {
+    // ⚠️ 메서드 진입 시점에 이미 DB 커넥션 획득 시도!
+
+    Redis Lua 실행  ← DB 커넥션 얻은 후에야 실행
+    bidRepository.save(bid)
+}
+
+DB 장애 발생 시:
+1. 입찰 요청 → @Transactional 진입 → 커넥션 풀에서 커넥션 요청
+2. connection-timeout: 3초 동안 블로킹 (모든 요청이!)
+3. Redis 작업조차 시작 못함 (DB 커넥션 대기 중)
+4. 커넥션 풀 50개 고갈 → 새 요청도 3초씩 대기
+5. 스레드 풀 점유 → 다른 API(경매 조회 등)도 영향
+
+→ 결과: 단순 "20건 유실"이 아닌 "입찰 API 전체 마비"
+→ 핵심 수치: p95 응답시간 N배 급증, TPS 급락
 ```
 
 ### Solution Summary
 
-비동기 전환으로 장애 격리:
+**단계별 전환으로 문제 해결**:
 
 ```
-[비동기 방식]
-1. Redis Lua 스크립트 실행 ✅
-2. 메시지 큐에 적재 ✅
-3. HTTP 200 반환 (즉시 응답)
+[Phase 1: 동기 (현재)]
+문제: DB 장애 → 전체 API 마비 (장애 전파)
+수치: p95 Nms → Nms, TPS N → N 급락
 
-→ RDB는 Consumer가 비동기로 처리
-→ DB 장애 시에도 입찰은 정상 처리
-→ 메시지 큐에 남아있다가 복구 후 처리
+[Phase 2: @Async]
+해결: 장애 격리 성공 (DB 장애가 응답에 영향 없음)
+한계: 앱 종료 시 메모리 큐 유실 → N건 영구 손실
+수치: 유실 N건, 복구 불가
+
+[Phase 3: MQ (Redis Stream / Kafka / RabbitMQ)]
+해결: 장애 격리 + 복구 가능성
+수치: 유실 0건, 재시작 후 N초 내 자동 복구
 ```
 
 ### Success Criteria
 
-| 기준 | 목표 |
-|------|------|
-| 장애 격리 | DB 다운 시에도 입찰 성공 |
-| 복구 가능성 | 앱 재시작 후 미처리 메시지 자동 처리 |
-| 최종 정합성 | Eventual Consistency (낙찰 전까지 RDB 동기화) |
-| 의사결정 근거 | 테스트 데이터 기반 객관적 선택 |
+| 기준 | Phase 1 (동기) | Phase 2 (@Async) | Phase 3 (MQ) |
+|------|----------------|------------------|--------------|
+| 장애 격리 | ❌ 전체 마비 | ✅ 격리됨 | ✅ 격리됨 |
+| 복구 가능성 | ❌ | ❌ 메모리 유실 | ✅ 자동 복구 |
+| 핵심 측정 지표 | p95 급증, TPS 급락 | 유실 건수 | 복구 시간 |
 
 ---
 
@@ -70,6 +85,56 @@
 
 - **로컬 Docker** (docker-compose)
 - k6 부하 테스트 도구
+- **테스트 데이터 시드**: k6 `setup()` 함수에서 API 호출로 테스트 유저/경매 생성
+
+---
+
+## 2-1. 관측 인프라
+
+### 커스텀 Micrometer 메트릭
+
+BidService에 아래 메트릭을 추가하여 Prometheus → Grafana로 수집:
+
+| 메트릭 | 타입 | 용도 |
+|--------|------|------|
+| `fairbid_bid_total` | Counter (tag: result=success/fail) | 입찰 성공/실패 건수 |
+| `fairbid_bid_rdb_sync_seconds` | Timer | RDB 동기화 소요 시간 |
+| `fairbid_bid_redis_count` | Gauge | Redis에 있는 총 입찰 수 |
+| `fairbid_bid_rdb_count` | Gauge | RDB에 있는 총 입찰 수 |
+| `fairbid_bid_inconsistency_count` | Gauge | Redis - RDB 차이 (불일치 건수) |
+
+### Grafana 대시보드 추가 패널
+
+**Row: 입찰 메트릭**
+
+| 패널 | PromQL | 증명 목적 |
+|------|--------|----------|
+| 입찰 처리량 (TPS) | `rate(fairbid_bid_total[1m])` by result | 성공/실패 비율 실시간 |
+| RDB 동기화 지연 | `fairbid_bid_rdb_sync_seconds` p95/p99 | DB 상태에 따른 동기화 시간 변화 |
+| 입찰 API 응답시간 | `http_server_requests` uri="/api/v1/bids" | 입찰 엔드포인트 전용 레이턴시 |
+
+**Row: Redis-RDB 정합성**
+
+| 패널 | PromQL | 증명 목적 |
+|------|--------|----------|
+| Redis vs RDB 입찰 건수 | `fairbid_bid_redis_count` vs `fairbid_bid_rdb_count` | 두 라인이 벌어지면 불일치 |
+| 불일치 건수 | `fairbid_bid_inconsistency_count` | 불일치 발생 순간 스파이크 |
+
+### Grafana Annotation
+
+장애 주입/복구 시점을 그래프에 수직선으로 표시하여 시각적 인과관계를 명확히 함:
+
+```bash
+# 장애 주입 시점에 Annotation 생성
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"DB 장애 주입 (docker pause mysql)","tags":["fault-injection"]}'
+
+# 복구 시점에 Annotation 생성
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"DB 복구 (docker unpause mysql)","tags":["recovery"]}'
+```
 
 ---
 
@@ -137,56 +202,105 @@ MQ 간 비교에서는 의미 없음:
 
 ### Phase 1: 동기 방식 문제점 증명
 
-#### 테스트 1-1: DB 지연 전파
+#### Baseline 측정 (정상 상태)
 
 ```bash
-# DB에 500ms 지연 주입
-docker exec mysql tc qdisc add dev eth0 root netem delay 500ms
-
-# k6 부하 테스트 실행
-k6 run scripts/bid-load-test.js
+# 정상 상태에서 30초 부하 → 기준선 확보
+k6 run --duration 30s k6/scenarios/bid-sync-test.js
 ```
 
-**측정**: 응답 시간이 500ms+ 증가하는지 확인
-**예상**: DB 지연이 응답 시간에 그대로 전파됨
+**목적**: 장애 주입 전후를 비교하기 위한 기준값 확보
+**기록 항목**: TPS, p95 응답시간, 에러율 0%, Redis-RDB 불일치 0건
 
-#### 테스트 1-2: DB 다운 시 불일치
+#### 테스트 1: DB 다운 시 불일치 + 응답 시간 전파
 
 ```bash
-# 부하 테스트 중 DB 정지
+# 1. Grafana Annotation: 장애 주입 시점 기록
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"DB 장애 주입","tags":["fault-injection"]}'
+
+# 2. 부하 테스트 중 DB 정지
 docker pause fairbid-mysql
 
-# 5초 후 재개
-sleep 5 && docker unpause fairbid-mysql
+# 3. 10초간 장애 유지 (입찰 요청 계속 유입)
+
+# 4. Grafana Annotation: 복구 시점 기록
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"DB 복구","tags":["recovery"]}'
+
+# 5. DB 복구
+docker unpause fairbid-mysql
 ```
 
-**측정**:
-- HTTP 500 에러 발생 건수
-- Redis 성공 but RDB 실패 건수 (불일치)
+**정량 측정 항목** (핵심: 장애 전파 증명):
 
-**예상**: Redis에만 반영되고 RDB에는 없는 데이터 발생
+| 지표 | 측정 방법 | 증명 목적 |
+|------|----------|----------|
+| **p95 응답시간 급증** | Baseline p95 vs 장애 중 p95 | 3초 타임아웃으로 수십~수백배 증가 예상 |
+| **TPS 급락** | Baseline TPS vs 장애 중 TPS | 블로킹으로 처리량 급감 |
+| 에러율 (%) | 5xx 응답 / 전체 요청 × 100 | 커넥션 타임아웃 실패 |
+| 불일치 건수 | Redis 입찰 수 - RDB 입찰 수 | (부차적) 일부 유실 발생 |
+
+**예상**:
+- ~~"20건 유실"~~ → **"p95 3000ms 이상, TPS 급락"**이 핵심 문제
+- DB 장애가 Redis 작업까지 블로킹 (장애 전파)
+- 커넥션 풀 고갈로 다른 API에도 영향 가능
+- Grafana에서 Baseline → 장애 → 복구 3단계가 Annotation과 함께 명확히 보임
 
 ---
 
 ### Phase 2: @Async 한계 증명
 
-#### 테스트 2-1: 앱 강제 종료 시 유실
+> **프레이밍**: 앱 강제 종료는 프로덕션에서 일상적으로 발생하는 시나리오의 축소판이다:
+> - 배포 시 graceful shutdown 중 미처리 큐
+> - OOM kill에 의한 프로세스 종료
+> - 오토스케일링 스케일 인 시 인스턴스 종료
+>
+> 메모리 기반 큐는 이 모든 상황에서 데이터를 유실한다.
+
+#### Baseline 측정 (정상 상태)
 
 ```bash
-# 부하 테스트 중 앱 강제 종료
-docker kill fairbid-app
-
-# 재시작
-docker start fairbid-app
-
-# Redis vs RDB 레코드 수 비교
+# @Async 전환 후 정상 상태 부하 → 동기 대비 응답시간 개선 확인
+k6 run --duration 30s k6/scenarios/bid-async-test.js
 ```
 
-**측정**:
-- 유실된 메시지 수
-- Redis-RDB 불일치 건수
+**목적**: @Async가 응답시간을 개선하는지 확인 (동기 Baseline과 비교)
 
-**예상**: 메모리 큐에 있던 메시지 전부 유실
+#### 테스트 2: 앱 강제 종료 시 메모리 큐 유실
+
+```bash
+# 1. Grafana Annotation: 앱 종료 시점 기록
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"앱 강제 종료 (docker kill)","tags":["fault-injection"]}'
+
+# 2. 부하 테스트 중 앱 강제 종료
+docker kill fairbid-app
+
+# 3. 재시작
+docker start fairbid-app
+
+# 4. Grafana Annotation: 앱 복구 시점 기록
+curl -X POST http://localhost:3001/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"text":"앱 재시작 완료","tags":["recovery"]}'
+
+# 5. Redis vs RDB 레코드 수 비교
+```
+
+**정량 측정 항목**:
+
+| 지표 | 측정 방법 |
+|------|----------|
+| 유실 건수 | Redis 입찰 수 - RDB 입찰 수 (재시작 후 안정화 이후 측정) |
+| 유실률 (%) | 유실 건수 / Redis 입찰 수 × 100 |
+| 복구 여부 | 재시작 후 유실 건수가 줄어드는지 (메모리 큐이므로 복구 불가 예상) |
+| 영구 불일치 | 재시작 후에도 Redis-RDB 갭이 유지되는지 |
+
+**예상**: 메모리 큐에 있던 메시지 전부 유실, 재시작 후에도 복구 불가 → **영구 불일치**
 
 ---
 
@@ -231,46 +345,51 @@ docker unpause fairbid-mysql
 
 ```
 main
-├── feat/async-test-sync          # 동기 방식 테스트
-├── feat/async-test-async         # @Async 구현 + 테스트
-├── feat/async-test-redis-stream  # Redis Stream 구현 + 테스트
-├── feat/async-test-kafka         # Kafka 구현 + 테스트
-└── feat/async-test-rabbitmq      # RabbitMQ 구현 + 테스트
+├── chore/62-async-sync-test       # Phase 1-2: 동기/@Async 문제점 증명 (#62)
+├── chore/63-mq-comparison-test    # Phase 3: MQ 비교 테스트 (#63)
+│   ├── (Redis Stream 구현 + 테스트)
+│   ├── (Kafka 구현 + 테스트)
+│   └── (RabbitMQ 구현 + 테스트)
+└── feat/{N}-{선택된MQ}-async-sync  # 최종 선택 MQ 구현 (테스트 후 이슈 생성)
 ```
 
 ### 5.2 구현 순서
 
 ```
-[Step 1] 테스트 인프라 구성 (1일)
-├── docker-compose.test.yml 작성
-├── k6 스크립트 작성
-└── 측정 스크립트 작성 (Redis vs RDB 비교)
+[Step 1] 관측 인프라 구성 (#62)
+├── 커스텀 Micrometer 메트릭 추가 (BidService)
+├── Grafana 대시보드 패널 추가 (입찰 메트릭 + 정합성)
+├── Grafana Annotation 자동화 스크립트
+├── k6 스크립트 작성 (setup()에서 테스트 유저/경매 시드)
+└── Redis vs RDB 비교 측정 스크립트
 
-[Step 2] Phase 1 테스트 - 동기 방식 (1일)
-├── 테스트 1-1, 1-2 실행
-└── 결과 문서화
+[Step 2] Phase 1 테스트 - 동기 방식 (#62)
+├── Baseline 측정 (정상 상태)
+├── 테스트 1 실행 (DB 다운 → 불일치 + 응답시간 전파)
+└── 결과 문서화 (정량 수치 + Grafana 스크린샷)
 
-[Step 3] @Async 구현 + Phase 2 테스트 (1-2일)
-├── @Async 적용
-├── 테스트 2-1 실행
-└── 결과 문서화
+[Step 3] @Async 구현 + Phase 2 테스트 (#62)
+├── BidService RDB 쓰기 @Async 전환
+├── Baseline 측정 (동기 대비 개선 확인)
+├── 테스트 2 실행 (앱 강제 종료 → 메모리 큐 유실)
+└── 결과 문서화 (정량 수치 + Grafana 스크린샷)
 
-[Step 4] Redis Stream 구현 + 테스트 (2일)
+[Step 4] Redis Stream 구현 + 테스트 (#63)
 ├── Redis Stream Consumer 구현
 ├── Phase 3 테스트 실행
 └── 결과 문서화
 
-[Step 5] Kafka 구현 + 테스트 (2-3일)
+[Step 5] Kafka 구현 + 테스트 (#63)
 ├── Kafka 설정 + Consumer 구현
 ├── Phase 3 테스트 실행
 └── 결과 문서화
 
-[Step 6] RabbitMQ 구현 + 테스트 (2일)
+[Step 6] RabbitMQ 구현 + 테스트 (#63)
 ├── RabbitMQ 설정 + Consumer 구현
 ├── Phase 3 테스트 실행
 └── 결과 문서화
 
-[Step 7] 최종 분석 + 결정 (1일)
+[Step 7] 최종 분석 + 결정 (#63)
 ├── 비교표 작성
 ├── 트레이드오프 분석
 └── 최종 선택 + 근거 문서화
@@ -290,23 +409,33 @@ main
 - 환경: Docker Desktop (Windows)
 - 스펙: CPU, RAM
 
-## 테스트 N-M: {테스트명}
+## Baseline (정상 상태)
+| 지표 | 값 |
+|------|---|
+| TPS | N req/s |
+| p95 응답시간 | Nms |
+| 에러율 | 0% |
+| Redis-RDB 불일치 | 0건 |
+
+## 테스트 N: {테스트명}
 
 ### 시나리오
 - 부하: N VUs, M 요청
 - 장애 주입: {방법}
 
-### 결과
-| 지표 | 값 |
-|------|---|
-| 유실률 | X% |
-| ... | ... |
+### 정량 결과 (핵심: 장애 전파 수치)
+| 지표 | Baseline | 장애 중 | 복구 후 | 비고 |
+|------|----------|---------|---------|------|
+| **p95 응답시간** | Nms | Nms | Nms | 장애 전파의 핵심 지표 |
+| **TPS** | N req/s | N req/s | N req/s | 처리량 급락 |
+| 에러율 (%) | 0% | X% | 0% | 커넥션 타임아웃 |
+| 불일치 건수 | 0건 | N건 | N건 | (부차적) |
 
-### 스크린샷
-{k6 결과 / 로그}
+### Grafana 스크린샷
+{Annotation 포함 시계열 그래프 - Baseline → 장애 → 복구 3단계}
 
 ### 분석
-{문제점 / 원인 분석}
+{문제점 / 원인 분석 / 정량 수치 해석}
 ```
 
 ### 6.2 최종 비교표
@@ -342,6 +471,8 @@ main
 | 성능 최적화 | 이미 TPS 1,000 처리 가능, 성능은 문제가 아님 |
 | 분산 환경 테스트 | 로컬 Docker로 단일 노드만 테스트 |
 | 장기 안정성 테스트 | 포폴 목적상 단기 테스트로 충분 |
+| Redis 장애 테스트 | Redis는 Source of Truth이므로 장애 시 입찰 자체 불가. HA(고가용성) 영역으로 별도 대응 (Redis Sentinel/Cluster). 참고: `docs/high-availability-SPEC.md` |
+| DB 지연 주입 테스트 | 동기 호출의 지연 전파는 자명한 결론. DB 다운 테스트에서 응답시간 변화도 함께 관측 가능 |
 
 ### 7.2 학습 비용 고려
 
@@ -356,17 +487,20 @@ main
 ### 8.1 전체 흐름
 
 ```
-[문제 발견]
-동기 방식에서 DB 장애 시 Redis-RDB 불일치 발생
-→ 테스트로 증명
+[Phase 1: 문제 발견 - 장애 전파]
+동기 방식에서 DB 장애 시 전체 API 마비
+→ 수치: p95 Nms → Nms (N배 증가), TPS N → N 급락
+→ 핵심: "20건 유실"이 아닌 "장애 전파로 서비스 품질 저하"
 
-[1차 해결 시도: @Async]
-비동기 전환으로 응답 시간 분리 성공
+[Phase 2: 1차 해결 - @Async]
+비동기 전환으로 장애 격리 성공
 But 앱 재시작 시 메모리 큐 유실
-→ 테스트로 한계 증명
+→ 수치: N건 영구 유실, 복구 불가
+→ 핵심: "메모리 유실"이 @Async → MQ 전환 근거
 
-[2차 해결: Message Queue 도입]
+[Phase 3: 2차 해결 - Message Queue]
 3가지 옵션 비교 (Redis Stream / Kafka / RabbitMQ)
+→ 수치: 유실 0건, 재시작 후 N초 내 자동 복구
 → 테스트 데이터 기반 객관적 선택
 
 [결론]
@@ -457,8 +591,22 @@ auction:{id} (Hash)
 
 ---
 
+---
+
+## 예상 vs 현실 (테스트 후 작성 예정)
+
+> 이 섹션은 테스트 실행 후 "계획과 달랐던 점"을 기록할 공간입니다.
+
+| 항목 | 예상 | 실제 | 배운 점 |
+|------|------|------|---------|
+| TBD | - | - | - |
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|----------|
 | 2026-01-31 | 1.0 | 스펙 인터뷰 기반 초안 작성 |
+| 2026-02-05 | 1.1 | 계획 문서임을 명시, 예상vs현실 섹션 추가 |
+| 2026-02-05 | 1.2 | 테스트 1-1 삭제(1-2에 통합), 관측 인프라 섹션 추가, Baseline 측정 추가, 정량 측정 기준 강화, Grafana Annotation 추가, @Async 프레이밍 확장, 테스트 데이터 시드(k6 setup) 명시, 브랜치 전략 이슈 기반으로 변경 |
