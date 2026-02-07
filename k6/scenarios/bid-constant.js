@@ -25,7 +25,7 @@ export const options = {
         // 일정 부하: 100명이 2분간 동시 입찰
         constant_load: {
             executor: 'constant-vus',
-            vus: 100,
+            vus: 1000,
             duration: '2m',
         },
     },
@@ -52,6 +52,8 @@ export function setup() {
         startPrice: 10000,
         instantBuyPrice: 1000000,
         duration: 'HOURS_24',
+        directTradeAvailable: false,
+        deliveryAvailable: true,
     });
 
     const res = http.post(`${BASE_URL}/api/v1/auctions`, auctionPayload, { headers });
