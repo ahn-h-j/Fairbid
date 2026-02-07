@@ -27,6 +27,9 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+    # OSIV 비활성화: HTTP 요청 시작 시 DB 커넥션을 잡지 않도록 설정
+    # @Transactional이 있는 곳에서만 커넥션을 획득하여 장애 격리 달성
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
