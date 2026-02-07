@@ -88,28 +88,15 @@ export function setup() {
 }
 
 // 메인 테스트 함수: 지속적으로 입찰 요청
+// 경매 조회 API를 호출하지 않음 → 순수하게 입찰 API만 측정
+// ONE_TOUCH 타입은 서버(Lua)에서 currentPrice + bidIncrement 자동 계산
 export default function (data) {
     const auctionId = data.auctionId;
     const userId = randomUserId();
     const headers = getHeaders(userId);
 
-    // 현재 경매 정보 조회 → 입찰 금액 결정
-    const infoRes = http.get(`${BASE_URL}/api/v1/auctions/${auctionId}`, {
-        headers,
-        tags: { name: 'get_auction' },
-    });
-
-    let bidAmount = 10000;
-    if (infoRes.status === 200) {
-        const info = JSON.parse(infoRes.body);
-        if (info.success && info.data) {
-            bidAmount = generateBidAmount(info.data.currentPrice, info.data.bidIncrement);
-        }
-    }
-
-    // 입찰 요청
+    // 입찰 요청 (ONE_TOUCH: amount 생략 시 서버 Lua에서 자동 계산)
     const bidPayload = JSON.stringify({
-        amount: bidAmount,
         bidType: 'ONE_TOUCH',
     });
 
