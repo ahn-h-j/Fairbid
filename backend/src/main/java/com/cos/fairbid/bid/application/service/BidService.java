@@ -8,14 +8,11 @@ import com.cos.fairbid.bid.application.port.in.PlaceBidUseCase;
 import com.cos.fairbid.bid.application.port.out.BidCachePort;
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
 import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
-import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import com.cos.fairbid.bid.domain.Bid;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 입찰 서비스
@@ -24,39 +21,42 @@ import org.springframework.transaction.annotation.Transactional;
  * 흐름:
  * 1. Redis 캐시 확인 (없으면 RDB에서 로드)
  * 2. Lua 스크립트로 원자적 입찰 처리 (Read + Write)
- * 3. RDB 동기화 (경매 목록 페이지용)
+ * 3. WebSocket 이벤트 발행
+ * 4. RDB 비동기 저장 (@Async → BidRdbSyncService)
+ *
+ * @Transactional 제거:
+ * 기존에는 클래스 레벨 @Transactional로 인해 placeBid() 진입 시점에 DB 커넥션을 획득했다.
+ * 이로 인해 DB 장애 시 Redis 작업조차 블로킹되는 "장애 전파" 문제가 있었다.
+ * RDB 저장을 BidRdbSyncService(@Async)로 분리하여 장애 격리를 달성한다.
  */
 @Service
 @Slf4j
-@Transactional
 public class BidService implements PlaceBidUseCase {
 
     private final BidCachePort bidCachePort;
-    private final BidRepositoryPort bidRepository;
     private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
     private final BidEventPublisherPort bidEventPublisher;
+    private final BidRdbSyncService bidRdbSyncService;
 
     /** 입찰 성공 카운터 */
     private final Counter bidSuccessCounter;
     /** 입찰 실패 카운터 */
     private final Counter bidFailCounter;
-    /** RDB 동기화 소요 시간 */
-    private final Timer rdbSyncTimer;
 
     public BidService(
             BidCachePort bidCachePort,
-            BidRepositoryPort bidRepository,
             AuctionRepositoryPort auctionRepository,
             AuctionCachePort auctionCachePort,
             BidEventPublisherPort bidEventPublisher,
+            BidRdbSyncService bidRdbSyncService,
             MeterRegistry meterRegistry
     ) {
         this.bidCachePort = bidCachePort;
-        this.bidRepository = bidRepository;
         this.auctionRepository = auctionRepository;
         this.auctionCachePort = auctionCachePort;
         this.bidEventPublisher = bidEventPublisher;
+        this.bidRdbSyncService = bidRdbSyncService;
 
         // Micrometer 메트릭 등록
         this.bidSuccessCounter = Counter.builder("fairbid_bid_total")
@@ -66,10 +66,6 @@ public class BidService implements PlaceBidUseCase {
         this.bidFailCounter = Counter.builder("fairbid_bid_total")
                 .tag("result", "fail")
                 .description("입찰 실패 건수")
-                .register(meterRegistry);
-        this.rdbSyncTimer = Timer.builder("fairbid_bid_rdb_sync_seconds")
-                .description("RDB 동기화 소요 시간")
-                .publishPercentileHistogram(true)  // Prometheus histogram bucket 생성 (histogram_quantile 사용 가능)
                 .register(meterRegistry);
     }
 
@@ -100,11 +96,12 @@ public class BidService implements PlaceBidUseCase {
         // 입찰 성공한 사람이 곧 1순위 입찰자(topBidderId)
         bidEventPublisher.publishBidPlaced(command.auctionId(), result, command.bidderId());
 
-        // 5. 즉시 구매 활성화 시에만 RDB 동기화 (상태 변경이 필요한 경우)
-        // 일반 입찰 시에는 auction 테이블 UPDATE 하지 않음 (성능 최적화)
-        // 경매 목록의 currentPrice는 Redis에서 조회 (AuctionService.getAuctionList)
+        // 5. 비동기 RDB 저장 (별도 스레드, DB 장애 시에도 여기서 블로킹되지 않음)
+        bidRdbSyncService.saveBidAsync(bid);
+
+        // 6. 즉시 구매 활성화 시에만 경매 상태 비동기 업데이트
         if (Boolean.TRUE.equals(result.instantBuyActivated())) {
-            auctionRepository.updateInstantBuyActivated(
+            bidRdbSyncService.updateInstantBuyActivatedAsync(
                     command.auctionId(),
                     result.newCurrentPrice(),
                     result.newTotalBidCount(),
@@ -113,17 +110,10 @@ public class BidService implements PlaceBidUseCase {
                     currentTimeMs,
                     result.scheduledEndTimeMs()
             );
-            log.info("즉시 구매 활성화 RDB 동기화: auctionId={}, instantBuyerId={}", command.auctionId(), command.bidderId());
         }
 
-        // 6. 입찰 이력 저장 (RDB) - Timer로 소요 시간 측정
-        Bid savedBid = rdbSyncTimer.record(() -> bidRepository.save(bid));
-
         bidSuccessCounter.increment();
-        log.debug("입찰 이력 RDB 저장 완료: auctionId={}, bidderId={}, amount={}",
-                command.auctionId(), command.bidderId(), bid.getAmount());
-
-        return savedBid;
+        return bid;
     }
 
     /**
