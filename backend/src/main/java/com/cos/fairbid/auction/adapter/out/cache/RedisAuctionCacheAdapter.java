@@ -60,6 +60,27 @@ public class RedisAuctionCacheAdapter implements AuctionCachePort {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 
+    @Override
+    public Map<Long, Long> getCurrentPrices(Set<Long> auctionIds) {
+        if (auctionIds == null || auctionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Long> result = new HashMap<>();
+        for (Long auctionId : auctionIds) {
+            String key = AUCTION_KEY_PREFIX + auctionId;
+            Object currentPrice = redisTemplate.opsForHash().get(key, "currentPrice");
+            if (currentPrice != null) {
+                try {
+                    result.put(auctionId, Long.parseLong(currentPrice.toString()));
+                } catch (NumberFormatException e) {
+                    log.warn("currentPrice 파싱 실패: auctionId={}, value={}", auctionId, currentPrice);
+                }
+            }
+        }
+        return result;
+    }
+
     // ============================
     // 종료 대기 큐 (Sorted Set) 구현
     // ============================

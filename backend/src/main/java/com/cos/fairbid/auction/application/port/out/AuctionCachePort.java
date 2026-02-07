@@ -29,6 +29,15 @@ public interface AuctionCachePort {
     Optional<Auction> findById(Long auctionId);
 
     /**
+     * 캐시에서 여러 경매의 실시간 가격 정보를 조회한다 (배치)
+     * 경매 목록 페이지에서 Redis의 최신 currentPrice를 표시하기 위해 사용
+     *
+     * @param auctionIds 경매 ID 목록
+     * @return 경매 ID → currentPrice 맵 (캐시 미스인 경매는 맵에 포함되지 않음)
+     */
+    java.util.Map<Long, Long> getCurrentPrices(java.util.Set<Long> auctionIds);
+
+    /**
      * 캐시에 경매 정보가 존재하는지 확인한다
      *
      * @param auctionId 경매 ID

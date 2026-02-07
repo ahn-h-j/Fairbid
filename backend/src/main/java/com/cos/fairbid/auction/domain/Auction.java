@@ -245,6 +245,18 @@ public class Auction {
     }
 
     /**
+     * Redis 캐시에서 조회한 최신 가격으로 currentPrice를 갱신한다.
+     * 경매 목록 조회 시 RDB의 오래된 가격 대신 Redis의 실시간 가격을 표시하기 위해 사용.
+     *
+     * @param redisCurrentPrice Redis에서 조회한 현재가
+     */
+    public void updateCurrentPriceFromCache(Long redisCurrentPrice) {
+        if (redisCurrentPrice != null) {
+            this.currentPrice = redisCurrentPrice;
+        }
+    }
+
+    /**
      * 경매 시간을 연장한다
      * AuctionExtensionPolicy에 위임
      *
