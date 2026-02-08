@@ -28,6 +28,17 @@ public interface BidRepositoryPort {
     List<Bid> findTop2ByAuctionId(Long auctionId);
 
     /**
+     * 입찰을 멱등하게 저장한다 (중복 시 무시)
+     * Redis Stream Consumer의 at-least-once 전달 보장에서
+     * 중복 처리를 방지하기 위해 streamRecordId 기반으로 중복 체크한다.
+     *
+     * @param bid 저장할 입찰 도메인 객체
+     * @param streamRecordId Redis Stream 메시지 ID (중복 판별 키)
+     * @return 저장 성공 시 true, 중복으로 스킵 시 false
+     */
+    boolean saveIdempotent(Bid bid, String streamRecordId);
+
+    /**
      * 전체 입찰 건수를 조회한다
      * Redis-RDB 정합성 모니터링에 사용
      *
