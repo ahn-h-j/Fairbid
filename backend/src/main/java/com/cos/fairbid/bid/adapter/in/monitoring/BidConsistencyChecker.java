@@ -1,9 +1,11 @@
 package com.cos.fairbid.bid.adapter.in.monitoring;
 
+import com.cos.fairbid.bid.adapter.out.stream.RedisBidStreamAdapter;
 import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,10 +34,13 @@ public class BidConsistencyChecker {
     private final StringRedisTemplate redisTemplate;
     private final BidRepositoryPort bidRepositoryPort;
 
+    private static final String STREAM_GROUP = "bid-rdb-sync-group";
+
     /** Gauge에 바인딩할 AtomicLong (스케줄러가 주기적으로 갱신) */
     private final AtomicLong redisCount = new AtomicLong(0);
     private final AtomicLong rdbCount = new AtomicLong(0);
     private final AtomicLong inconsistencyCount = new AtomicLong(0);
+    private final AtomicLong streamPendingCount = new AtomicLong(0);
 
     public BidConsistencyChecker(
             StringRedisTemplate redisTemplate,
@@ -57,6 +62,10 @@ public class BidConsistencyChecker {
         Gauge.builder("fairbid_bid_inconsistency_count", inconsistencyCount, AtomicLong::get)
                 .description("Redis-RDB 입찰 건수 차이 (불일치)")
                 .register(meterRegistry);
+
+        Gauge.builder("fairbid_stream_pending_count", streamPendingCount, AtomicLong::get)
+                .description("Redis Stream PENDING 메시지 수 (미처리 RDB 동기화 건수)")
+                .register(meterRegistry);
     }
 
     /**
@@ -77,9 +86,29 @@ public class BidConsistencyChecker {
             if (diff != 0) {
                 log.warn("Redis-RDB 입찰 불일치 감지: Redis={}, RDB={}, 차이={}", redis, rdb, diff);
             }
+
+            // Stream PENDING 메시지 수 조회
+            checkStreamPending();
         } catch (Exception e) {
             // DB 다운 시 RDB 조회 실패할 수 있음 - 에러 로그만 남기고 계속 동작
             log.error("정합성 체크 실패: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Redis Stream의 PENDING 메시지 수를 조회한다.
+     * PENDING이 누적되면 DB 장애 등으로 RDB 동기화가 지연되고 있음을 의미한다.
+     */
+    private void checkStreamPending() {
+        try {
+            PendingMessagesSummary summary = redisTemplate.opsForStream()
+                    .pending(RedisBidStreamAdapter.STREAM_KEY, STREAM_GROUP);
+            if (summary != null) {
+                streamPendingCount.set(summary.getTotalPendingMessages());
+            }
+        } catch (Exception e) {
+            // Stream 또는 Group이 아직 없는 경우 무시
+            log.debug("Stream PENDING 조회 실패 (정상 가능): {}", e.getMessage());
         }
     }
 
