@@ -79,6 +79,7 @@
 | 입찰금액 | | |
 | 입찰시간 | | |
 | 입찰유형 | | |
+| streamRecordId | UK | Redis Stream Record ID (멱등 저장용) |
 
 ---
 
