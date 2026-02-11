@@ -48,9 +48,14 @@ public class BidPersistenceAdapter implements BidRepositoryPort {
             jpaBidRepository.save(entity);
             return true;
         } catch (DataIntegrityViolationException e) {
-            // unique 제약 위반 = 이미 처리된 메시지 → 중복 스킵
-            log.debug("멱등 저장 스킵 (중복 메시지): streamRecordId={}", streamRecordId);
-            return false;
+            // streamRecordId unique 제약 위반만 중복으로 판단
+            String message = e.getMostSpecificCause().getMessage();
+            if (message != null && message.contains("stream_record_id")) {
+                log.debug("멱등 저장 스킵 (중복 메시지): streamRecordId={}", streamRecordId);
+                return false;
+            }
+            // 그 외 제약 위반은 재throw (NOT NULL, FK 등 실제 데이터 오류)
+            throw e;
         }
     }
 
