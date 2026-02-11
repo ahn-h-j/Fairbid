@@ -5,7 +5,9 @@ import com.cos.fairbid.auction.domain.AuctionStatus;
 import com.cos.fairbid.auction.domain.TopBidderInfo;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 경매 캐시 아웃바운드 포트
@@ -35,7 +37,7 @@ public interface AuctionCachePort {
      * @param auctionIds 경매 ID 목록
      * @return 경매 ID → currentPrice 맵 (캐시 미스인 경매는 맵에 포함되지 않음)
      */
-    java.util.Map<Long, Long> getCurrentPrices(java.util.Set<Long> auctionIds);
+    Map<Long, Long> getCurrentPrices(Set<Long> auctionIds);
 
     /**
      * 캐시에 경매 정보가 존재하는지 확인한다

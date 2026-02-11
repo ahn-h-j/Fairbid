@@ -103,11 +103,16 @@ public class BidService implements PlaceBidUseCase {
         bidEventPublisher.publishBidPlaced(command.auctionId(), result, command.bidderId());
 
         // 5. Redis Stream에 RDB 동기화 메시지 발행 (XADD, DB 상태와 무관하게 O(1))
-        bidStreamPort.publishBidSave(bid);
+        String recordId = bidStreamPort.publishBidSave(bid);
+        if (recordId == null) {
+            bidFailCounter.increment();
+            log.warn("Stream 발행 실패 (RDB 동기화 누락 가능): auctionId={}, bidderId={}",
+                    command.auctionId(), command.bidderId());
+        }
 
         // 6. 즉시 구매 활성화 시에만 업데이트 메시지 발행
         if (Boolean.TRUE.equals(result.instantBuyActivated())) {
-            bidStreamPort.publishInstantBuyUpdate(
+            String instantBuyRecordId = bidStreamPort.publishInstantBuyUpdate(
                     command.auctionId(),
                     result.newCurrentPrice(),
                     result.newTotalBidCount(),
@@ -116,6 +121,9 @@ public class BidService implements PlaceBidUseCase {
                     currentTimeMs,
                     result.scheduledEndTimeMs()
             );
+            if (instantBuyRecordId == null) {
+                log.warn("즉시구매 업데이트 Stream 발행 실패: auctionId={}", command.auctionId());
+            }
         }
 
         bidSuccessCounter.increment();

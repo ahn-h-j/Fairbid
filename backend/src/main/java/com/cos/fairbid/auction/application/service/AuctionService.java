@@ -21,6 +21,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * 경매 유스케이스 구현체
  *
@@ -116,11 +120,11 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
         Page<Auction> auctions = auctionRepository.findAll(status, category, keyword, pageable);
 
         // Redis에서 최신 currentPrice 조회
-        java.util.Set<Long> auctionIds = auctions.getContent().stream()
+        Set<Long> auctionIds = auctions.getContent().stream()
                 .map(Auction::getId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
-        java.util.Map<Long, Long> redisPrices = auctionCachePort.getCurrentPrices(auctionIds);
+        Map<Long, Long> redisPrices = auctionCachePort.getCurrentPrices(auctionIds);
 
         // Redis 가격으로 덮어쓰기 (캐시에 있는 경우만)
         auctions.getContent().forEach(auction -> {
