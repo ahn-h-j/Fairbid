@@ -27,6 +27,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
 
   # 프론트엔드 (nginx)
   frontend:
@@ -73,7 +74,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.47.0
     ports:
-      - "9090:9090"
+      - "9595:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus

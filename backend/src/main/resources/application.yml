@@ -18,11 +18,18 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
       pool-name: FairBid-HikariPool
+      data-source-properties:
+        # DB 장애 시 커넥션이 무한 대기하지 않도록 소켓 타임아웃 설정
+        # docker pause 등으로 DB가 응답 불가일 때 3초 후 커넥션 실패 → 빠른 장애 전파
+        socketTimeout: 3000
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
+    # OSIV 활성화: imageUrls 등 Lazy 컬렉션의 Controller 레벨 로딩에 필요
+    # 주의: 요청 전체에 걸쳐 DB 커넥션을 점유하므로 고부하 시 HikariCP 고갈 가능성 있음
+    open-in-view: true
     properties:
       hibernate:
         format_sql: true

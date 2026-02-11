@@ -21,6 +21,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * 경매 유스케이스 구현체
  *
@@ -101,6 +105,10 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
     /**
      * 경매 목록을 조회한다
      *
+     * RDB에서 페이지네이션/필터링된 목록을 가져온 후,
+     * Redis에서 최신 currentPrice를 조회하여 덮어쓴다.
+     * (입찰 시 auction 테이블 UPDATE 제거로 인한 성능 최적화)
+     *
      * @param status   경매 상태 필터 (nullable)
      * @param category 카테고리 필터 (nullable)
      * @param keyword  검색어 - 상품명 (nullable)
@@ -109,7 +117,24 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
      */
     @Override
     public Page<Auction> getAuctionList(AuctionStatus status, Category category, String keyword, Pageable pageable) {
-        return auctionRepository.findAll(status, category, keyword, pageable);
+        Page<Auction> auctions = auctionRepository.findAll(status, category, keyword, pageable);
+
+        // Redis에서 최신 currentPrice 조회
+        Set<Long> auctionIds = auctions.getContent().stream()
+                .map(Auction::getId)
+                .collect(Collectors.toSet());
+
+        Map<Long, Long> redisPrices = auctionCachePort.getCurrentPrices(auctionIds);
+
+        // Redis 가격으로 덮어쓰기 (캐시에 있는 경우만)
+        auctions.getContent().forEach(auction -> {
+            Long redisPrice = redisPrices.get(auction.getId());
+            if (redisPrice != null) {
+                auction.updateCurrentPriceFromCache(redisPrice);
+            }
+        });
+
+        return auctions;
     }
 
     /**

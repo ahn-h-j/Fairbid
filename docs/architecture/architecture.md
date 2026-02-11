@@ -74,7 +74,8 @@ src/main/java/com/cos/fairbid/
 └── adapter/               # Adapter Layer
     ├── in/                # Inbound Adapter
     │   ├── controller/    # REST Controller
-    │   └── dto/           # Request/Response DTO
+    │   ├── dto/           # Request/Response DTO
+    │   └── monitoring/    # 모니터링 스케줄러 (Micrometer Gauge 등)
     │
     └── out/               # Outbound Adapter
         └── persistence/   # JPA Repository 구현
@@ -228,3 +229,49 @@ Controller  ──────▶  UseCase (Interface)
 - Domain에서 JPA Annotation 사용 금지
 - Service에서 Entity 직접 반환 금지
 - Mapper 없이 Entity ↔ Domain 직접 변환 금지
+
+---
+
+## 7. 입찰-경매 가격 동기화 전략
+
+> 입찰 성능 최적화를 위해 일반 입찰 시 auction 테이블 UPDATE를 제거하고,
+> 경매 목록 조회 시 Redis에서 실시간 가격을 오버레이하는 방식으로 전환.
+
+### 데이터 흐름
+
+```
+[입찰 요청]
+    │
+    ▼
+┌─────────────┐
+│  BidService  │  Redis Lua 스크립트로 입찰 처리 (currentPrice, totalBidCount 갱신)
+└─────────────┘
+    │
+    ├── Redis (auction:{id} Hash) ← 실시간 가격 반영 (Source of Truth)
+    ├── RDB (bid 테이블) ← 입찰 이력 저장
+    └── RDB (auction 테이블) ← 즉시 구매 활성화 시에만 UPDATE
+                                (일반 입찰 시 UPDATE 하지 않음)
+
+[경매 목록 조회]
+    │
+    ▼
+┌────────────────┐
+│ AuctionService │  1. RDB에서 페이지네이션/필터링 조회
+└────────────────┘  2. Redis에서 최신 currentPrice 배치 조회 (getCurrentPrices)
+    │               3. Redis 가격으로 RDB 결과 덮어쓰기 (오버레이)
+    ▼
+[클라이언트에 실시간 가격 반영된 목록 응답]
+```
+
+### 모니터링
+
+`BidConsistencyChecker` (bid/adapter/in/monitoring/)가 5초마다 Redis vs RDB 입찰 건수를 비교하여
+Prometheus Gauge로 노출한다.
+
+| 메트릭 | 타입 | 설명 |
+|--------|------|------|
+| `fairbid_bid_total` | Counter (tag: result) | 입찰 성공/실패 건수 |
+| `fairbid_bid_rdb_sync_seconds` | Timer | RDB 입찰 이력 저장 소요 시간 |
+| `fairbid_bid_redis_count` | Gauge | Redis 기준 총 입찰 수 |
+| `fairbid_bid_rdb_count` | Gauge | RDB 기준 총 입찰 수 |
+| `fairbid_bid_inconsistency_count` | Gauge | Redis-RDB 입찰 건수 차이 |

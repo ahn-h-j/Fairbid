@@ -8,12 +8,12 @@ import com.cos.fairbid.bid.application.port.in.PlaceBidUseCase;
 import com.cos.fairbid.bid.application.port.out.BidCachePort;
 import com.cos.fairbid.bid.application.port.out.BidCachePort.BidResult;
 import com.cos.fairbid.bid.application.port.out.BidEventPublisherPort;
-import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
+import com.cos.fairbid.bid.application.port.out.BidStreamPort;
 import com.cos.fairbid.bid.domain.Bid;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 입찰 서비스
@@ -22,19 +22,58 @@ import org.springframework.transaction.annotation.Transactional;
  * 흐름:
  * 1. Redis 캐시 확인 (없으면 RDB에서 로드)
  * 2. Lua 스크립트로 원자적 입찰 처리 (Read + Write)
- * 3. RDB 동기화 (경매 목록 페이지용)
+ * 3. WebSocket 이벤트 발행
+ * 4. Redis Stream에 RDB 동기화 메시지 발행 (내구적 비동기 처리)
+ *
+ * @Transactional 제거:
+ * 기존에는 클래스 레벨 @Transactional로 인해 placeBid() 진입 시점에 DB 커넥션을 획득했다.
+ * 이로 인해 DB 장애 시 Redis 작업조차 블로킹되는 "장애 전파" 문제가 있었다.
+ * RDB 저장을 Redis Stream(MQ)으로 분리하여 완전한 장애 격리를 달성한다.
+ *
+ * @Async 대비 개선:
+ * - CallerRunsPolicy로 인한 지연 전파 문제 해결 (XADD는 O(1))
+ * - 앱 종료 시 메모리 큐 유실 문제 해결 (Redis 디스크 영속성)
+ * - 실패 메시지 자동 재처리 (Consumer Group PENDING 메커니즘)
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
-@Transactional
 public class BidService implements PlaceBidUseCase {
 
     private final BidCachePort bidCachePort;
-    private final BidRepositoryPort bidRepository;
     private final AuctionRepositoryPort auctionRepository;
     private final AuctionCachePort auctionCachePort;
     private final BidEventPublisherPort bidEventPublisher;
+    private final BidStreamPort bidStreamPort;
+
+    /** 입찰 성공 카운터 */
+    private final Counter bidSuccessCounter;
+    /** 입찰 실패 카운터 */
+    private final Counter bidFailCounter;
+
+    public BidService(
+            BidCachePort bidCachePort,
+            AuctionRepositoryPort auctionRepository,
+            AuctionCachePort auctionCachePort,
+            BidEventPublisherPort bidEventPublisher,
+            BidStreamPort bidStreamPort,
+            MeterRegistry meterRegistry
+    ) {
+        this.bidCachePort = bidCachePort;
+        this.auctionRepository = auctionRepository;
+        this.auctionCachePort = auctionCachePort;
+        this.bidEventPublisher = bidEventPublisher;
+        this.bidStreamPort = bidStreamPort;
+
+        // Micrometer 메트릭 등록
+        this.bidSuccessCounter = Counter.builder("fairbid_bid_total")
+                .tag("result", "success")
+                .description("입찰 성공 건수")
+                .register(meterRegistry);
+        this.bidFailCounter = Counter.builder("fairbid_bid_total")
+                .tag("result", "fail")
+                .description("입찰 실패 건수")
+                .register(meterRegistry);
+    }
 
     @Override
     public Bid placeBid(PlaceBidCommand command) {
@@ -63,10 +102,17 @@ public class BidService implements PlaceBidUseCase {
         // 입찰 성공한 사람이 곧 1순위 입찰자(topBidderId)
         bidEventPublisher.publishBidPlaced(command.auctionId(), result, command.bidderId());
 
-        // 5. RDB 동기화 (즉시 구매 여부에 따라 분기)
+        // 5. Redis Stream에 RDB 동기화 메시지 발행 (XADD, DB 상태와 무관하게 O(1))
+        String recordId = bidStreamPort.publishBidSave(bid);
+        if (recordId == null) {
+            bidFailCounter.increment();
+            log.warn("Stream 발행 실패 (RDB 동기화 누락 가능): auctionId={}, bidderId={}",
+                    command.auctionId(), command.bidderId());
+        }
+
+        // 6. 즉시 구매 활성화 시에만 업데이트 메시지 발행
         if (Boolean.TRUE.equals(result.instantBuyActivated())) {
-            // 즉시 구매 활성화: 상태 + 종료시간 + 구매자 정보 모두 업데이트
-            auctionRepository.updateInstantBuyActivated(
+            String instantBuyRecordId = bidStreamPort.publishInstantBuyUpdate(
                     command.auctionId(),
                     result.newCurrentPrice(),
                     result.newTotalBidCount(),
@@ -75,23 +121,13 @@ public class BidService implements PlaceBidUseCase {
                     currentTimeMs,
                     result.scheduledEndTimeMs()
             );
-            log.info("즉시 구매 활성화 RDB 동기화: auctionId={}, instantBuyerId={}", command.auctionId(), command.bidderId());
-        } else {
-            // 일반 입찰: 현재가/입찰수/입찰단위만 업데이트
-            auctionRepository.updateCurrentPrice(
-                    command.auctionId(),
-                    result.newCurrentPrice(),
-                    result.newTotalBidCount(),
-                    result.newBidIncrement()
-            );
+            if (instantBuyRecordId == null) {
+                log.warn("즉시구매 업데이트 Stream 발행 실패: auctionId={}", command.auctionId());
+            }
         }
 
-        // 6. 입찰 이력 저장 (RDB)
-        Bid savedBid = bidRepository.save(bid);
-        log.debug("입찰 이력 RDB 저장 완료: bidId={}, auctionId={}, bidderId={}, amount={}",
-                savedBid.getId(), command.auctionId(), command.bidderId(), bid.getAmount());
-
-        return savedBid;
+        bidSuccessCounter.increment();
+        return bid;
     }
 
     /**

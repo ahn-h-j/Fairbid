@@ -43,18 +43,24 @@ public class BidEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** Redis Stream 메시지 ID (멱등성 보장용, at-least-once 중복 방지) */
+    @Column(name = "stream_record_id", unique = true)
+    private String streamRecordId;
+
     @Builder
     private BidEntity(
             Long id,
             Long auctionId,
             Long bidderId,
             Long amount,
-            BidType bidType
+            BidType bidType,
+            String streamRecordId
     ) {
         this.id = id;
         this.auctionId = auctionId;
         this.bidderId = bidderId;
         this.amount = amount;
         this.bidType = bidType;
+        this.streamRecordId = streamRecordId;
     }
 }

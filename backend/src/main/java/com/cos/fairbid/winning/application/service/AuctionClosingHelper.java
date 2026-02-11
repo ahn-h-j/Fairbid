@@ -70,6 +70,11 @@ public class AuctionClosingHelper {
 
         // 3. 1순위 낙찰자 결정 (Redis 기준)
         TopBidderInfo topBidder = topBidderOpt.get();
+
+        // Redis의 최신 currentPrice를 RDB 도메인에 반영 (일반 입찰 시 RDB 미갱신 대응)
+        // Lua 스크립트에서 currentPrice == topBidAmount 이므로 topBidAmount를 사용
+        auction.updateCurrentPriceFromCache(topBidder.bidAmount());
+
         closingProcessor.processFirstRankWinner(auction, topBidder);
 
         // 4. 2순위 후보 저장 (있는 경우, 1순위의 90% 이상인 경우만)
