@@ -10,12 +10,13 @@ import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Redis-RDB 입찰 정합성 모니터링 스케줄러
+ * Redis-RDB 입찰 정합성 모니터링 스케줄러 (load-test 프로파일 전용)
  *
  * 5초마다 Redis의 총 입찰 건수와 RDB의 총 입찰 건수를 비교하여
  * Prometheus Gauge로 노출한다. Grafana에서 두 값의 차이를 시각화하여
@@ -23,8 +24,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * Redis 입찰 수: 모든 auction:{id} 해시의 totalBidCount 합산
  * RDB 입찰 수: bid 테이블 COUNT(*)
+ *
+ * 프로덕션에서는 5초마다 COUNT(*) 풀 스캔이 부담이므로
+ * load-test 프로파일에서만 활성화한다.
  */
 @Component
+@Profile("load-test")
 @Slf4j
 public class BidConsistencyChecker {
 

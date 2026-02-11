@@ -1,10 +1,6 @@
 package com.cos.fairbid.bid.adapter.in.stream;
 
-import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.bid.adapter.out.stream.RedisBidStreamAdapter;
-import com.cos.fairbid.bid.application.port.out.BidRepositoryPort;
-import com.cos.fairbid.bid.domain.Bid;
-import com.cos.fairbid.bid.domain.BidType;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -20,10 +16,8 @@ import org.springframework.data.redis.stream.StreamMessageListenerContainer.Stre
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -32,10 +26,10 @@ import java.util.UUID;
  * Redis Stream 기반 입찰 RDB 동기화 컨슈머
  *
  * Consumer Group을 통해 Redis Stream 메시지를 소비하고,
- * RDB에 저장한 후 ACK를 보내는 Inbound Adapter.
+ * 별도 빈(BidStreamMessageHandler)에서 RDB 저장 후 ACK를 보내는 Inbound Adapter.
  *
  * 핵심 동작:
- * 1. 새 메시지 수신 → RDB 저장 → ACK (정상 흐름)
+ * 1. 새 메시지 수신 → Handler에서 RDB 저장 (트랜잭션 커밋) → ACK (정상 흐름)
  * 2. RDB 저장 실패 → ACK 안 함 → PENDING에 남음 (장애 시)
  * 3. @Scheduled로 PENDING 메시지 주기적 재처리 (복구 시)
  *
@@ -52,26 +46,27 @@ public class BidStreamConsumer implements DisposableBean {
     private static final String GROUP_NAME = "bid-rdb-sync-group";
     /** PENDING 메시지 재처리 대상 기준 시간 (이 시간 이상 ACK 안 된 메시지) */
     private static final Duration PENDING_TIMEOUT = Duration.ofSeconds(30);
+    /** 병렬 Consumer 수 (Consumer Group 내에서 메시지를 분산 처리) */
+    private static final int CONSUMER_COUNT = 10;
 
     private final String consumerName;
     private final StringRedisTemplate redisTemplate;
-    private final BidRepositoryPort bidRepository;
-    private final AuctionRepositoryPort auctionRepository;
+    private final BidStreamMessageHandler messageHandler;
     private final Timer rdbSyncTimer;
     private final Counter consumeSuccessCounter;
     private final Counter consumeFailCounter;
 
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
+    /** 리스너 컨테이너용 스레드 풀 (destroy()에서 명시적 종료) */
+    private ThreadPoolTaskExecutor executor;
 
     public BidStreamConsumer(
             StringRedisTemplate redisTemplate,
-            BidRepositoryPort bidRepository,
-            AuctionRepositoryPort auctionRepository,
+            BidStreamMessageHandler messageHandler,
             MeterRegistry meterRegistry
     ) {
         this.redisTemplate = redisTemplate;
-        this.bidRepository = bidRepository;
-        this.auctionRepository = auctionRepository;
+        this.messageHandler = messageHandler;
         // 인스턴스별 고유 컨슈머 이름 (다중 인스턴스 대비)
         this.consumerName = "consumer-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -101,10 +96,21 @@ public class BidStreamConsumer implements DisposableBean {
 
     /**
      * Consumer Group이 없으면 생성한다.
-     * 스트림이 없어도 MKSTREAM 옵션으로 자동 생성된다.
+     * 스트림이 없는 경우 더미 메시지를 추가하여 스트림을 먼저 생성한다.
      */
     private void createConsumerGroupIfNotExists() {
         try {
+            // 스트림이 없으면 더미 메시지로 생성 후 즉시 삭제 (MKSTREAM 대체)
+            Boolean exists = redisTemplate.hasKey(STREAM_KEY);
+            if (Boolean.FALSE.equals(exists)) {
+                RecordId dummyId = redisTemplate.opsForStream()
+                        .add(STREAM_KEY, Map.of("_init", "true"));
+                if (dummyId != null) {
+                    redisTemplate.opsForStream().delete(STREAM_KEY, dummyId);
+                }
+                log.info("Stream 키 생성: {}", STREAM_KEY);
+            }
+
             redisTemplate.opsForStream().createGroup(STREAM_KEY, ReadOffset.from("0"), GROUP_NAME);
             log.info("Consumer Group 생성: stream={}, group={}", STREAM_KEY, GROUP_NAME);
         } catch (RedisSystemException e) {
@@ -118,9 +124,6 @@ public class BidStreamConsumer implements DisposableBean {
         }
     }
 
-    /** 병렬 Consumer 수 (Consumer Group 내에서 메시지를 분산 처리) */
-    private static final int CONSUMER_COUNT = 10;
-
     /**
      * StreamMessageListenerContainer를 설정하고 시작한다.
      * Consumer Group 내에 여러 Consumer를 등록하여 병렬 처리한다.
@@ -128,7 +131,7 @@ public class BidStreamConsumer implements DisposableBean {
      * 메시지를 자동으로 분배하므로 중복 처리 없이 병렬성을 확보한다.
      */
     private void startListenerContainer() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(CONSUMER_COUNT);
         executor.setMaxPoolSize(CONSUMER_COUNT * 2);
         executor.setQueueCapacity(100);
@@ -163,64 +166,32 @@ public class BidStreamConsumer implements DisposableBean {
 
     /**
      * 메시지 수신 콜백
-     * 타입에 따라 분기하여 RDB 저장 후 수동 ACK한다.
+     * Handler 빈에서 RDB 저장 (트랜잭션 커밋) 후 수동 ACK한다.
      * 실패 시 ACK하지 않아 PENDING에 남는다.
+     *
+     * ACK 타이밍: Handler의 @Transactional 메서드가 반환되면 트랜잭션이 커밋된 상태이므로
+     * 이후 ACK를 전송하여 "커밋 후 ACK" 순서를 보장한다.
      */
-    @Transactional
     public void onMessage(MapRecord<String, String, String> message) {
         Map<String, String> body = message.getValue();
-        String type = body.get("type");
         String recordId = message.getId().getValue();
 
         try {
             rdbSyncTimer.record(() -> {
-                switch (type) {
-                    case "BID_SAVE" -> processBidSave(body, recordId);
-                    case "INSTANT_BUY_UPDATE" -> processInstantBuyUpdate(body);
-                    default -> log.warn("알 수 없는 메시지 타입: type={}, recordId={}", type, recordId);
-                }
+                // Handler 빈 호출 → Spring 프록시 경유 → @Transactional 정상 동작
+                messageHandler.handle(body, recordId);
             });
 
-            // RDB 저장 성공 시에만 ACK
+            // 트랜잭션 커밋 확인 후 ACK
             redisTemplate.opsForStream().acknowledge(STREAM_KEY, GROUP_NAME, message.getId());
             consumeSuccessCounter.increment();
-            log.debug("메시지 처리 완료: type={}, recordId={}", type, recordId);
+            log.debug("메시지 처리 완료: recordId={}", recordId);
         } catch (Exception e) {
             consumeFailCounter.increment();
             // ACK하지 않으면 PENDING 목록에 남아 retryPendingMessages()에서 재처리됨
-            log.error("메시지 처리 실패 (PENDING 유지): type={}, recordId={}, error={}",
-                    type, recordId, e.getMessage());
+            log.error("메시지 처리 실패 (PENDING 유지): recordId={}, error={}",
+                    recordId, e.getMessage());
         }
-    }
-
-    /**
-     * BID_SAVE 메시지 처리: 입찰 이력을 RDB에 멱등하게 저장한다.
-     * streamRecordId unique 제약으로 at-least-once 중복 처리를 방지한다.
-     */
-    private void processBidSave(Map<String, String> body, String recordId) {
-        Bid bid = Bid.reconstitute()
-                .auctionId(Long.parseLong(body.get("auctionId")))
-                .bidderId(Long.parseLong(body.get("bidderId")))
-                .amount(Long.parseLong(body.get("amount")))
-                .bidType(BidType.valueOf(body.get("bidType")))
-                .createdAt(LocalDateTime.parse(body.get("createdAt")))
-                .build();
-        bidRepository.saveIdempotent(bid, recordId);
-    }
-
-    /**
-     * INSTANT_BUY_UPDATE 메시지 처리: 경매 즉시 구매 상태를 RDB에 업데이트한다.
-     */
-    private void processInstantBuyUpdate(Map<String, String> body) {
-        auctionRepository.updateInstantBuyActivated(
-                Long.parseLong(body.get("auctionId")),
-                Long.parseLong(body.get("currentPrice")),
-                Integer.parseInt(body.get("totalBidCount")),
-                Long.parseLong(body.get("bidIncrement")),
-                Long.parseLong(body.get("bidderId")),
-                Long.parseLong(body.get("currentTimeMs")),
-                Long.parseLong(body.get("scheduledEndTimeMs"))
-        );
     }
 
     /**
@@ -270,7 +241,7 @@ public class BidStreamConsumer implements DisposableBean {
     }
 
     /**
-     * 애플리케이션 종료 시 리스너 컨테이너를 정지한다.
+     * 애플리케이션 종료 시 리스너 컨테이너와 스레드 풀을 정지한다.
      * 처리 중이던 메시지는 ACK되지 않아 PENDING에 남고,
      * 재시작 시 retryPendingMessages()에서 재처리된다.
      */
@@ -278,7 +249,11 @@ public class BidStreamConsumer implements DisposableBean {
     public void destroy() {
         if (container != null && container.isRunning()) {
             container.stop();
-            log.info("BidStreamConsumer 종료: consumer={}", consumerName);
+            log.info("BidStreamConsumer 리스너 컨테이너 종료: consumer={}", consumerName);
+        }
+        if (executor != null) {
+            executor.shutdown();
+            log.info("BidStreamConsumer 스레드 풀 종료");
         }
     }
 }
