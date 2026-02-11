@@ -16,7 +16,6 @@ import { BASE_URL, getHeaders, randomUserId, generateBidAmount } from './config.
 const bidSuccess = new Counter('bid_success');
 const bidFailed = new Counter('bid_failed');
 const bidErrorRate = new Rate('bid_error_rate');
-const bidDuration = new Trend('bid_duration', true);
 
 // 테스트 설정
 export const options = {
@@ -149,7 +148,7 @@ function textSummary(data) {
     const metrics = data.metrics;
     return `
 ========================================
-📊 일정 부하 테스트 결과 (100 VUs, 2분)
+📊 일정 부하 테스트 결과 (1000 VUs, 2분)
 ========================================
 
 📈 요청 통계

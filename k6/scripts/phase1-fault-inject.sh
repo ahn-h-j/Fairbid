@@ -13,7 +13,10 @@ PAUSE_DURATION="${1:-10}"  # 기본 10초
 
 echo "🔴 DB 장애 주입 시작..."
 bash "${SCRIPT_DIR}/grafana-annotation.sh" "DB 장애 주입 (docker pause mysql)" "fault-injection"
-docker pause fairbid-mysql-1 2>/dev/null || docker pause fairbid_mysql_1 2>/dev/null || docker pause mysql 2>/dev/null
+if ! (docker pause fairbid-mysql-1 2>/dev/null || docker pause fairbid_mysql_1 2>/dev/null || docker pause mysql 2>/dev/null); then
+    echo "❌ MySQL 컨테이너 pause 실패. 컨테이너 이름을 확인하세요."
+    exit 1
+fi
 echo "⏳ ${PAUSE_DURATION}초간 장애 유지..."
 sleep "${PAUSE_DURATION}"
 

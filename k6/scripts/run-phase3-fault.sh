@@ -129,7 +129,7 @@ while true; do
     done <<< "$REDIS_KEYS"
 
     # RDB 입찰 수
-    RDB_COUNT=$(docker exec fairbid-mysql-1 mysql -u"${MYSQL_USER}" -p"${MYSQL_PASS}" -D"${MYSQL_DB}" -se "SELECT COUNT(*) FROM bid;" 2>/dev/null || echo "0")
+    RDB_COUNT=$(docker exec ${MYSQL_CONTAINER} mysql -u"${MYSQL_USER}" -p"${MYSQL_PASS}" -D"${MYSQL_DB}" -se "SELECT COUNT(*) FROM bid;" 2>/dev/null || echo "0")
 
     DIFF=$((REDIS_COUNT - RDB_COUNT))
 

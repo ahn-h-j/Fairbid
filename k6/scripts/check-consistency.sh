@@ -32,6 +32,7 @@ while IFS= read -r key; do
     count=$(docker exec fairbid-redis-1 redis-cli HGET "$key" totalBidCount 2>/dev/null \
       || docker exec fairbid_redis_1 redis-cli HGET "$key" totalBidCount 2>/dev/null \
       || redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} HGET "$key" totalBidCount)
+    count=$(echo "$count" | tr -d '\r')
     if [[ -n "$count" && "$count" != "(nil)" ]]; then
         REDIS_COUNT=$((REDIS_COUNT + count))
     fi
@@ -54,7 +55,12 @@ echo ""
 if [[ "$DIFF" -eq 0 ]]; then
     echo "✅ 정합성 일치"
 else
-    echo "❌ 불일치 감지! (Redis가 ${DIFF}건 더 많음)"
+    if [ "$DIFF" -gt 0 ]; then
+        echo "❌ 불일치 감지! (Redis가 ${DIFF}건 더 많음)"
+    else
+        ABS_DIFF=$(( -DIFF ))
+        echo "❌ 불일치 감지! (RDB가 ${ABS_DIFF}건 더 많음)"
+    fi
     if [[ "$REDIS_COUNT" -gt 0 ]]; then
         RATE=$(awk "BEGIN {printf \"%.2f\", ${DIFF} * 100 / ${REDIS_COUNT}}")
         echo "   불일치율: ${RATE}%"

@@ -85,8 +85,7 @@ annotate "DB 복구 (docker start ${MYSQL_CONTAINER})" "recovery"
 # 6. k6 종료 대기
 echo ""
 echo "⏳ k6 종료 대기 중..."
-wait "${K6_PID}"
-K6_EXIT=$?
+wait "${K6_PID}" || true
 
 # 7. 정합성 비교
 echo ""

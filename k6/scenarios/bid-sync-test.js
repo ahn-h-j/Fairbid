@@ -1,12 +1,12 @@
 /**
- * 동기 방식 RDB 동기화 테스트 (Issue #62 - Phase 1)
+ * RDB 동기화 부하 테스트 (Issue #62)
  *
- * 시나리오: 50명이 90초간 지속적으로 입찰
- * 용도: Baseline(30초) → 장애 주입(30초) → 복구(30초) 3단계 측정
+ * 시나리오: 1000명이 120초간 지속적으로 입찰
+ * 용도: Baseline(60초) → 장애 주입(20초) → 복구(40초) 3단계 측정
  *
- * 장애 주입은 k6 외부에서 수동으로 실행:
- *   docker pause fairbid-mysql    (k6 시작 30초 후)
- *   docker unpause fairbid-mysql  (pause 후 30초)
+ * 장애 주입은 k6 외부에서 오케스트레이터 스크립트로 실행:
+ *   bash k6/scripts/run-phase1-test.sh   (Phase 1)
+ *   bash k6/scripts/run-phase3-fault.sh  (Phase 3)
  *
  * 실행: k6 run k6/scenarios/bid-sync-test.js
  */
@@ -14,13 +14,12 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
-import { BASE_URL, getHeaders, randomUserId, generateBidAmount } from './config.js';
+import { BASE_URL, getHeaders, randomUserId } from './config.js';
 
 // 커스텀 메트릭
 const bidSuccess = new Counter('bid_success');
 const bidFailed = new Counter('bid_failed');
 const bidErrorRate = new Rate('bid_error_rate');
-const bidDuration = new Trend('bid_duration', true);
 const httpErrors = new Counter('http_5xx_errors');
 
 // 테스트 설정: 2분간 1000 VUs 일정 부하
@@ -182,7 +181,7 @@ function textSummary(data) {
     const metrics = data.metrics;
     return `
 =============================================
-📊 동기 RDB 동기화 테스트 결과 (1000 VUs, 90초)
+📊 RDB 동기화 부하 테스트 결과 (1000 VUs, 120초)
 =============================================
 
 📈 요청 통계
