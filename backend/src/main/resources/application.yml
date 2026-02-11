@@ -27,8 +27,8 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
-    # OSIV: imageUrls 등 Lazy 컬렉션 로딩에 필요하여 활성화 유지
-    # @Transactional이 있는 곳에서만 커넥션을 획득하여 장애 격리 달성
+    # OSIV 활성화: imageUrls 등 Lazy 컬렉션의 Controller 레벨 로딩에 필요
+    # 주의: 요청 전체에 걸쳐 DB 커넥션을 점유하므로 고부하 시 HikariCP 고갈 가능성 있음
     open-in-view: true
     properties:
       hibernate:

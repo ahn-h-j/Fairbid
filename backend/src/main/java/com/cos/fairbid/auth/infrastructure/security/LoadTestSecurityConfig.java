@@ -50,6 +50,9 @@ public class LoadTestSecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        // ADMIN 전용 엔드포인트 (프로덕션 SecurityConfig와 동일)
+                        .requestMatchers("/api/v1/test/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 // JWT 필터 대신 X-User-Id 헤더 필터 사용
