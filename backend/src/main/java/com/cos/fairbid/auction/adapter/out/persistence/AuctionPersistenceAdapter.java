@@ -7,6 +7,7 @@ import com.cos.fairbid.auction.adapter.out.persistence.repository.JpaAuctionRepo
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -55,9 +56,9 @@ public class AuctionPersistenceAdapter implements AuctionRepositoryPort {
     }
 
     @Override
-    public Page<Auction> findAll(AuctionStatus status, String keyword, Pageable pageable) {
+    public Page<Auction> findAll(AuctionStatus status, Category category, String keyword, Pageable pageable) {
         return jpaAuctionRepository.findAll(
-                AuctionSpecification.withCondition(status, keyword),
+                AuctionSpecification.withCondition(status, category, keyword),
                 pageable
         ).map(auctionMapper::toDomain);
     }

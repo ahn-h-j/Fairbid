@@ -173,11 +173,20 @@ export async function apiRequest(endpoint, options = {}) {
     }
   }
 
+  // 비로그인 상태에서 인증이 필요한 API 호출 시 (401/403)
+  if ((response.status === 401 || response.status === 403) && !accessToken) {
+    throw new ApiError('UNAUTHORIZED', '로그인이 필요합니다.', response.status);
+  }
+
   let data;
   try {
     data = await response.json();
   } catch {
-    throw new ApiError('PARSE_ERROR', '서버 응답을 처리할 수 없습니다.');
+    // JSON 파싱 실패 시 상태코드 기반 에러 처리
+    if (response.status === 401 || response.status === 403) {
+      throw new ApiError('UNAUTHORIZED', '로그인이 필요합니다.', response.status);
+    }
+    throw new ApiError('PARSE_ERROR', '서버 응답을 처리할 수 없습니다.', response.status);
   }
 
   // 서버 시간 오프셋 갱신

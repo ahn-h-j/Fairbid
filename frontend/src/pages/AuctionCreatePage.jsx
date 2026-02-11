@@ -140,7 +140,7 @@ export default function AuctionCreatePage() {
               경매 상세 보기
             </Link>
             <Link
-              to="/"
+              to="/auctions"
               className="w-full py-3 bg-gray-50 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-100 transition-colors btn-press text-center"
             >
               목록으로 돌아가기

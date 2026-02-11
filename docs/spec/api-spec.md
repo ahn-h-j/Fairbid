@@ -69,6 +69,9 @@
 | POST | /trades/{tradeId}/direct/accept | 직거래 제안 수락 |
 | POST | /trades/{tradeId}/direct/counter | 직거래 역제안 |
 | POST | /trades/{tradeId}/delivery/address | 배송지 입력 |
+| POST | /trades/{tradeId}/delivery/payment | 입금 완료 확인 (구매자) |
+| POST | /trades/{tradeId}/delivery/payment/verify | 입금 확인 (판매자) |
+| POST | /trades/{tradeId}/delivery/payment/reject | 미입금 처리 (판매자) |
 | POST | /trades/{tradeId}/delivery/ship | 송장번호 입력 |
 | POST | /trades/{tradeId}/delivery/confirm | 수령 확인 |
 | POST | /trades/{tradeId}/complete | 거래 완료 확인 |
@@ -82,6 +85,7 @@
 | DELETE | /users/me | 회원 탈퇴 |
 | GET | /users/me/auctions | 내 판매 경매 목록 |
 | GET | /users/me/bids | 내 입찰 경매 목록 |
+| PUT | /users/me/bank-account | 판매 계좌 등록/수정 |
 | GET | /users/check-nickname | 닉네임 중복 확인 |
 
 ### Auth (인증)

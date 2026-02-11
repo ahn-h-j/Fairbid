@@ -1,0 +1,144 @@
+sequenceDiagram
+autonumber
+actor User as 사용자
+participant FE as Frontend
+participant Ctrl as AuthController
+participant UC as OAuthLoginUseCase
+participant TokenUC as RefreshTokenUseCase
+participant Provider as OAuth Provider
+participant UserRepo as UserRepository
+participant Redis as Redis
+participant RDB as MySQL
+
+    Note over User, RDB: [지원 OAuth Provider]<br/>- KAKAO (카카오)<br/>- NAVER (네이버)<br/>- GOOGLE (구글)
+
+    Note over User, RDB: [토큰 정책]<br/>- Access Token: JWT (짧은 유효기간)<br/>- Refresh Token: Redis 저장 (Token Rotation)<br/>- CSRF 방지: state 파라미터 검증
+
+    %% OAuth 로그인 시작
+    rect rgb(235, 245, 255)
+        Note over User, Provider: [1단계: OAuth 인증 요청]
+        User->>FE: 소셜 로그인 버튼 클릭
+        FE->>Ctrl: GET /api/v1/auth/oauth2/{provider}
+        Note right of Ctrl: provider: kakao | naver | google
+
+        Ctrl->>Ctrl: state 생성 (UUID)
+        Ctrl->>Ctrl: state 쿠키 설정 (5분 TTL)
+        Note right of Ctrl: HttpOnly 쿠키<br/>CSRF 방지용
+
+        Ctrl->>Ctrl: Authorization URL 생성
+        Note right of Ctrl: client_id, redirect_uri<br/>response_type=code<br/>scope, state
+
+        Ctrl-->>User: 302 Redirect to Provider
+        User->>Provider: 로그인 페이지
+        Provider-->>User: 인증 화면
+        User->>Provider: 로그인 승인
+    end
+
+    %% OAuth 콜백 처리
+    rect rgb(255, 240, 240)
+        Note over Provider, RDB: [2단계: 콜백 처리]
+        Provider-->>Ctrl: GET /api/v1/auth/oauth2/callback/{provider}?code=xxx&state=xxx
+
+        Ctrl->>Ctrl: state 쿠키 검증
+        Note right of Ctrl: 쿠키 값 != state 파라미터<br/>→ CSRF 공격 차단
+
+        alt state 불일치
+            Ctrl-->>FE: Redirect /auth/error?reason=invalid_state
+        else state 일치
+            Ctrl->>Ctrl: state 쿠키 삭제 (일회용)
+            Ctrl->>UC: login(provider, code)
+        end
+    end
+
+    %% 토큰 교환 및 사용자 처리
+    rect rgb(240, 255, 240)
+        Note over UC, RDB: [3단계: 토큰 교환 & 사용자 처리]
+        UC->>Provider: POST /oauth/token (code 교환)
+        Provider-->>UC: access_token, refresh_token
+
+        UC->>Provider: GET /userinfo (사용자 정보)
+        Provider-->>UC: email, profile
+
+        UC->>UserRepo: findByEmailAndProvider(email, provider)
+        UserRepo->>RDB: SELECT * FROM users<br/>WHERE email = ? AND oauth_provider = ?
+
+        alt 기존 사용자
+            RDB-->>UserRepo: User
+            UserRepo-->>UC: User
+        else 신규 사용자
+            RDB-->>UserRepo: null
+            UC->>UserRepo: save(User.create(...))
+            UserRepo->>RDB: INSERT INTO users (...)
+            Note right of RDB: email, oauth_provider<br/>oauth_id, onboarded=false
+            RDB-->>UserRepo: User
+            UserRepo-->>UC: User
+        end
+
+        UC->>UC: Access Token 생성 (JWT)
+        UC->>UC: Refresh Token 생성 (UUID)
+
+        UC->>Redis: SET refresh:{userId} {token}
+        Note right of Redis: Token Rotation용<br/>단일 활성 토큰
+
+        UC-->>Ctrl: LoginResult (accessToken, refreshToken, onboarded)
+    end
+
+    %% 프론트엔드 리다이렉트
+    rect rgb(255, 250, 230)
+        Note over Ctrl, FE: [4단계: 프론트엔드 리다이렉트]
+        Ctrl->>Ctrl: Refresh Token 쿠키 설정
+        Note right of Ctrl: HttpOnly, Secure<br/>SameSite=Lax
+
+        Ctrl-->>FE: Redirect /auth/callback
+        FE->>FE: 콜백 페이지 로드
+    end
+
+    %% Access Token 발급
+    rect rgb(235, 245, 255)
+        Note over FE, Redis: [5단계: Access Token 발급]
+        FE->>Ctrl: POST /api/v1/auth/refresh
+        Note right of FE: Refresh Token 쿠키 자동 전송
+
+        Ctrl->>TokenUC: refresh(refreshToken)
+
+        TokenUC->>Redis: GET refresh:{userId}
+        Redis-->>TokenUC: storedToken
+
+        alt 토큰 불일치 (재사용 감지)
+            TokenUC->>Redis: DEL refresh:{userId}
+            Note right of Redis: 보안: 모든 세션 무효화
+            TokenUC-->>Ctrl: throw RefreshTokenReusedException
+            Ctrl-->>FE: 401 Unauthorized
+        else 토큰 일치
+            TokenUC->>TokenUC: 새 Access Token 생성
+            TokenUC->>TokenUC: 새 Refresh Token 생성
+            TokenUC->>Redis: SET refresh:{userId} {newToken}
+            Note right of Redis: Token Rotation<br/>이전 토큰 무효화
+            TokenUC-->>Ctrl: TokenResult (accessToken, refreshToken, onboarded)
+        end
+
+        Ctrl->>Ctrl: 새 Refresh Token 쿠키 설정
+        Ctrl-->>FE: 200 OK { accessToken, onboarded }
+
+        alt onboarded = false
+            FE-->>User: 온보딩 페이지로 이동
+        else onboarded = true
+            FE-->>User: 메인 페이지로 이동
+        end
+    end
+
+    %% 로그아웃
+    rect rgb(240, 255, 240)
+        Note over User, Redis: [로그아웃]
+        User->>FE: 로그아웃 버튼 클릭
+        FE->>Ctrl: POST /api/v1/auth/logout
+        Note right of FE: Authorization: Bearer {accessToken}
+
+        Ctrl->>Ctrl: JWT에서 userId 추출
+        Ctrl->>Redis: DEL refresh:{userId}
+        Note right of Redis: Refresh Token 삭제
+
+        Ctrl->>Ctrl: Refresh Token 쿠키 삭제
+        Ctrl-->>FE: 200 OK
+        FE-->>User: 로그인 페이지로 이동
+    end

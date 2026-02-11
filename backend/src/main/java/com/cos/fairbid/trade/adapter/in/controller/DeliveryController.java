@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.*;
  * 택배 배송 API 컨트롤러
  *
  * - POST /api/v1/trades/{tradeId}/delivery/address - 배송지 입력 (구매자)
+ * - POST /api/v1/trades/{tradeId}/delivery/payment - 입금 완료 확인 (구매자)
+ * - POST /api/v1/trades/{tradeId}/delivery/payment/verify - 입금 확인 (판매자)
+ * - POST /api/v1/trades/{tradeId}/delivery/payment/reject - 미입금 처리 (판매자)
  * - POST /api/v1/trades/{tradeId}/delivery/ship - 송장 입력 (판매자)
  * - POST /api/v1/trades/{tradeId}/delivery/confirm - 수령 확인 (구매자)
  */
@@ -44,6 +47,45 @@ public class DeliveryController {
                 request.getAddress(),
                 request.getAddressDetail()
         );
+        return ResponseEntity.ok(ApiResponse.success(DeliveryInfoResponse.from(info)));
+    }
+
+    /**
+     * 입금 완료 확인 (구매자)
+     * 구매자가 판매자 계좌로 입금 후 호출한다.
+     */
+    @PostMapping("/payment")
+    public ResponseEntity<ApiResponse<DeliveryInfoResponse>> confirmPayment(
+            @PathVariable Long tradeId
+    ) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        DeliveryInfo info = deliveryUseCase.confirmPayment(tradeId, userId);
+        return ResponseEntity.ok(ApiResponse.success(DeliveryInfoResponse.from(info)));
+    }
+
+    /**
+     * 입금 확인 (판매자)
+     * 판매자가 구매자의 입금을 확인한다.
+     */
+    @PostMapping("/payment/verify")
+    public ResponseEntity<ApiResponse<DeliveryInfoResponse>> verifyPayment(
+            @PathVariable Long tradeId
+    ) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        DeliveryInfo info = deliveryUseCase.verifyPayment(tradeId, userId);
+        return ResponseEntity.ok(ApiResponse.success(DeliveryInfoResponse.from(info)));
+    }
+
+    /**
+     * 미입금 처리 (판매자)
+     * 판매자가 구매자의 입금을 확인하지 못한 경우 호출한다.
+     */
+    @PostMapping("/payment/reject")
+    public ResponseEntity<ApiResponse<DeliveryInfoResponse>> rejectPayment(
+            @PathVariable Long tradeId
+    ) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        DeliveryInfo info = deliveryUseCase.rejectPayment(tradeId, userId);
         return ResponseEntity.ok(ApiResponse.success(DeliveryInfoResponse.from(info)));
     }
 

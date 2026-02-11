@@ -8,6 +8,9 @@ import {
   acceptDirectTrade,
   counterProposeDirectTrade,
   submitAddress,
+  confirmPayment,
+  verifyPayment,
+  rejectPayment,
   shipDelivery,
   confirmDelivery
 } from '../api/useTrade';
@@ -15,7 +18,7 @@ import { apiRequest } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
 import Alert from '../components/Alert';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatPhoneInput, formatPhone } from '../utils/formatters';
 
 /**
  * 거래 상세 페이지
@@ -394,6 +397,15 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
     trackingNumber: '',
   });
 
+  // 판매자 계좌 관련 상태
+  const [savedBankAccount, setSavedBankAccount] = useState(null);
+  const [bankAccountLoaded, setBankAccountLoaded] = useState(false);
+  const [bankAccountForm, setBankAccountForm] = useState({
+    bankName: '',
+    accountNumber: '',
+    accountHolder: '',
+  });
+
   // 저장된 배송지 로드
   useEffect(() => {
     if (!isSeller && deliveryInfo?.status === 'AWAITING_ADDRESS') {
@@ -406,6 +418,33 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
         .catch(() => {});
     }
   }, [isSeller, deliveryInfo?.status]);
+
+  // 판매자: 저장된 계좌 로드 (입금 대기 상태일 때)
+  useEffect(() => {
+    if (isSeller && deliveryInfo?.status === 'AWAITING_PAYMENT') {
+      apiRequest('/users/me')
+        .then(data => {
+          if (data.bankAccount) {
+            setSavedBankAccount(data.bankAccount);
+          }
+          setBankAccountLoaded(true);
+        })
+        .catch(() => {
+          setBankAccountLoaded(true);
+        });
+    }
+  }, [isSeller, deliveryInfo?.status]);
+
+  // 계좌 등록 처리
+  const handleSubmitBankAccount = async () => {
+    const result = await apiRequest('/users/me/bank-account', {
+      method: 'PUT',
+      body: JSON.stringify(bankAccountForm),
+    });
+    // API 성공 후에만 로컬 상태 업데이트 (뷰 전환)
+    setSavedBankAccount({ ...bankAccountForm });
+    return result;
+  };
 
   // 저장된 배송지 사용 토글
   const handleUseSavedAddress = () => {
@@ -469,7 +508,7 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
               </div>
               {useSavedAddress && (
                 <div className="bg-blue-50 rounded-xl p-3 text-[13px] text-blue-700">
-                  <p className="font-semibold">{savedAddress.recipientName} ({savedAddress.recipientPhone})</p>
+                  <p className="font-semibold">{savedAddress.recipientName} ({formatPhone(savedAddress.recipientPhone)})</p>
                   <p className="mt-0.5">{savedAddress.postalCode && `[${savedAddress.postalCode}] `}{savedAddress.address}</p>
                   {savedAddress.addressDetail && <p>{savedAddress.addressDetail}</p>}
                 </div>
@@ -491,7 +530,7 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
                 type="tel"
                 placeholder="연락처 (010-0000-0000)"
                 value={addressForm.recipientPhone}
-                onChange={(e) => setAddressForm(prev => ({ ...prev, recipientPhone: e.target.value }))}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, recipientPhone: formatPhoneInput(e.target.value) }))}
                 className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
               <input
@@ -536,9 +575,113 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
     }
   }
 
-  // 배송지 입력 완료 (판매자가 송장 입력해야 함)
-  if (deliveryInfo?.status === 'ADDRESS_SUBMITTED') {
-    if (isSeller) {
+  // 입금 대기 (배송지 입력 완료)
+  if (deliveryInfo?.status === 'AWAITING_PAYMENT') {
+    if (!isSeller) {
+      // 구매자: 판매자 계좌 정보 확인 + 입금 완료 버튼
+      const bankAccount = trade.sellerBankAccount;
+      return (
+        <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] space-y-4">
+          <h3 className="text-[14px] font-bold text-gray-900">판매자에게 입금해주세요</h3>
+
+          {/* 거래 금액 */}
+          <div className="bg-blue-50 rounded-xl p-4 text-center">
+            <p className="text-[12px] text-blue-600 mb-1">입금 금액</p>
+            <p className="text-[20px] font-bold text-blue-700">{formatPrice(trade.finalPrice)}</p>
+          </div>
+
+          {/* 판매자 계좌 정보 */}
+          {bankAccount ? (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-1">
+              <p className="text-[12px] text-gray-500 mb-2">판매자 계좌</p>
+              <p className="text-[14px] font-semibold text-gray-900">{bankAccount.bankName}</p>
+              <p className="text-[14px] text-gray-700">{bankAccount.accountNumber}</p>
+              <p className="text-[13px] text-gray-500">{bankAccount.accountHolder}</p>
+            </div>
+          ) : (
+            <div className="bg-yellow-50 rounded-xl p-4">
+              <p className="text-[13px] text-yellow-700">판매자가 아직 계좌를 등록하지 않았습니다. 잠시 후 다시 확인해주세요.</p>
+            </div>
+          )}
+
+          {deliveryInfo.paymentConfirmed ? (
+            deliveryInfo.paymentVerified ? (
+              <div className="bg-green-50 rounded-xl p-4 text-center">
+                <p className="text-[14px] font-semibold text-green-700">입금 확인 완료</p>
+                <p className="text-[12px] text-green-600 mt-1">판매자가 입금을 확인했습니다. 곧 발송될 예정입니다.</p>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 rounded-xl p-4 text-center">
+                <p className="text-[14px] font-semibold text-yellow-700">입금 완료 처리됨</p>
+                <p className="text-[12px] text-yellow-600 mt-1">판매자의 입금 확인을 기다리는 중...</p>
+              </div>
+            )
+          ) : (
+            <button
+              onClick={() => onAction(() => confirmPayment(trade.id))}
+              disabled={submitting || !bankAccount}
+              className="w-full py-3 bg-blue-600 text-white text-[14px] font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {submitting ? '처리 중...' : '입금 완료'}
+            </button>
+          )}
+        </div>
+      );
+    } else {
+      // 판매자: 계좌 등록 + 입금 확인 후 송장 입력
+
+      // 계좌 정보 로딩 중
+      if (!bankAccountLoaded) {
+        return (
+          <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] flex justify-center py-8">
+            <Spinner size="md" />
+          </div>
+        );
+      }
+
+      // 계좌 미등록 → 계좌 입력 폼
+      if (!savedBankAccount) {
+        return (
+          <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] space-y-4">
+            <h3 className="text-[14px] font-bold text-gray-900">입금받을 계좌를 등록해주세요</h3>
+            <p className="text-[13px] text-gray-500">구매자가 이 계좌로 입금하게 됩니다.</p>
+
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="은행명 (예: 카카오뱅크)"
+                value={bankAccountForm.bankName}
+                onChange={(e) => setBankAccountForm(prev => ({ ...prev, bankName: e.target.value }))}
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <input
+                type="text"
+                placeholder="계좌번호"
+                value={bankAccountForm.accountNumber}
+                onChange={(e) => setBankAccountForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <input
+                type="text"
+                placeholder="예금주"
+                value={bankAccountForm.accountHolder}
+                onChange={(e) => setBankAccountForm(prev => ({ ...prev, accountHolder: e.target.value }))}
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+            </div>
+
+            <button
+              onClick={() => onAction(handleSubmitBankAccount)}
+              disabled={submitting || !bankAccountForm.bankName || !bankAccountForm.accountNumber || !bankAccountForm.accountHolder}
+              className="w-full py-3 bg-blue-600 text-white text-[14px] font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {submitting ? '등록 중...' : '계좌 등록'}
+            </button>
+          </div>
+        );
+      }
+
+      // 계좌 등록됨 → 배송 정보 + 입금 대기/송장 입력
       return (
         <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] space-y-4">
           <h3 className="text-[14px] font-bold text-gray-900">배송 정보</h3>
@@ -547,37 +690,69 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
             <p className="text-[13px] text-gray-600">👤 {deliveryInfo.recipientName}</p>
             <p className="text-[13px] text-gray-600">📞 {deliveryInfo.recipientPhone}</p>
           </div>
-          <h4 className="text-[13px] font-semibold text-gray-700 pt-2">송장 정보 입력</h4>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="택배사"
-              value={shippingForm.courierCompany}
-              onChange={(e) => setShippingForm(prev => ({ ...prev, courierCompany: e.target.value }))}
-              className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            />
-            <input
-              type="text"
-              placeholder="송장번호"
-              value={shippingForm.trackingNumber}
-              onChange={(e) => setShippingForm(prev => ({ ...prev, trackingNumber: e.target.value }))}
-              className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            />
-          </div>
-          <button
-            onClick={() => onAction(() => shipDelivery(trade.id, shippingForm))}
-            disabled={submitting || !shippingForm.courierCompany || !shippingForm.trackingNumber}
-            className="w-full py-3 bg-blue-600 text-white text-[14px] font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {submitting ? '등록 중...' : '발송 완료'}
-          </button>
-        </div>
-      );
-    } else {
-      return (
-        <div className="bg-yellow-50 rounded-2xl p-5 ring-1 ring-yellow-200/50">
-          <p className="text-[14px] text-yellow-800">판매자가 상품을 발송 중입니다.</p>
-          <p className="text-[13px] text-yellow-600 mt-1">배송 시작 시 알림을 보내드립니다.</p>
+
+          {deliveryInfo.paymentConfirmed && deliveryInfo.paymentVerified ? (
+            /* 입금 확인 완료 → 송장 입력 가능 */
+            <>
+              <div className="bg-green-50 rounded-xl p-3">
+                <p className="text-[13px] font-semibold text-green-700">입금이 확인되었습니다. 송장을 입력해주세요.</p>
+              </div>
+              <h4 className="text-[13px] font-semibold text-gray-700 pt-2">송장 정보 입력</h4>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="택배사"
+                  value={shippingForm.courierCompany}
+                  onChange={(e) => setShippingForm(prev => ({ ...prev, courierCompany: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+                <input
+                  type="text"
+                  placeholder="송장번호"
+                  value={shippingForm.trackingNumber}
+                  onChange={(e) => setShippingForm(prev => ({ ...prev, trackingNumber: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <button
+                onClick={() => onAction(() => shipDelivery(trade.id, shippingForm))}
+                disabled={submitting || !shippingForm.courierCompany || !shippingForm.trackingNumber}
+                className="w-full py-3 bg-blue-600 text-white text-[14px] font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {submitting ? '등록 중...' : '발송 완료'}
+              </button>
+            </>
+          ) : deliveryInfo.paymentConfirmed && !deliveryInfo.paymentVerified ? (
+            /* 구매자가 입금 완료 알림 → 판매자가 확인/거절 선택 */
+            <>
+              <div className="bg-blue-50 rounded-xl p-4">
+                <p className="text-[14px] font-semibold text-blue-800">구매자가 입금을 완료했다고 합니다.</p>
+                <p className="text-[13px] text-blue-600 mt-1">계좌를 확인하고 입금 여부를 확인해주세요.</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => onAction(() => verifyPayment(trade.id))}
+                  disabled={submitting}
+                  className="flex-1 py-3 bg-green-600 text-white text-[14px] font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? '처리 중...' : '입금 확인'}
+                </button>
+                <button
+                  onClick={() => onAction(() => rejectPayment(trade.id))}
+                  disabled={submitting}
+                  className="flex-1 py-3 bg-red-100 text-red-700 text-[14px] font-semibold rounded-xl hover:bg-red-200 disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? '처리 중...' : '미입금'}
+                </button>
+              </div>
+            </>
+          ) : (
+            /* 아직 구매자가 입금 완료를 누르지 않음 */
+            <div className="bg-yellow-50 rounded-xl p-4">
+              <p className="text-[14px] text-yellow-800">구매자의 입금을 기다리는 중입니다.</p>
+              <p className="text-[13px] text-yellow-600 mt-1">입금이 확인되면 알림을 보내드립니다.</p>
+            </div>
+          )}
         </div>
       );
     }
@@ -635,7 +810,7 @@ function ArrangedUI({ trade, isSeller, onAction, submitting }) {
           </div>
           <div className="bg-gray-50 rounded-xl p-4 space-y-1">
             <p className="text-[13px] font-semibold text-gray-700">배송지</p>
-            <p className="text-[13px] text-gray-600">👤 {trade.deliveryInfo.recipientName} ({trade.deliveryInfo.recipientPhone})</p>
+            <p className="text-[13px] text-gray-600">👤 {trade.deliveryInfo.recipientName} ({formatPhone(trade.deliveryInfo.recipientPhone)})</p>
             <p className="text-[13px] text-gray-600">📍 {trade.deliveryInfo.address} {trade.deliveryInfo.addressDetail}</p>
           </div>
         </div>

@@ -8,6 +8,7 @@ import com.cos.fairbid.auction.application.port.out.AuctionCachePort;
 import com.cos.fairbid.auction.application.port.out.AuctionRepositoryPort;
 import com.cos.fairbid.auction.domain.Auction;
 import com.cos.fairbid.auction.domain.AuctionStatus;
+import com.cos.fairbid.auction.domain.Category;
 import com.cos.fairbid.auction.domain.event.AuctionCreatedEvent;
 import com.cos.fairbid.auction.domain.exception.AuctionNotFoundException;
 import com.cos.fairbid.winning.application.port.out.WinningRepositoryPort;
@@ -105,13 +106,14 @@ public class AuctionService implements CreateAuctionUseCase, GetAuctionDetailUse
      * (입찰 시 auction 테이블 UPDATE 제거로 인한 성능 최적화)
      *
      * @param status   경매 상태 필터 (nullable)
+     * @param category 카테고리 필터 (nullable)
      * @param keyword  검색어 - 상품명 (nullable)
      * @param pageable 페이지네이션 정보
      * @return 경매 목록 (페이지)
      */
     @Override
-    public Page<Auction> getAuctionList(AuctionStatus status, String keyword, Pageable pageable) {
-        Page<Auction> auctions = auctionRepository.findAll(status, keyword, pageable);
+    public Page<Auction> getAuctionList(AuctionStatus status, Category category, String keyword, Pageable pageable) {
+        Page<Auction> auctions = auctionRepository.findAll(status, category, keyword, pageable);
 
         // Redis에서 최신 currentPrice 조회
         java.util.Set<Long> auctionIds = auctions.getContent().stream()

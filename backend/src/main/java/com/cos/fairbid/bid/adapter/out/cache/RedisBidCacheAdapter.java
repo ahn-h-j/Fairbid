@@ -100,7 +100,7 @@ public class RedisBidCacheAdapter implements BidCachePort {
         switch (errorCode) {
             case "NOT_FOUND" -> throw AuctionNotFoundException.withId(auctionId);
             case "NOT_ACTIVE", "AUCTION_ENDED" -> throw AuctionEndedException.forBid(auctionId);
-            case "SELF_BID" -> throw SelfBidNotAllowedException.forAuction(auctionId, bidderId);
+            case "SELF_BID" -> throw SelfBidNotAllowedException.create();
             case "BID_TOO_LOW" -> {
                 Long minBidAmount = (Long) result.get(3);
                 throw BidTooLowException.belowMinimum(bidAmount, minBidAmount);

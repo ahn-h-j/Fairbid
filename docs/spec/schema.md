@@ -35,6 +35,9 @@
 | 수정일시 | | |
 | 활성상태 | | |
 | 경고횟수 | | |
+| 은행명 | | 판매 대금 수령용 |
+| 계좌번호 | | |
+| 예금주 | | |
 
 ---
 
@@ -161,7 +164,9 @@
 | 상세주소 | | |
 | 택배사 | | |
 | 송장번호 | | |
-| 상태 | | AWAITING_ADDRESS, ADDRESS_SUBMITTED, SHIPPED, DELIVERED |
+| 입금확인여부 | | 구매자 입금 완료 확인 |
+| 입금검증여부 | | 판매자 입금 확인 |
+| 상태 | | AWAITING_ADDRESS, AWAITING_PAYMENT, SHIPPED, DELIVERED |
 
 ---
 

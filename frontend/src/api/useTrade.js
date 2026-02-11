@@ -121,6 +121,38 @@ export async function shipDelivery(tradeId, shippingData) {
 }
 
 /**
+ * 입금 완료 확인 (구매자)
+ * @param {string|number} tradeId - 거래 ID
+ */
+export async function confirmPayment(tradeId) {
+  return apiRequest(`/trades/${tradeId}/delivery/payment`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * 입금 확인 (판매자)
+ * 판매자가 구매자의 입금을 확인한다.
+ * @param {string|number} tradeId - 거래 ID
+ */
+export async function verifyPayment(tradeId) {
+  return apiRequest(`/trades/${tradeId}/delivery/payment/verify`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * 미입금 처리 (판매자)
+ * 판매자가 입금을 확인하지 못한 경우 호출한다.
+ * @param {string|number} tradeId - 거래 ID
+ */
+export async function rejectPayment(tradeId) {
+  return apiRequest(`/trades/${tradeId}/delivery/payment/reject`, {
+    method: 'POST',
+  });
+}
+
+/**
  * 수령 확인
  * @param {string|number} tradeId - 거래 ID
  */

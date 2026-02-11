@@ -31,14 +31,14 @@ export default function AuthCallbackPage() {
       const payload = decodeJwtPayload(token);
 
       if (!payload) {
-        navigate('/', { replace: true });
+        navigate('/auctions', { replace: true });
         return;
       }
 
       if (!payload.onboarded) {
         navigate('/onboarding', { replace: true });
       } else {
-        const redirectPath = localStorage.getItem('redirectAfterLogin') || '/';
+        const redirectPath = localStorage.getItem('redirectAfterLogin') || '/auctions';
         localStorage.removeItem('redirectAfterLogin');
         navigate(redirectPath, { replace: true });
       }

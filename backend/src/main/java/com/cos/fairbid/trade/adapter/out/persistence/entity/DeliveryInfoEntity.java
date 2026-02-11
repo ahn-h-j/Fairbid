@@ -49,6 +49,12 @@ public class DeliveryInfoEntity {
     @Column(nullable = false)
     private DeliveryStatus status;
 
+    @Column(name = "payment_confirmed", nullable = false)
+    private boolean paymentConfirmed;
+
+    @Column(name = "payment_verified", nullable = false)
+    private boolean paymentVerified;
+
     @Builder
     private DeliveryInfoEntity(
             Long id,
@@ -60,7 +66,9 @@ public class DeliveryInfoEntity {
             String addressDetail,
             String courierCompany,
             String trackingNumber,
-            DeliveryStatus status
+            DeliveryStatus status,
+            boolean paymentConfirmed,
+            boolean paymentVerified
     ) {
         this.id = id;
         this.tradeId = tradeId;
@@ -72,5 +80,7 @@ public class DeliveryInfoEntity {
         this.courierCompany = courierCompany;
         this.trackingNumber = trackingNumber;
         this.status = status;
+        this.paymentConfirmed = paymentConfirmed;
+        this.paymentVerified = paymentVerified;
     }
 }

@@ -1,0 +1,127 @@
+sequenceDiagram
+autonumber
+actor Buyer as 구매자 (낙찰자)
+actor Seller as 판매자
+participant Ctrl as DeliveryController
+participant Svc as DeliveryService
+participant InfoRepo as DeliveryInfoRepository
+participant TradeRepo as TradeRepository
+participant RDB as MySQL
+participant Noti as NotificationPort
+
+    Note over Buyer, Noti: [배송 상태 흐름]<br/>AWAITING_ADDRESS → AWAITING_PAYMENT → SHIPPED → DELIVERED
+
+    Note over Buyer, Noti: [전제 조건]<br/>- 거래 방식이 DELIVERY로 선택됨<br/>- DeliveryInfo 레코드 생성됨 (status=AWAITING_ADDRESS)
+
+    %% 배송지 입력 (구매자)
+    rect rgb(235, 245, 255)
+        Note over Buyer, RDB: [1단계: 배송지 입력 (구매자)]
+        Buyer->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/address
+        Note right of Buyer: { recipientName: "홍길동",<br/>  recipientPhone: "010-1234-5678",<br/>  postalCode: "12345",<br/>  address: "서울시 강남구...",<br/>  addressDetail: "101동 202호" }
+
+        Ctrl->>Svc: submitAddress(tradeId, userId, addressInfo)
+
+        Svc->>InfoRepo: findByTradeId(tradeId)
+        InfoRepo->>RDB: SELECT * FROM delivery_infos<br/>WHERE trade_id = ?
+        RDB-->>Svc: DeliveryInfo
+
+        Svc->>Svc: 검증
+        Note right of Svc: 1. 구매자 권한 확인<br/>2. 상태가 AWAITING_ADDRESS인지<br/>3. 필수 필드 검증
+
+        Svc->>InfoRepo: saveAddress()
+        InfoRepo->>RDB: UPDATE delivery_infos<br/>SET recipient_name = ?,<br/>recipient_phone = ?,<br/>postal_code = ?,<br/>address = ?,<br/>address_detail = ?,<br/>status = 'AWAITING_PAYMENT'
+
+        Svc->>Noti: notify(sellerId, DELIVERY_ADDRESS_SUBMITTED)
+        Noti-->>Seller: "배송지가 입력되었습니다.<br/>발송을 진행해주세요."
+
+        Svc-->>Ctrl: DeliveryInfo
+        Ctrl-->>Buyer: 200 OK (DeliveryInfoResponse)
+    end
+
+    %% 입금 확인 (구매자 → 판매자 검증)
+    rect rgb(255, 250, 230)
+        Note over Buyer, RDB: [2단계: 입금 확인 (구매자)]
+        Buyer->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/payment
+        Ctrl->>Svc: confirmPayment(tradeId, userId)
+        Svc->>Svc: 검증
+        Note right of Svc: 1. 구매자 권한 확인<br/>2. 상태가 AWAITING_PAYMENT인지
+        Svc->>InfoRepo: confirmPayment()
+        InfoRepo->>RDB: UPDATE delivery_infos<br/>SET payment_confirmed = true
+        Svc->>Noti: notify(sellerId, PAYMENT_CONFIRMED)
+        Noti-->>Seller: "구매자가 입금했습니다.<br/>계좌를 확인해주세요."
+        Svc-->>Ctrl: DeliveryInfo
+        Ctrl-->>Buyer: 200 OK
+    end
+
+    %% 판매자 입금 확인/거절
+    rect rgb(255, 245, 245)
+        Note over Seller, RDB: [3단계: 입금 검증 (판매자)]
+        alt 입금 확인
+            Seller->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/payment/verify
+            Ctrl->>Svc: verifyPayment(tradeId, userId)
+            Svc->>InfoRepo: verifyPayment()
+            InfoRepo->>RDB: UPDATE delivery_infos<br/>SET payment_verified = true
+            Svc->>Noti: notify(buyerId, PAYMENT_VERIFIED)
+            Noti-->>Buyer: "판매자가 입금을 확인했습니다.<br/>곧 상품이 발송됩니다."
+        else 미입금 처리
+            Seller->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/payment/reject
+            Ctrl->>Svc: rejectPayment(tradeId, userId)
+            Svc->>InfoRepo: rejectPayment()
+            InfoRepo->>RDB: UPDATE delivery_infos<br/>SET payment_confirmed = false,<br/>payment_verified = false
+            Svc->>Noti: notify(buyerId, PAYMENT_REJECTED)
+            Noti-->>Buyer: "판매자가 입금을 확인하지 못했습니다.<br/>입금 후 다시 시도해주세요."
+        end
+        Svc-->>Ctrl: DeliveryInfo
+        Ctrl-->>Seller: 200 OK
+    end
+
+    %% 송장 입력 (판매자)
+    rect rgb(255, 240, 240)
+        Note over Seller, RDB: [4단계: 송장 입력 (판매자)]
+        Seller->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/ship
+        Note right of Seller: { courierCompany: "CJ대한통운",<br/>  trackingNumber: "1234567890" }
+
+        Ctrl->>Svc: ship(tradeId, userId, courier, trackingNumber)
+
+        Svc->>InfoRepo: findByTradeId(tradeId)
+        InfoRepo->>RDB: SELECT * FROM delivery_infos
+        RDB-->>Svc: DeliveryInfo
+
+        Svc->>Svc: 검증
+        Note right of Svc: 1. 판매자 권한 확인<br/>2. 상태가 AWAITING_PAYMENT인지<br/>3. paymentVerified = true인지
+
+        Svc->>InfoRepo: ship()
+        InfoRepo->>RDB: UPDATE delivery_infos<br/>SET courier_company = ?,<br/>tracking_number = ?,<br/>status = 'SHIPPED'
+
+        Svc->>TradeRepo: updateStatus(ARRANGED)
+        TradeRepo->>RDB: UPDATE trades<br/>SET status = 'ARRANGED'
+
+        Svc->>Noti: notify(buyerId, DELIVERY_SHIPPED)
+        Noti-->>Buyer: "상품이 발송되었습니다.<br/>송장 정보를 확인해주세요."
+
+        Svc-->>Ctrl: DeliveryInfo
+        Ctrl-->>Seller: 200 OK (DeliveryInfoResponse)
+    end
+
+    %% 수령 확인 (구매자)
+    rect rgb(240, 255, 240)
+        Note over Buyer, RDB: [5단계: 수령 확인 (구매자)]
+        Buyer->>Ctrl: POST /api/v1/trades/{tradeId}/delivery/confirm
+
+        Ctrl->>Svc: confirmDelivery(tradeId, userId)
+
+        Svc->>InfoRepo: findByTradeId(tradeId)
+        InfoRepo->>RDB: SELECT * FROM delivery_infos
+        RDB-->>Svc: DeliveryInfo
+
+        Svc->>Svc: 검증
+        Note right of Svc: 1. 구매자 권한 확인<br/>2. 상태가 SHIPPED인지
+
+        Svc->>InfoRepo: confirm()
+        InfoRepo->>RDB: UPDATE delivery_infos<br/>SET status = 'DELIVERED'
+
+        Svc-->>Ctrl: DeliveryInfo
+        Ctrl-->>Buyer: 200 OK (DeliveryInfoResponse)
+    end
+
+    Note over Buyer, Seller: [이후 거래 완료]<br/>POST /api/v1/trades/{tradeId}/complete

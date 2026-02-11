@@ -21,6 +21,8 @@ public class DeliveryInfo {
     private String courierCompany;      // 택배사
     private String trackingNumber;      // 송장번호
     private DeliveryStatus status;      // 배송 상태
+    private boolean paymentConfirmed;   // 구매자 입금 완료 확인 여부
+    private boolean paymentVerified;    // 판매자 입금 확인 여부
 
     /**
      * 새로운 택배 정보 생성 (거래 시작 시)
@@ -48,6 +50,7 @@ public class DeliveryInfo {
 
     /**
      * 배송지 정보를 입력한다 (구매자)
+     * 배송지 입력 후 AWAITING_PAYMENT 상태로 전환
      *
      * @param recipientName  수령인 이름
      * @param recipientPhone 수령인 연락처
@@ -72,18 +75,71 @@ public class DeliveryInfo {
         this.postalCode = postalCode;
         this.address = address;
         this.addressDetail = addressDetail;
-        this.status = DeliveryStatus.ADDRESS_SUBMITTED;
+        this.status = DeliveryStatus.AWAITING_PAYMENT;
+    }
+
+    /**
+     * 입금을 확인한다 (구매자)
+     * 구매자가 입금 완료 버튼을 누르면 호출된다.
+     * 판매자에게 입금 완료 알림이 발송되고, 이후 판매자가 송장을 입력할 수 있다.
+     */
+    public void confirmPayment() {
+        if (this.status != DeliveryStatus.AWAITING_PAYMENT) {
+            throw new IllegalStateException("입금 대기 상태에서만 입금 확인이 가능합니다. 현재 상태: " + this.status);
+        }
+        if (this.paymentConfirmed) {
+            throw new IllegalStateException("이미 입금 완료 처리되었습니다.");
+        }
+        this.paymentConfirmed = true;
+    }
+
+    /**
+     * 입금을 확인한다 (판매자)
+     * 구매자가 입금 완료를 알린 후, 판매자가 실제 입금을 확인하면 호출된다.
+     * 입금 확인 후에만 발송(ship)이 가능하다.
+     */
+    public void verifyPayment() {
+        if (this.status != DeliveryStatus.AWAITING_PAYMENT) {
+            throw new IllegalStateException("입금 대기 상태에서만 입금 확인이 가능합니다. 현재 상태: " + this.status);
+        }
+        if (!this.paymentConfirmed) {
+            throw new IllegalStateException("구매자가 아직 입금 완료를 하지 않았습니다.");
+        }
+        if (this.paymentVerified) {
+            throw new IllegalStateException("이미 입금 확인 처리되었습니다.");
+        }
+        this.paymentVerified = true;
+    }
+
+    /**
+     * 입금을 거절한다 (판매자)
+     * 구매자가 입금 완료를 알렸지만, 실제로 입금되지 않은 경우 호출된다.
+     * paymentConfirmed를 false로 되돌려 구매자가 다시 입금 완료를 알릴 수 있게 한다.
+     */
+    public void rejectPayment() {
+        if (this.status != DeliveryStatus.AWAITING_PAYMENT) {
+            throw new IllegalStateException("입금 대기 상태에서만 미입금 처리가 가능합니다. 현재 상태: " + this.status);
+        }
+        if (!this.paymentConfirmed) {
+            throw new IllegalStateException("구매자가 아직 입금 완료를 하지 않았습니다.");
+        }
+        this.paymentConfirmed = false;
+        this.paymentVerified = false;
     }
 
     /**
      * 발송 정보를 입력한다 (판매자)
+     * 판매자가 입금 확인 처리한 후에만 가능하다.
      *
      * @param courierCompany 택배사
      * @param trackingNumber 송장번호
      */
     public void ship(String courierCompany, String trackingNumber) {
-        if (this.status != DeliveryStatus.ADDRESS_SUBMITTED) {
-            throw new IllegalStateException("배송지 입력 완료 상태에서만 발송 가능합니다. 현재 상태: " + this.status);
+        if (this.status != DeliveryStatus.AWAITING_PAYMENT) {
+            throw new IllegalStateException("입금 대기 상태에서만 발송 가능합니다. 현재 상태: " + this.status);
+        }
+        if (!this.paymentVerified) {
+            throw new IllegalStateException("입금이 확인되지 않았습니다. 입금 확인 후 발송해주세요.");
         }
         if (courierCompany == null || courierCompany.isBlank()) {
             throw new IllegalArgumentException("택배사는 필수입니다.");

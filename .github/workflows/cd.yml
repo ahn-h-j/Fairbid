@@ -34,5 +34,6 @@ jobs:
               echo "Attempt $i/30: Backend not ready yet..."
               sleep 5
             done
-            echo "Backend health check failed!"
+            echo "Backend health check failed! Dumping container logs..."
+            docker logs fairbid-backend-1 --tail 100
             exit 1

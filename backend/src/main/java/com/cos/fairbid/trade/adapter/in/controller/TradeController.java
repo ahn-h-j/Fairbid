@@ -10,9 +10,12 @@ import com.cos.fairbid.trade.application.port.in.DirectTradeUseCase;
 import com.cos.fairbid.trade.application.port.in.TradeCommandUseCase;
 import com.cos.fairbid.trade.application.port.in.TradeQueryUseCase;
 import com.cos.fairbid.trade.domain.DeliveryInfo;
+import com.cos.fairbid.trade.domain.DeliveryStatus;
 import com.cos.fairbid.trade.domain.DirectTradeInfo;
 import com.cos.fairbid.trade.domain.Trade;
 import com.cos.fairbid.trade.domain.exception.NotTradeParticipantException;
+import com.cos.fairbid.user.application.port.in.GetMyProfileUseCase;
+import com.cos.fairbid.user.domain.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +44,7 @@ public class TradeController {
     private final TradeCommandUseCase tradeCommandUseCase;
     private final DirectTradeUseCase directTradeUseCase;
     private final DeliveryUseCase deliveryUseCase;
+    private final GetMyProfileUseCase getMyProfileUseCase;
 
     /**
      * 거래 상세 조회
@@ -68,7 +72,21 @@ public class TradeController {
             deliveryInfo = deliveryUseCase.findByTradeId(tradeId).orElse(null);
         }
 
-        TradeDetailResponse response = TradeDetailResponse.from(trade, directTradeInfo, deliveryInfo);
+        // 택배 거래 시 구매자에게 판매자 계좌 정보 노출 (입금 대기 상태일 때)
+        TradeDetailResponse.SellerBankAccount sellerBankAccount = null;
+        if (trade.isDelivery() && trade.isBuyer(userId) && deliveryInfo != null
+                && deliveryInfo.getStatus() == DeliveryStatus.AWAITING_PAYMENT) {
+            User seller = getMyProfileUseCase.getMyProfile(trade.getSellerId());
+            if (seller.hasBankAccount()) {
+                sellerBankAccount = TradeDetailResponse.SellerBankAccount.builder()
+                        .bankName(seller.getBankName())
+                        .accountNumber(seller.getAccountNumber())
+                        .accountHolder(seller.getAccountHolder())
+                        .build();
+            }
+        }
+
+        TradeDetailResponse response = TradeDetailResponse.from(trade, directTradeInfo, deliveryInfo, sellerBankAccount);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

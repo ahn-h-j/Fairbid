@@ -135,4 +135,37 @@ public interface PushNotificationPort {
      * @param auctionTitle 경매 제목
      */
     void sendTradeCompletedNotification(Long userId, Long auctionId, Long tradeId, String auctionTitle);
+
+    /**
+     * 입금 완료 알림을 발송한다 (판매자에게)
+     * 구매자가 입금 완료를 확인하면 판매자에게 발송한다.
+     *
+     * @param sellerId     판매자 ID
+     * @param auctionId    경매 ID
+     * @param tradeId      거래 ID
+     * @param auctionTitle 경매 제목
+     */
+    void sendPaymentConfirmedNotification(Long sellerId, Long auctionId, Long tradeId, String auctionTitle);
+
+    /**
+     * 입금 확인 알림을 발송한다 (구매자에게)
+     * 판매자가 입금을 확인하면 구매자에게 발송한다.
+     *
+     * @param buyerId      구매자 ID
+     * @param auctionId    경매 ID
+     * @param tradeId      거래 ID
+     * @param auctionTitle 경매 제목
+     */
+    void sendPaymentVerifiedNotification(Long buyerId, Long auctionId, Long tradeId, String auctionTitle);
+
+    /**
+     * 미입금 알림을 발송한다 (구매자에게)
+     * 판매자가 입금을 확인하지 못하면 구매자에게 발송한다.
+     *
+     * @param buyerId      구매자 ID
+     * @param auctionId    경매 ID
+     * @param tradeId      거래 ID
+     * @param auctionTitle 경매 제목
+     */
+    void sendPaymentRejectedNotification(Long buyerId, Long auctionId, Long tradeId, String auctionTitle);
 }

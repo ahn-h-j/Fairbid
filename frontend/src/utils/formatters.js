@@ -120,6 +120,25 @@ export function formatPhoneInput(value) {
 }
 
 /**
+ * 전화번호를 010-0000-0000 형식으로 포맷 (표시용)
+ * @param {string} phone - 전화번호 (숫자만 또는 하이픈 포함)
+ * @returns {string} 하이픈이 포함된 전화번호
+ */
+export function formatPhone(phone) {
+  if (!phone) return '-';
+  // 이미 하이픈이 있으면 그대로 반환
+  if (phone.includes('-')) return phone;
+  // 숫자만 추출
+  const numbers = phone.replace(/[^0-9]/g, '');
+  if (numbers.length === 11) {
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7)}`;
+  } else if (numbers.length === 10) {
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 6)}-${numbers.slice(6)}`;
+  }
+  return phone;
+}
+
+/**
  * 서버에서 반환한 날짜 문자열을 UTC Date 객체로 변환
  * 서버는 LocalDateTime을 타임존 없이 반환하므로, UTC로 해석한다.
  * @param {string} dateStr - 서버에서 반환한 날짜 문자열 (예: "2026-01-25T04:51:56")

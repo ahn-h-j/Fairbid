@@ -56,4 +56,18 @@ public interface TradeJpaRepository extends JpaRepository<TradeEntity, Long> {
     @Query("SELECT COALESCE(SUM(t.finalPrice), 0) FROM TradeEntity t " +
             "WHERE (t.sellerId = :userId OR t.buyerId = :userId) AND t.status = 'COMPLETED'")
     long sumCompletedAmount(@Param("userId") Long userId);
+
+    /**
+     * 사용자의 총 판매 금액을 조회한다
+     */
+    @Query("SELECT COALESCE(SUM(t.finalPrice), 0) FROM TradeEntity t " +
+            "WHERE t.sellerId = :userId AND t.status = 'COMPLETED'")
+    long sumCompletedSalesAmount(@Param("userId") Long userId);
+
+    /**
+     * 사용자의 총 구매 금액을 조회한다
+     */
+    @Query("SELECT COALESCE(SUM(t.finalPrice), 0) FROM TradeEntity t " +
+            "WHERE t.buyerId = :userId AND t.status = 'COMPLETED'")
+    long sumCompletedPurchaseAmount(@Param("userId") Long userId);
 }
