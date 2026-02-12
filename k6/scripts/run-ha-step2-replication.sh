@@ -55,7 +55,6 @@ echo "  경매 키: ${AUCTION_KEY}"
 # 백엔드를 먼저 내려서 Redis 쓰기를 중단시킨 뒤 데이터 비교 (정확한 비교를 위해)
 echo ""
 $DC stop backend > /dev/null 2>&1
-sleep 1
 
 # Master 스냅샷 (쓰기 중단 상태이므로 정확)
 MASTER_DATA=$($DC exec -T redis redis-cli HMGET "$AUCTION_KEY" currentPrice totalBidCount topBidderId 2>&1 | tr -d '\r')
@@ -66,7 +65,7 @@ MASTER_TOP=$(echo "$MASTER_DATA" | sed -n '3p')
 # Master 종료
 FAULT_EPOCH=$(date +%s)
 FAULT_TS=$(date '+%H:%M:%S')
-$DC stop redis
+$DC kill redis
 echo "  Redis Master 장애 발생! [${FAULT_TS}]"
 
 # Slave 스냅샷 (Master와 동일해야 함)
