@@ -48,7 +48,7 @@ echo "============================================="
 echo ""
 echo "  타임라인:"
 echo "  0~${BASELINE_DURATION}초  : Baseline (정상 부하)"
-echo "  ${BASELINE_DURATION}~$((BASELINE_DURATION + PAUSE_DURATION))초 : Redis 장애 (docker stop)"
+echo "  ${BASELINE_DURATION}~$((BASELINE_DURATION + PAUSE_DURATION))초 : Redis 장애 (docker kill)"
 echo "  $((BASELINE_DURATION + PAUSE_DURATION))~120초 : 복구 후 안정화"
 echo ""
 
@@ -63,12 +63,12 @@ echo ""
 echo "  Baseline 측정 중... (${BASELINE_DURATION}초 대기)"
 sleep "${BASELINE_DURATION}"
 
-# 3. 장애 주입 (docker stop으로 Redis 종료)
+# 3. 장애 주입 (docker kill로 Redis 즉시 종료)
 echo ""
 echo "  Redis 장애 주입!"
-annotate "Redis 장애 주입 (docker stop ${REDIS_CONTAINER})" "fault-injection"
-docker stop "${REDIS_CONTAINER}"
-echo "  ${REDIS_CONTAINER} stopped"
+annotate "Redis 장애 주입 (docker kill ${REDIS_CONTAINER})" "fault-injection"
+docker kill "${REDIS_CONTAINER}"
+echo "  ${REDIS_CONTAINER} killed"
 
 # 4. 장애 유지
 echo "  장애 유지 중... (${PAUSE_DURATION}초)"
