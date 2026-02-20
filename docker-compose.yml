@@ -62,6 +62,9 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+    # min-replicas-to-write 1: Slave 연결 없으면 쓰기 거부 → split brain 방지
+    # min-replicas-max-lag 10: 복제 지연 10초 이내인 Slave만 카운트
+    command: redis-server --min-replicas-to-write 1 --min-replicas-max-lag 10
     volumes:
       - redis_data:/data
     healthcheck:
