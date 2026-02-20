@@ -353,27 +353,24 @@ spring:
       sentinel:
         master: mymaster
         nodes:
-          - sentinel-1:26379
-          - sentinel-2:26379
-          - sentinel-3:26379
+          - 172.22.0.20:26379
+          - 172.22.0.21:26379
+          - 172.22.0.22:26379
       timeout: 3000ms
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 2
 ```
 
 #### 5-2. Lettuce 클라이언트 설정
 
 ```java
 @Configuration
+@Profile("sentinel")
 public class RedisSentinelConfig {
 
     @Bean
     public LettuceClientConfigurationBuilderCustomizer lettuceCustomizer() {
         return builder -> builder
-            // failover 시 Sentinel에서 새 Master 주소를 받아 자동 재연결
+            .readFrom(ReadFrom.MASTER)
+            // 모든 읽기/쓰기를 Master에서 처리 (Slave의 stale 데이터 방지)
             .clientOptions(ClientOptions.builder()
                 .autoReconnect(true)
                 .disconnectedBehavior(
@@ -390,24 +387,17 @@ public class RedisSentinelConfig {
 **핵심 설정 의도**:
 | 설정 | 값 | 이유 |
 |------|---|------|
+| `@Profile("sentinel")` | - | sentinel 프로필 활성화 시에만 적용 (개발 환경 유연성) |
+| `ReadFrom.MASTER` | MASTER | 경매 데이터의 비동기 복제 지연으로 인한 stale 읽기 방지 |
 | `autoReconnect` | true | failover 후 새 Master로 자동 재연결 |
 | `disconnectedBehavior` | REJECT_COMMANDS | 끊긴 상태에서 명령 대기 X → 즉시 에러 |
 | `fixedTimeout` | 3초 | 커넥션/커맨드 타임아웃 상한 |
 
-#### 5-3. 읽기 분산 (선택적)
+#### 5-3. 읽기 분산 (미적용)
 
-```java
-// Slave에서 읽기 가능하도록 설정 (failover 중에도 읽기 유지)
-@Bean
-public LettuceClientConfigurationBuilderCustomizer readFromReplicaCustomizer() {
-    return builder -> builder
-        .readFrom(ReadFrom.REPLICA_PREFERRED);
-        // 쓰기: Master, 읽기: Slave 우선 (Slave 없으면 Master)
-}
-```
-
-> 입찰 처리는 Lua 스크립트로 Master에서만 실행되지만,
-> 경매 조회 같은 읽기 작업은 Slave에서 처리 가능 → failover 중에도 읽기 유지
+> `ReadFrom.REPLICA_PREFERRED`로 읽기를 Slave에 분산할 수 있지만,
+> 경매 시스템 특성상 비동기 복제 지연으로 인한 stale 데이터(이전 입찰가, 잘못된 낙찰자 등)
+> 위험이 있어 `ReadFrom.MASTER`로 설정하여 모든 읽기/쓰기를 Master에서 처리한다.
 
 #### 5-4. 부하 테스트 중 failover 시나리오
 
