@@ -52,6 +52,10 @@ sleep 40
 
 # 3. 경매 키 확인
 AUCTION_KEY=$($DC exec -T redis redis-cli KEYS "auction:*" 2>&1 | grep -v "closing" | head -1 | tr -d '\r\n')
+if [ -z "$AUCTION_KEY" ]; then
+    echo " 경매 키가 없음. k6 부하가 정상 실행되었는지 확인 필요."
+    exit 1
+fi
 
 # 4. 네트워크 파티션
 PARTITION_TS=$(date '+%H:%M:%S')
@@ -71,12 +75,6 @@ for i in $(seq 1 60); do
     fi
     sleep 1
 done
-
-if [ "$NEW_MASTER" = "172.22.0.11" ]; then
-    NEW_MASTER_SVC="redis-slave-1"
-elif [ "$NEW_MASTER" = "172.22.0.12" ]; then
-    NEW_MASTER_SVC="redis-slave-2"
-fi
 
 # 6. k6 종료 대기
 echo ""

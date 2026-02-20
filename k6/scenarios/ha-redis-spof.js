@@ -16,7 +16,7 @@
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Counter, Rate, Trend } from 'k6/metrics';
+import { Counter, Rate } from 'k6/metrics';
 import { BASE_URL, getHeaders, randomUserId } from './config.js';
 
 // 커스텀 메트릭

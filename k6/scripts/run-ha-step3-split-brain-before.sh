@@ -55,6 +55,10 @@ sleep 40
 
 # 3. 경매 키 확인
 AUCTION_KEY=$($DC exec -T redis redis-cli KEYS "auction:*" 2>&1 | grep -v "closing" | head -1 | tr -d '\r\n')
+if [ -z "$AUCTION_KEY" ]; then
+    echo " 경매 키가 없음. k6 부하가 정상 실행되었는지 확인 필요."
+    exit 1
+fi
 
 # 4. 네트워크 파티션
 PARTITION_TS=$(date '+%H:%M:%S')
@@ -149,7 +153,12 @@ docker network connect --ip ${MASTER_IP} ${NETWORK} ${MASTER_CONTAINER}
 echo " [$(date '+%H:%M:%S')] 구 Master 네트워크 재연결"
 
 # 원복
-$DC exec -T redis redis-cli CONFIG SET min-replicas-to-write 1 > /dev/null 2>&1
+# failover 후 새 Master에 min-replicas-to-write 복원
+if [ -n "$NEW_MASTER_SVC" ]; then
+    $DC exec -T ${NEW_MASTER_SVC} redis-cli CONFIG SET min-replicas-to-write 1 > /dev/null 2>&1
+else
+    $DC exec -T redis redis-cli CONFIG SET min-replicas-to-write 1 > /dev/null 2>&1
+fi
 if [ -n "$ORIGINAL_PROFILES" ]; then
     sed -i "s/^SPRING_PROFILES_ACTIVE=.*/SPRING_PROFILES_ACTIVE=${ORIGINAL_PROFILES}/" "$ENV_FILE"
 else
