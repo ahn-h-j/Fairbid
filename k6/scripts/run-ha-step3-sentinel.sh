@@ -181,12 +181,45 @@ else
 fi
 echo ""
 NEW_MASTER=$($DC exec -T sentinel-1 redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster 2>&1 | head -1 | tr -d '\r')
+if [ "$NEW_MASTER" = "172.22.0.11" ]; then
+    NEW_MASTER_SVC="redis-slave-1"
+elif [ "$NEW_MASTER" = "172.22.0.12" ]; then
+    NEW_MASTER_SVC="redis-slave-2"
+fi
 echo "  2. Sentinel 자동 Failover"
 echo "  ─────────────────────────────"
 echo "    장애 발생 : ${FAULT_TS}"
 echo "    서비스 복구: ${RECOVERY_TS}"
 echo "    새 Master  : ${NEW_MASTER:-확인 실패}"
 echo "    다운타임   : ${DOWNTIME}초"
+echo ""
+echo "  3. 구 Master 복구 → Slave 자동 전환"
+echo "  ─────────────────────────────"
+$DC start redis > /dev/null 2>&1
+echo "    구 Master 재시작 후 대기... (90초)"
+sleep 90
+OLD_ROLE=$($DC exec -T redis redis-cli INFO replication 2>&1 | grep "^role:" | cut -d: -f2 | tr -d '\r\n')
+echo "    \$ redis-cli -h 172.22.0.10 INFO replication | grep role:"
+echo "    role:${OLD_ROLE}"
+if [ "$OLD_ROLE" = "slave" ]; then
+    echo "    → Slave 자동 전환 확인 = Master 1개 유지"
+    echo ""
+    # 복제 동작 검증: 새 Master에 쓰고 → 구 Master(Slave)에서 읽기
+    echo "    복제 동작 검증:"
+    echo "    \$ redis-cli -h ${NEW_MASTER} SET recovery-test ok"
+    $DC exec -T ${NEW_MASTER_SVC} redis-cli SET recovery-test ok > /dev/null 2>&1
+    sleep 1
+    echo "    \$ redis-cli -h 172.22.0.10 GET recovery-test"
+    REPL_RESULT=$($DC exec -T redis redis-cli GET recovery-test 2>&1 | tr -d '\r\n')
+    echo "    ${REPL_RESULT}"
+    if [ "$REPL_RESULT" = "ok" ]; then
+        echo "    → 복제 정상: 새 Master → 구 Master(Slave) 데이터 동기화 확인"
+    else
+        echo "    → 복제 지연"
+    fi
+else
+    echo "    → Slave 전환 실패"
+fi
 echo ""
 echo "============================================="
 
