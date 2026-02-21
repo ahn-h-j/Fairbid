@@ -106,7 +106,7 @@ echo "  ────────────────────────
 echo "    장애 발생   : ${FAULT_TS}"
 echo "    서비스 복구 : ${RECOVERY_TS}"
 echo "    다운타임    : ${DOWNTIME}초"
-echo "    (백엔드 중단 + Slave 승격 + 설정 변경 + 백엔드 재시작)"
+echo "    (Slave 승격 + Slave-2 재연결 + 설정 변경 + 백엔드 재시작)"
 echo ""
 echo "  → Step 3 speed 테스트와 비교:"
 echo "    Step 2: 수동 승격 + 백엔드 재시작 필요"
