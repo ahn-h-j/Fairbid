@@ -1,8 +1,8 @@
-# 장애 대응 / 고가용성 Specification
+# Redis 고가용성 (HA) Specification
 
 > ⚠️ **이 문서는 향후 진행할 테스트의 계획서입니다. 아직 실행 전이며, 실행 후 별도 결과 문서를 작성할 예정입니다.**
 
-> 각 컴포넌트의 SPOF를 인식하고, 장애 시뮬레이션을 통해 고가용성 구성을 검증한다.
+> Redis가 Source of Truth인 구조에서 SPOF를 인식하고, 장애 시뮬레이션을 통해 Sentinel 기반 고가용성 구성을 검증한다.
 
 ---
 
@@ -10,54 +10,60 @@
 
 ### Problem Statement
 
-현재 구조의 단일 장애점(SPOF):
+Redis가 입찰의 핵심 데이터(현재가, 입찰 검증, 순위)를 처리하는 Source of Truth인데, 단일 인스턴스로 운영 중:
+
 ```
 [현재 구조]
-- Redis: 단일 인스턴스 → 죽으면 서비스 터짐
-- Stream Consumer: 단일 → 죽으면 메시지 쌓임
-- RDB: 단일 → 죽으면 영속화 실패
+Redis: 단일 인스턴스 → 죽으면 입찰 서비스 전체 마비
 ```
 
+> Stream/Consumer HA(Consumer Group, 멱등성)는 Issue #62에서 별도 다룸.
+> RDB는 이력 백업 용도로, Replication은 현재 스코프에서 제외. 향후 필요 시 별도 이슈로 진행.
+
 ### Solution Summary
+
 ```
 [목표 구조]
-- Redis: Sentinel (자동 failover)
-- Stream: Consumer Group (분산 처리 + 멱등성)
-- RDB: Replication (읽기 분산 + 백업)
+Redis: Sentinel (Master 1 + Slave 2 + Sentinel 3)
+→ 자동 failover + Split Brain 방지 + 클라이언트 자동 재연결
 ```
+
+### Why Sentinel, Not Cluster?
+
+| 기준 | Sentinel | Cluster |
+|------|----------|---------|
+| 데이터 규모 | 단일 노드로 충분 (경매 데이터 < 수 GB) | 수십 GB 이상 샤딩 필요 시 |
+| 운영 복잡도 | 낮음 (Master-Slave + 감시) | 높음 (슬롯 관리, 리밸런싱) |
+| Lua 스크립트 | 제약 없음 | 키가 같은 슬롯에 있어야 함 |
+| 적합한 상황 | HA만 필요 | HA + 수평 확장 둘 다 필요 |
+
+**결론**: 데이터 규모가 작고 Lua 스크립트(bid.lua)를 핵심으로 사용하므로 Sentinel이 적정 기술.
+Cluster는 "데이터 규모가 커서 샤딩이 필요할 때" 도입하는 것이지, HA만을 위해 쓰면 오버엔지니어링.
 
 ### Success Criteria
 
 | 기준 | 목표 |
 |------|------|
-| Redis 장애 | Sentinel이 자동 failover, 서비스 중단 최소화 |
-| Consumer 장애 | 다른 Consumer가 처리, 메시지 유실 없음 |
-| RDB 장애 | Slave로 읽기 가능, 복구 후 정합성 유지 |
+| Master 장애 | Sentinel이 자동 failover, 5-10초 내 복구 |
+| Split Brain | 고립된 Master가 쓰기 거부 (데이터 분기 방지) |
+| 네트워크 파티션 | 프로세스 생존 + 통신 불가 상황에서도 정상 failover |
+| 클라이언트 | failover 후 자동 재연결, 일시적 에러 최소화 |
 
 ---
 
-## 2. 테스트 범위
-
-### 2.1 깊이 조절
-
-| 영역 | 깊이 | 이유 |
-|------|------|------|
-| **Redis** | 깊게 (풀코스) | 메인 DB, 핵심 SPOF |
-| Stream/Consumer | 가볍게 (Step 3까지) | HA + 멱등성까지 |
-| RDB | 가볍게 (Step 2까지) | Replication까지 |
-
-### 2.2 테스트 환경
+## 2. 테스트 환경
 
 - **로컬 Docker** (docker-compose)
-- 장애 주입: `docker kill`, `docker pause`
+- 장애 주입: `docker kill`, `docker pause`, `docker network disconnect`
+- 부하 테스트: k6
 
 ---
 
-## 3. Redis 장애 대응 (깊게)
+## 3. Redis Sentinel HA (풀코스)
 
 ### Step 1: 현재 상태 확인
 
-**목표**: SPOF 인식
+**목표**: SPOF 인식 — Redis 단일 인스턴스가 죽으면 서비스가 어떻게 되는지 체감
 
 **시나리오**:
 ```bash
@@ -78,7 +84,7 @@ curl -X POST http://localhost:8080/api/bids
 
 ### Step 2: Replication 구성
 
-**목표**: Master-Slave 구성, 수동 failover 체험
+**목표**: Master-Slave 구성, 수동 failover 체험 → "자동화가 필요하다"는 동기 부여
 
 **구성**:
 ```yaml
@@ -88,7 +94,7 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
-  
+
   redis-slave-1:
     image: redis:7
     ports:
@@ -166,15 +172,15 @@ redis-cli GET bid:123
 services:
   redis-master:
     image: redis:7
-    
+
   redis-slave-1:
     image: redis:7
     command: redis-server --replicaof redis-master 6379
-    
+
   redis-slave-2:
     image: redis:7
     command: redis-server --replicaof redis-master 6379
-    
+
   sentinel-1:
     image: redis:7
     ports:
@@ -335,23 +341,65 @@ redis-cli -p 6379 GET after-failover
 
 ### Step 5: 클라이언트 튜닝
 
-**목표**: failover 중 앱 동작 확인
+**목표**: failover 중 앱이 어떻게 동작하는지 확인하고, 에러를 최소화하는 설정 구성
 
-**구성** (Spring Boot):
+#### 5-1. Spring Boot Sentinel 연동
+
+**구성**:
 ```yaml
 spring:
-  redis:
-    sentinel:
-      master: mymaster
-      nodes:
-        - sentinel-1:26379
-        - sentinel-2:26379
-        - sentinel-3:26379
-    timeout: 3000ms
-    lettuce:
-      pool:
-        max-active: 8
+  data:
+    redis:
+      sentinel:
+        master: mymaster
+        nodes:
+          - 172.22.0.20:26379
+          - 172.22.0.21:26379
+          - 172.22.0.22:26379
+      timeout: 3000ms
 ```
+
+#### 5-2. Lettuce 클라이언트 설정
+
+```java
+@Configuration
+@Profile("sentinel")
+public class RedisSentinelConfig {
+
+    @Bean
+    public LettuceClientConfigurationBuilderCustomizer lettuceCustomizer() {
+        return builder -> builder
+            .readFrom(ReadFrom.MASTER)
+            // 모든 읽기/쓰기를 Master에서 처리 (Slave의 stale 데이터 방지)
+            .clientOptions(ClientOptions.builder()
+                .autoReconnect(true)
+                .disconnectedBehavior(
+                    ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
+                // 연결 끊기면 즉시 에러 → 빠른 실패 (대기 X)
+                .timeoutOptions(TimeoutOptions.builder()
+                    .fixedTimeout(Duration.ofSeconds(3))
+                    .build())
+                .build());
+    }
+}
+```
+
+**핵심 설정 의도**:
+| 설정 | 값 | 이유 |
+|------|---|------|
+| `@Profile("sentinel")` | - | sentinel 프로필 활성화 시에만 적용 (개발 환경 유연성) |
+| `ReadFrom.MASTER` | MASTER | 경매 데이터의 비동기 복제 지연으로 인한 stale 읽기 방지 |
+| `autoReconnect` | true | failover 후 새 Master로 자동 재연결 |
+| `disconnectedBehavior` | REJECT_COMMANDS | 끊긴 상태에서 명령 대기 X → 즉시 에러 |
+| `fixedTimeout` | 3초 | 커넥션/커맨드 타임아웃 상한 |
+
+#### 5-3. 읽기 분산 (미적용)
+
+> `ReadFrom.REPLICA_PREFERRED`로 읽기를 Slave에 분산할 수 있지만,
+> 경매 시스템 특성상 비동기 복제 지연으로 인한 stale 데이터(이전 입찰가, 잘못된 낙찰자 등)
+> 위험이 있어 `ReadFrom.MASTER`로 설정하여 모든 읽기/쓰기를 Master에서 처리한다.
+
+#### 5-4. 부하 테스트 중 failover 시나리오
 
 **시나리오**:
 ```bash
@@ -360,12 +408,15 @@ k6 run scripts/bid-load.js &
 docker kill redis-master
 ```
 
-**확인 사항**:
-- failover 중 에러율
-- 재연결 자동 여부
-- 요청 재시도 동작
+**측정 항목**:
+| 지표 | 측정 방법 |
+|------|----------|
+| failover 중 에러 건수 | HTTP 5xx 카운트 |
+| failover 중 에러 지속 시간 | 첫 에러 ~ 마지막 에러 타임스탬프 |
+| 재연결 자동 여부 | failover 후 정상 응답 복구 확인 |
+| p95 응답시간 변화 | Baseline vs failover 구간 |
 
-**예상 결과**: 일시적 에러 후 자동 복구
+**예상 결과**: failover 5-10초 동안 일시적 에러 후 자동 복구
 
 ---
 
@@ -392,264 +443,36 @@ redis-cli -p 26379 SENTINEL master mymaster
 
 ---
 
-## 4. Stream/Consumer 장애 대응 (가볍게)
+## 4. 구현 계획
 
-### Step 1: 현재 상태 확인
+### 4.1 브랜치 전략
 
-**목표**: 단일 Consumer 한계 인식
-
-**시나리오**:
-```bash
-# Consumer 강제 종료
-docker kill fairbid-app
-
-# Stream 길이 확인
-redis-cli XLEN bid-stream
-```
-
-**확인 사항**:
-- 메시지 쌓이는지 확인
-- 재시작 후 처리 여부
-
----
-
-### Step 2: Consumer Group 구성
-
-**목표**: 다중 Consumer로 분산 처리
-
-**구성**:
-```bash
-# Consumer Group 생성
-redis-cli XGROUP CREATE bid-stream bid-group $ MKSTREAM
-```
-
-**시나리오**:
-```bash
-# Consumer 2개 실행
-java -jar app.jar --consumer.id=1 &
-java -jar app.jar --consumer.id=2 &
-
-# 하나 종료
-kill -9 <consumer-1-pid>
-
-# 메시지 처리 확인
-redis-cli XPENDING bid-stream bid-group
-```
-
-**확인 사항**:
-- 다른 Consumer가 처리하는지
-- Pending 메시지 재처리 여부
-
----
-
-### Step 2-1: Pending 메시지 재처리 (XCLAIM)
-
-**목표**: 죽은 Consumer의 메시지를 다른 Consumer가 가져가기
-
-**배경**:
-```
-Consumer1이 메시지 읽음 (XREADGROUP)
-→ pending 상태 (아직 XACK 안 함)
-→ Consumer1 죽음
-→ 메시지는 Consumer1한테 할당된 채로 방치
-→ Consumer2는 이 메시지 못 봄
-```
-
-**시나리오**:
-```bash
-# 1. 메시지 발행
-redis-cli XADD bid-stream '*' bidId "123" amount "10000"
-
-# 2. Consumer1이 읽기 (XACK 안 함)
-redis-cli XREADGROUP GROUP bid-group consumer1 COUNT 1 STREAMS bid-stream >
-
-# 3. Consumer1 죽음 시뮬레이션 (그냥 안 씀)
-
-# 4. Pending 메시지 확인
-redis-cli XPENDING bid-stream bid-group
-
-# 5. Consumer2가 오래된 pending 메시지 가져오기
-# 60000ms(1분) 이상 pending인 메시지를 consumer2가 가져감
-redis-cli XAUTOCLAIM bid-stream bid-group consumer2 60000 0-0
-
-# 6. Consumer2가 처리 후 XACK
-redis-cli XACK bid-stream bid-group <message-id>
-```
-
-**확인 사항**:
-- XAUTOCLAIM으로 메시지 소유권 이전되는지
-- 이전 후 Consumer2가 처리 가능한지
-- 원래 Consumer1의 pending 목록에서 사라지는지
-
-**예상 결과**: 일정 시간 후 다른 Consumer가 orphan 메시지 처리 가능
-
----
-
-### Step 2-2: 자동 Claim 로직 구현
-
-**목표**: 애플리케이션에서 주기적으로 orphan 메시지 처리
-
-**구현**:
-```java
-@Scheduled(fixedDelay = 30000) // 30초마다
-public void claimOrphanMessages() {
-    // 60초 이상 pending인 메시지 가져오기
-    List<MapRecord<String, Object, Object>> claimed =
-        redisTemplate.opsForStream().autoClaim(
-            "bid-stream",
-            "bid-group",
-            "consumer-" + instanceId,
-            Duration.ofSeconds(60),
-            "-"  // 처음부터
-        );
-
-    for (MapRecord<String, Object, Object> record : claimed) {
-        processMessage(record);  // 처리
-        acknowledge(record);      // XACK
-    }
-}
-```
-
-**시나리오**:
-```bash
-# Consumer1 강제 종료 (XACK 전)
-kill -9 <consumer1-pid>
-
-# 30초 대기
-
-# Consumer2 로그 확인 (claim 발생하는지)
-```
-
-**확인 사항**:
-- 스케줄러가 orphan 메시지 감지하는지
-- 중복 처리 방지 (멱등성)와 함께 동작하는지
-
-**예상 결과**: Consumer 장애 시에도 메시지 유실 없음
-
----
-
-### Step 3: 멱등성 처리
-
-**목표**: 중복 처리 방지
-
-**구현**:
-```java
-// unique key로 중복 체크
-if (bidRepository.existsByBidId(bidId)) {
-    return; // 이미 처리됨
-}
-```
-
-**시나리오**:
-```bash
-# Consumer 처리 중 강제 종료 (XACK 전)
-# 재시작 후 같은 메시지 재처리 시도
-
-# RDB 중복 데이터 확인
-SELECT COUNT(*) FROM bid WHERE bid_id = 'xxx';
-```
-
-**확인 사항**:
-- 중복 저장 방지 여부
-
----
-
-## 5. RDB 장애 대응 (가볍게)
-
-### Step 1: 현재 상태 확인
-
-**목표**: 단일 DB 한계 인식
-
-**시나리오**:
-```bash
-# DB 정지
-docker pause fairbid-mysql
-
-# Consumer 로그 확인 (저장 실패)
-```
-
-**확인 사항**:
-- 영속화 실패 로그
-- Stream에 메시지 남아있는지
-
----
-
-### Step 2: Replication 구성
-
-**목표**: Master-Slave 구성
-
-**구성**:
-```yaml
-# docker-compose.yml
-services:
-  mysql-master:
-    image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-    command: --server-id=1 --log-bin=mysql-bin
-    
-  mysql-slave:
-    image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-    command: --server-id=2 --relay-log=relay-bin
-```
-
-**시나리오**:
-```bash
-# 데이터 동기화 확인
-mysql -h master -e "INSERT INTO bid VALUES (...)"
-mysql -h slave -e "SELECT * FROM bid"
-
-# Master 정지
-docker pause mysql-master
-
-# Slave 데이터 확인
-mysql -h slave -e "SELECT * FROM bid"
-```
-
-**확인 사항**:
-- 데이터 동기화 여부
-- Master 장애 시 Slave 데이터 보존
-
----
-
-## 6. 구현 계획
-
-### 6.1 브랜치 전략
 ```
 main
-├── feat/ha-redis-replication    # Redis Replication
-├── feat/ha-redis-sentinel       # Redis Sentinel
-├── feat/ha-consumer-group       # Consumer Group
-└── feat/ha-rdb-replication      # RDB Replication
+└── feat/ha-redis-sentinel    # Redis Sentinel HA (전체)
 ```
 
-### 6.2 구현 순서
+### 4.2 구현 순서
+
 ```
-[Phase 1] Redis HA (5일)
-├── Step 1: 현재 상태 확인 (0.5일)
-├── Step 2: Replication 구성 (1일)
-├── Step 3: Persistence 설정 (0.5일)
-├── Step 4: Sentinel 구성 (1.5일)
-├── Step 5: 클라이언트 튜닝 (1일)
-└── Step 6: 모니터링 (0.5일)
-
-[Phase 2] Stream/Consumer (2일)
-├── Step 1: 현재 상태 확인 (0.5일)
-├── Step 2: Consumer Group (1일)
-└── Step 3: 멱등성 처리 (0.5일)
-
-[Phase 3] RDB (1일)
-├── Step 1: 현재 상태 확인 (0.5일)
-└── Step 2: Replication 구성 (0.5일)
+[Redis Sentinel HA]
+├── Step 1: 현재 상태 확인 — SPOF 체감
+├── Step 2: Replication 구성 — 수동 failover 체험
+├── Step 3: Persistence 설정 — 데이터 복구 확인
+├── Step 4: Sentinel 구성 — 자동 failover
+│   ├── 4-1: Split Brain 방지
+│   ├── 4-2: 네트워크 파티션 테스트
+│   └── 4-3: 구 Master 복구 동작
+├── Step 5: 클라이언트 튜닝 — Lettuce 설정 + 부하 중 failover
+└── Step 6: 모니터링 — 관찰 포인트 정리
 ```
 
 ---
 
-## 7. 결과 기록 형식
+## 5. 결과 기록 형식
 
-### 7.1 단계별 기록
+### 5.1 단계별 기록
+
 ```markdown
 # Step N: {단계명}
 
@@ -677,35 +500,37 @@ main
 
 ---
 
-## 8. 포트폴리오 스토리라인
+## 6. 포트폴리오 스토리라인
 
-### 8.1 전체 흐름
+### 6.1 전체 흐름
+
 ```
 [SPOF 인식]
-Redis가 메인 DB인데 단일 인스턴스 → 죽으면 서비스 터짐
-→ 장애 시뮬레이션으로 증명
+Redis가 Source of Truth인데 단일 인스턴스 → 죽으면 서비스 터짐
+→ 장애 시뮬레이션으로 증명 (Step 1)
 
 [단계별 해결]
-Replication → "수동 failover 불편하네"
-Sentinel → "자동 failover 편하네"
+Replication → "수동 failover 가능하지만 새벽 3시에 직접 해야 함"
+Persistence → "재시작 후 데이터는 살아있지만 failover는 여전히 수동"
+Sentinel → "자동 failover + Split Brain 방지까지"
 → 각 단계에서 불편함 체감 후 다음 단계 필요성 이해
 
-[확장]
-Redis 경험을 바탕으로 Consumer, RDB까지 장애 대응 설계
-→ 전체 아키텍처에 고가용성 적용
+[클라이언트까지]
+Sentinel만으로 끝이 아님
+→ Lettuce 재연결 전략, 읽기 분산, 타임아웃 설정까지 해야 실제 서비스에서 동작
+→ 부하 테스트로 failover 중 에러율/복구 시간 실측
 ```
 
-### 8.2 면접 예상 질문
+### 6.2 면접 예상 질문
 
 | 질문 | 답변 포인트 |
 |------|------------|
-| Redis Sentinel이 뭐예요? | 자동 failover, 구성 방법, failover 시간 |
-| failover 중 요청은 어떻게 돼요? | 일시적 에러, 클라이언트 재연결, 재시도 로직 |
-| 왜 Cluster 안 썼어요? | 데이터 규모상 Sentinel로 충분, 오버엔지니어링 방지 |
-| 멱등성 어떻게 처리했어요? | unique key 체크, 중복 저장 방지 |
-| Split Brain 어떻게 방지해요? | min-replicas-to-write 설정, 고립된 Master 쓰기 거부 |
-| Consumer 죽으면 그 메시지는요? | XAUTOCLAIM으로 다른 Consumer가 가져감, 멱등성으로 중복 방지 |
-| failover 후 구 Master 켜면요? | Sentinel이 자동으로 Slave로 재구성, 데이터 동기화 |
+| Redis Sentinel이 뭐예요? | 자동 failover 감시 프로세스. 구성: Sentinel 3대(과반 투표), Master 1 + Slave 2. failover 시간: 실측 N초 |
+| failover 중 요청은 어떻게 돼요? | Lettuce가 Sentinel에서 새 Master 주소 받아 자동 재연결. 그 사이 N초간 에러 발생, `disconnectedBehavior=REJECT_COMMANDS`로 빠른 실패 유도 |
+| 왜 Cluster 안 썼어요? | 데이터 < 수 GB로 샤딩 불필요. Lua 스크립트(bid.lua)가 핵심인데 Cluster는 키 슬롯 제약 있음. HA만 필요하면 Sentinel이 적정 기술 |
+| Split Brain 어떻게 방지해요? | `min-replicas-to-write 1` — Slave 연결 없으면 쓰기 거부. 고립된 구 Master에 데이터 쓰이는 거 방지 |
+| failover 후 구 Master 켜면요? | Sentinel이 자동으로 Slave로 재구성. 새 Master 데이터 동기화. 수동 개입 불필요 |
+| 읽기 분산은 어떻게요? | `ReadFrom.REPLICA_PREFERRED` — 읽기는 Slave 우선, failover 중에도 조회 가능. 쓰기(Lua)는 항상 Master |
 
 ---
 
@@ -725,3 +550,4 @@ Redis 경험을 바탕으로 Consumer, RDB까지 장애 대응 설계
 |------|------|----------|
 | 2025-02-02 | 1.0 | 초안 작성 |
 | 2026-02-05 | 1.1 | 계획 문서임을 명시, 예상vs현실 섹션 추가 |
+| 2026-02-11 | 2.0 | Redis Sentinel 전용으로 스코프 축소 (Stream/Consumer·RDB 제거), Step 5 클라이언트 튜닝 구체화 (Lettuce 설정, 읽기 분산, 측정 항목), Sentinel vs Cluster 선택 근거 추가 |
