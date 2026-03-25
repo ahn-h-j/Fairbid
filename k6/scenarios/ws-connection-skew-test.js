@@ -161,6 +161,13 @@ export function auctionUser(data) {
             }
         });
 
+        // STOMP heartbeat 전송 (ALB idle timeout 60초 대응)
+        // k6 ws 모듈은 STOMP heartbeat을 자동 전송하지 않으므로 수동으로 보낸다.
+        // 30초 간격이면 ALB 60초 idle timeout 안에 충분히 들어온다.
+        socket.setInterval(function () {
+            socket.send('\n');
+        }, 30000);
+
         // 10초마다 REST 요청 (경매 조회 — 유저가 자연스럽게 하는 행동)
         // WebSocket 연결 유지하면서 동시에 REST를 보냄
         socket.setInterval(function () {
