@@ -171,7 +171,7 @@ export function subscriber(data) {
         let messagesReceived = 0;
 
         socket.on('open', function () {
-            socket.send('CONNECT\naccept-version:1.2\nheart-beat:0,0\n\n\0');
+            socket.send('CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n\0');
         });
 
         socket.on('message', function (msg) {
