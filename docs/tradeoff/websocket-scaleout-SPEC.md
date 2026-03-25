@@ -173,59 +173,149 @@
 
 ### Step 5: REST / WebSocket 서버 분리 (독립 스케일링)
 
-**목표**: REST와 WebSocket 서버를 분리하여 독립 스케일링
+**목표**: 모놀리스에서 발생하는 WebSocket 관련 문제를 재현하고, 서버 분리로 해결
 
-**배경 - 왜 분리하는가?**
+**배경**:
 
-Step 4까지 달성하면 오토스케일링이 정상 동작한다.
-하지만 모놀리스이기 때문에 REST와 WebSocket이 한 덩어리로 스케일링된다.
-
-```
-[모놀리스 스케일링 문제]
-REST 부하 폭증 → 10대로 스케일 아웃
-→ 10대 전부 REST + WebSocket 같이 올라감
-→ WebSocket은 2대면 충분한데 10대에서 돌아감 (낭비)
-```
-
-**비용 관점 - "인스턴스 수가 같으면 비용도 같지 않나?"**
-
-단순히 대수만 보면 비슷할 수 있다. 하지만 분리하면 인스턴스 사이즈를 다르게 잡을 수 있다:
+Step 4에서 Redis Pub/Sub으로 서버 간 메시지 동기화를 달성했다(Stateless).
+하지만 REST와 WebSocket이 같은 프로세스에서 동작하는 **모놀리스 구조**이기 때문에
+세 가지 문제가 발생한다.
 
 ```
-[모놀리스]
-REST + WS 합쳐서 메모리 많이 필요 → t3.medium x 10
+[문제 1: 배포 시 커넥션 드롭]
+REST 코드 수정 → 배포(Instance Refresh) → 구 인스턴스 종료
+→ 해당 인스턴스의 WebSocket 커넥션 전부 끊김
+→ "무중단 배포"는 REST 기준이지, WebSocket은 무중단이 아님
 
-[분리]
-REST (CPU 위주) → t3.small x 8
-WS (메모리 위주) → t3.small x 2
-→ 인스턴스 사이즈 최적화 가능
+[문제 2: 스케일아웃 후 WebSocket 커넥션 쏠림]
+서버A에 100명 연결 → 스케일아웃 → 서버B 추가
+→ REST 요청은 A/B로 분산됨
+→ WebSocket 커넥션은 A에 100명 그대로, B에 0명
+→ 스케일아웃이 WebSocket에는 무의미
+
+[문제 3: 장애 격리 불가]
+REST와 WebSocket이 같은 프로세스
+→ 한쪽이 죽으면 다른 쪽도 같이 죽음
+→ 분리되어 있으면 한쪽만 죽고 다른 쪽은 살아있어야 함
 ```
 
-다만 이 프로젝트 규모에서 비용 차이는 미미하다.
+**왜 "새벽에 배포하면 되지 않나?"가 통하지 않는가**:
 
-**분리의 진짜 가치**:
+이 시스템은 24시간/48시간 경매다. 새벽에도 경매가 돌아가고 있고,
+종료 직전 5분이 입찰이 가장 치열한 시점이다. 새벽 종료 경매의 마감 입찰 중에 배포하면 최악의 UX 사고가 발생한다.
 
-| 가치 | 설명 |
-|------|------|
-| 배포 독립성 | REST 수정/배포해도 WebSocket 연결 안 끊김 |
-| 장애 격리 | REST 서버 터져도 WebSocket(실시간 알림) 살아있음 |
-| 리소스 최적화 | WS는 메모리 위주, REST는 CPU 위주로 각각 튜닝 가능 |
-| 독립 스케일링 | REST만 10대, WS는 2대 — 필요한 쪽만 늘릴 수 있음 |
+**왜 "무중단 배포하면 되지 않나?"가 통하지 않는가**:
 
-> 비용 절감보다 **운영 안정성과 배포 독립성**이 분리의 핵심 근거
+롤링 배포(Instance Refresh)의 동작:
+- 새 인스턴스 띄움 → 헬스체크 통과 → LB에 등록
+- 구 인스턴스를 LB에서 제거 (connection draining)
+- draining timeout(기본 300초) 후 구 인스턴스 **강제 종료**
+- REST는 요청이 짧으니 자연스럽게 빠짐 → **무중단**
+- WebSocket은 커넥션이 계속 살아있으니 timeout 후 **강제 끊김**
+
+"무중단 배포"는 **REST 기준 무중단**이지, WebSocket은 무중단이 아니다.
+
+---
+
+#### Step 5-1: 모놀리스 문제 재현
+
+**시나리오 A: 배포 시 WebSocket 커넥션 드롭**
+
+```
+사전: ASG 1대, load-test 프로필
+  1. k6로 WebSocket 구독자 20명 연결 유지 + 주기적 입찰
+  2. 모든 구독자 연결 확인 후 30초 대기
+  3. ASG Instance Refresh 트리거 (롤링 배포 시뮬레이션)
+  4. 새 인스턴스 뜸 → 구 인스턴스 draining → 종료
+  5. 측정: WebSocket 커넥션 끊김 수, 끊기는 시점의 메시지 유실
+결과: 구 인스턴스 구독자 전원 끊김
+```
+
+| 지표 | 기대 결과 |
+|------|----------|
+| WebSocket 커넥션 끊김 수 | 구 인스턴스 구독자 전원 (20명) |
+| 메시지 수신율 | 배포 중 하락 |
+
+**시나리오 B: 스케일아웃 후 WebSocket 커넥션 쏠림**
+
+```
+사전: ASG 1대 (서버A)
+  1. k6로 WebSocket 구독자 N명 연결 (전부 서버A에 붙음)
+  2. ASG desired=2로 증가 → 서버B 추가
+  3. 서버B healthy 확인 후
+  4. 각 인스턴스에 /actuator/wsconnections 조회
+  5. 측정: 서버A의 커넥션 수, 서버B의 커넥션 수
+결과: 서버A=N명, 서버B=0명 (REST는 분산되지만 WS는 안 옮겨감)
+```
+
+| 지표 | 기대 결과 |
+|------|----------|
+| 서버A WebSocket 커넥션 수 | N명 (전원) |
+| 서버B WebSocket 커넥션 수 | 0명 |
+| REST 요청 분산 | 서버A ~50%, 서버B ~50% |
+
+**핵심**: 스케일아웃이 REST에만 효과 있고, WebSocket에는 무의미하다.
+리소스 경합, LB 분산 불균형도 같은 원인에서 발생하는 문제다.
+
+**핵심 질문**: "Stateless는 달성했지만, 모놀리스라서 배포/스케일링이 WebSocket을 고려하지 못한다"
+
+---
+
+#### Step 5-2: REST / WebSocket 서버 분리 → 문제 해결
+
+**목표**: Spring Profile로 REST/WebSocket을 분리 배포하여 Step 5-1의 문제가 해결되는 것을 확인
 
 **구성**:
-- REST 서버 / WebSocket 서버 Spring Profile 분리
+- 같은 코드베이스, Spring Profile로 분리
+  - `--spring.profiles.active=api` → REST Controller만 활성화
+  - `--spring.profiles.active=ws` → WebSocket Config, STOMP Handler만 활성화
+- Redis Pub/Sub은 양쪽 다 연결 (REST에서 발행, WS에서 구독)
 - 각각 독립 ASG 구성
-- REST → Redis Pub/Sub → WebSocket 이벤트 전달 경로
+- ALB 라우팅: `/api/**` → REST ASG, `/ws/**` → WS ASG
+
+**시나리오 A 재검증: REST 배포 → WebSocket 유지**
+
+```
+  1. k6로 WebSocket 구독자 N명 연결 유지
+  2. REST ASG만 Instance Refresh 트리거
+  3. WebSocket 커넥션 끊김 수 측정
+  4. 기대: 0건 (WebSocket 서버는 건드리지 않았으므로)
+```
+
+**시나리오 B 재검증: 스케일아웃 → WS 독립 스케일링**
+
+```
+  1. WS ASG만 desired 증가
+  2. 새 WS 서버에도 커넥션 분산 확인
+  3. REST ASG와 독립적으로 스케일링 동작 확인
+```
+
+**시나리오 C: 장애 격리 — 한쪽 kill → 다른 쪽 생존**
+
+```
+  1. k6로 WebSocket 구독자 N명 연결 + REST 요청 동시 진행
+  2. REST 서버 kill → WebSocket 커넥션 유지 + 메시지 수신 정상 확인
+  3. WebSocket 서버 kill → REST API 정상 응답 확인
+  4. 기대: 한쪽이 죽어도 다른 쪽은 영향 없음
+```
 
 **정량 측정 항목**:
 
-| 지표 | Step 4 (모놀리스) | Step 5 (분리) |
-|------|------------------|--------------|
-| REST 배포 시 WS 끊김 | 끊김 | 유지 |
-| REST만 스케일 시 WS 영향 | 같이 늘어남 | 영향 없음 |
-| 서버별 리소스 효율 | 혼합 | 각각 최적화 |
+| 지표 | Step 5-1 (모놀리스) | Step 5-2 (분리) |
+|------|-------------------|----------------|
+| REST 배포 시 WS 끊김 | 구 인스턴스 구독자 전원 끊김 | **0건** |
+| 스케일아웃 후 WS 커넥션 분포 | 서버A 전원, 서버B 0명 | 각 WS 서버에 분산 |
+| REST kill 시 WS 영향 | 같이 죽음 | **WS 생존** |
+| WS kill 시 REST 영향 | 같이 죽음 | **REST 생존** |
+
+**핵심 질문**: "REST의 생명주기와 장애가 WebSocket에 전파되지 않는다 = 진정한 독립"
+
+**추가 이점 (글로 정리, 테스트 불가)**:
+
+| 이점 | 설명 |
+|------|------|
+| 스케일링 축 분리 | REST는 RPS 기반, WebSocket은 커넥션 수 기반으로 각각 오토스케일링 정책 설정 가능 |
+| 리소스 최적화 | REST(CPU 바운드)와 WebSocket(메모리 바운드)에 맞는 인스턴스 타입 선택 가능 |
 
 ---
 
@@ -290,10 +380,18 @@ main
 ├── N대 메시지 동기화 검증
 └── 결과 문서화
 
-[Step 5] REST / WebSocket 분리
-├── Spring Profile 분리
-├── 각각 독립 ASG 구성
-├── 독립 스케일링 테스트
+[Step 5-1] 모놀리스 문제 재현
+├── WebSocket 커넥션 수 조회 엔드포인트 구현 (/actuator/wsconnections)
+├── 시나리오 A: k6 WebSocket 유지 + Instance Refresh → 커넥션 드롭 측정
+├── 시나리오 B: k6 WebSocket 유지 + ASG 스케일아웃 → 커넥션 쏠림 측정
+└── 결과 문서화
+
+[Step 5-2] REST / WebSocket 분리 → 해결 확인
+├── Spring Profile 분리 (api / ws)
+├── 각각 독립 ASG + ALB 라우팅 구성
+├── 시나리오 A 재검증: REST 배포 → WS 끊김 0건 확인
+├── 시나리오 B 재검증: WS 독립 스케일링 확인
+├── 시나리오 C: 한쪽 kill → 다른 쪽 생존 확인 (장애 격리)
 └── 전체 Step 1~5 성능 비교 문서
 ```
 
@@ -450,6 +548,137 @@ WebSocket 메시지 동기화는 서버 간 메시지 공유 메커니즘(Step 4
 
 ---
 
+## Step 4 테스트 결과 (2026-03-24)
+
+### 구성
+- Simple Broker → Redis Pub/Sub으로 교체
+- Sticky Session OFF
+- ASG 2대
+
+### 구현
+- `RedisPubSubBroadcastAdapter`: 입찰/종료 메시지를 Redis 채널에 발행
+- `RedisMessageSubscriber`: Redis에서 수신 → 로컬 WebSocket 구독자에게 전달
+- `RedisPubSubConfig`: Redis Pub/Sub 리스너 설정
+- `WebSocketBroadcastAdapter`: @Component 비활성화 (Pub/Sub으로 교체)
+
+### k6 결과
+
+| 지표 | Step 2 (Simple Broker) | Step 4 (Redis Pub/Sub) |
+|------|----------------------|----------------------|
+| 메시지 수신율 | 50% | **100%** |
+| Sticky Session | 불필요 | 불필요 |
+| 서버 분산 | 2대 균등 | 2대 균등 |
+
+### 예상 vs 현실
+
+| 항목 | 예상 | 실제 | 배운 점 |
+|------|------|------|---------|
+| 수신율 | 100% | **100%** | Redis Pub/Sub으로 서버 간 메시지 동기화 달성 |
+| Pub/Sub 구독 연결 | 자동 연결 | 초기에 구독자 0명 | Sentinel 환경에서 RedisMessageListenerContainer 연결이 즉시 안 될 수 있음. Instance Refresh 후 정상 연결 |
+| 인증 (로그인) | JWT라 문제 없음 | load-test 프로필이 JWT 비활성화 | LoadTestSecurityConfig가 JWT 필터를 X-User-Id 필터로 대체해서 브라우저 로그인 불가. 스케일아웃 문제가 아닌 프로필 설정 문제 |
+
+### 결론
+
+Redis Pub/Sub 적용으로 **Stateless 달성**. 어떤 서버에 WebSocket이 붙어있든 모든 구독자가 메시지를 수신한다.
+Sticky Session 없이도 동작하므로 부하가 균등 분산되고, 서버 추가/제거가 자유롭다.
+
+---
+
+## 트레이드오프: Redis Pub/Sub vs Redis Stream
+
+### 배경
+
+Step 4에서 Simple Broker → Redis Pub/Sub으로 교체하여 서버 간 메시지 동기화를 달성했다.
+여기서 "Pub/Sub 대신 Redis Stream을 써야 하는 것 아닌가?"라는 질문이 나온다.
+Pub/Sub은 fire-and-forget이라 메시지 유실 가능성이 있고, Stream은 영속화 + 재처리가 가능하기 때문이다.
+
+### 비교
+
+| | Pub/Sub | Stream |
+|---|---|---|
+| 전달 방식 | 브로드캐스트 (모든 구독자 수신) | Consumer Group (한 컨슈머만 처리) |
+| 메시지 영속성 | 없음 (fire-and-forget) | 있음 (영속화, ACK 기반 재처리) |
+| 지연 | 거의 없음 | 약간 더 높음 |
+| 복잡도 | 낮음 | Consumer Group, ACK, 오프셋 관리 필요 |
+
+### 현재 용도에 Pub/Sub이 맞는 이유
+
+현재 하는 일: 입찰/종료 이벤트 발생 → **모든 서버**에 브로드캐스트 → 각 서버가 자기 WebSocket 구독자에게 전달.
+이것은 1:N 브로드캐스트이고, Pub/Sub이 정확히 이 용도다.
+
+Stream의 Consumer Group은 한 메시지를 **한 컨슈머만 처리**하는 구조이므로 브로드캐스트에 맞지 않는다.
+Stream으로 브로드캐스트를 구현하려면 서버마다 별도 Consumer Group을 만들어야 하는데,
+이는 Pub/Sub을 더 복잡하게 재구현하는 것에 불과하다.
+
+### "메시지 유실이 문제 아닌가?"
+
+Pub/Sub에서 메시지가 유실되려면 **구독 중인 서버가 다운**되어야 한다.
+그런데 서버가 다운되면 해당 서버의 WebSocket 클라이언트도 **이미 끊긴 상태**다.
+
+```
+서버2 다운
+  → 서버2에 붙어있던 WebSocket 클라이언트도 끊김
+  → Pub/Sub 메시지가 서버2에 전달 안 되어도, 받을 사람이 이미 없음
+  → 클라이언트 재연결 → 살아있는 서버1에 붙음
+  → 서버1은 정상 구독 중 → 이후 메시지 정상 수신
+```
+
+클라이언트 재연결 사이 짧은 틈에 놓치는 메시지는 Stream으로 바꿔도 동일하게 발생한다.
+**WebSocket 클라이언트가 끊겨있으면 Stream이 메시지를 영속화해도 전달할 방법이 없다.**
+
+이 문제는 메시지 브로커 레벨이 아니라 **클라이언트 레벨**에서 해결해야 한다:
+- 재연결 시 REST API로 현재 상태(최고가, 입찰 내역) 조회
+- 또는 WebSocket 연결 직후 서버가 현재 상태를 push
+
+### 결론
+
+| 용도 | 적합한 기술 | 이유 |
+|---|---|---|
+| 실시간 브로드캐스트 (입찰 가격, 경매 종료) | **Pub/Sub** | 1:N 브로드캐스트, 낮은 지연, 단순한 구조 |
+| 유실 불가 작업 큐 (낙찰 처리, 결제, 알림 발송) | **Stream** | 영속화, ACK 기반 재처리, Consumer Group으로 작업 분배 |
+
+Pub/Sub과 Stream은 경쟁 관계가 아니라 **용도가 다른 도구**다.
+브로드캐스트는 Pub/Sub을 유지하고, 영속성이 필요한 비동기 작업 큐에 Stream을 별도로 도입하는 것이 올바른 구조다.
+
+---
+
+## 트레이드오프: REST/WebSocket 서버 분리
+
+### 배경
+
+Step 4에서 Redis Pub/Sub으로 Stateless를 달성했다.
+하지만 모놀리스이기 때문에 REST 코드 수정 배포 시 WebSocket 커넥션도 함께 끊긴다.
+REST와 WebSocket을 별도 프로세스(인스턴스)로 분리할지에 대한 트레이드오프를 정리한다.
+
+### 분리해야 하는 기술적 근거
+
+| 근거 | 설명 |
+|---|---|
+| 배포 독립성 | REST 배포 시 WebSocket 커넥션이 끊기지 않음. REST는 배포 빈도가 높고, WebSocket은 안정화 후 거의 변경 없음 |
+| 장애 격리 | REST 서버 장애가 WebSocket에 전파되지 않음. 경매 중 실시간 가격 갱신이 보호됨 |
+| 스케일링 축 차이 | REST는 RPS 기반, WebSocket은 동시 커넥션 수 기반. 하나의 오토스케일링 정책으로 둘 다 최적화 불가 |
+| 리소스 특성 차이 | REST는 CPU 바운드(요청-응답 후 해제), WebSocket은 메모리 바운드(장시간 커넥션 유지). 인스턴스 타입 최적화 가능 |
+| 로드밸런서 설정 | REST는 라운드로빈, WebSocket은 sticky session이 유리. 같은 서비스면 LB 설정이 충돌 |
+
+### 비용 트레이드오프
+
+분리하면 인스턴스가 최소 2개(REST 1 + WS 1)이므로 비용이 증가한다.
+그러나 경매 시스템에서 **입찰 중 커넥션 끊김 = 돈이 걸린 UX 사고**이고,
+REST 핫픽스 하나 배포할 때마다 실시간 경매 참여자 전원이 튕기는 것은 기술적으로 허용할 수 없다.
+
+인스턴스 하나 추가하는 비용보다, 배포마다 WebSocket 재연결 + 상태 동기화 로직의 복잡도가 더 크다.
+
+### 분리 방식
+
+같은 코드베이스에서 Spring Profile로 분리한다:
+- `--spring.profiles.active=api` → REST Controller만 활성화
+- `--spring.profiles.active=ws` → WebSocket Config, STOMP Handler만 활성화
+- Redis Pub/Sub은 양쪽 다 연결 (REST에서 발행, WS에서 구독)
+
+코드 중복 없이 **배포 단위만 분리**하는 구조다.
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -457,3 +686,6 @@ WebSocket 메시지 동기화는 서버 간 메시지 공유 메커니즘(Step 4
 | 2026-03-07 | 1.0 | 초안 작성 |
 | 2026-03-23 | 1.1 | Step 2 테스트 결과 기록 (k6 50% 수신율, 브라우저 시연, 인증 문제 발견) |
 | 2026-03-23 | 1.2 | Step 3 테스트 결과 기록 (Sticky Session은 WebSocket 동기화와 무관, 예상과 다른 결과) |
+| 2026-03-24 | 1.3 | Step 4 테스트 결과 기록 (Redis Pub/Sub 100% 수신율, Stateless 달성) |
+| 2026-03-25 | 1.4 | 트레이드오프 추가: Pub/Sub vs Stream, REST/WS 서버 분리 |
+| 2026-03-25 | 1.5 | Step 5 시나리오 재구성: 배포 끊김(A) + 커넥션 쏠림(B) + 장애 격리(C) |
