@@ -1,0 +1,72 @@
+# REST / WebSocket 분리 배포용
+# 같은 이미지를 SERVER_ROLE 환경변수로 역할 분리
+#
+# 사용법:
+#   docker compose -f infra/scaleout/docker-compose-split.yml --env-file .env up -d
+#
+# 프로덕션(ASG 분리) 시에는 이 파일 대신 docker-compose-app.yml을 각 ASG에서
+# SERVER_ROLE=api / SERVER_ROLE=ws 로 실행한다.
+services:
+  # ===== API 서버 =====
+  # REST Controller + 스케줄러 + Redis Stream 컨슈머 + Pub/Sub 발행
+  backend-api:
+    image: 216989097509.dkr.ecr.ap-northeast-2.amazonaws.com/fairbid-backend:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # 서버 역할: API 전용
+      SERVER_ROLE: api
+      # DB
+      SPRING_DATASOURCE_URL: jdbc:mysql://${INFRA_HOST}:3306/fairbid?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      # Redis
+      SPRING_DATA_REDIS_HOST: ${INFRA_HOST}
+      REDIS_SENTINEL_NODES: ${INFRA_HOST}:26379,${INFRA_HOST}:26380,${INFRA_HOST}:26381
+      # OAuth2
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI:-}
+      NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+
+  # ===== WebSocket 서버 =====
+  # WebSocket STOMP + Redis Pub/Sub 구독 → 로컬 WS 구독자에게 전달
+  backend-ws:
+    image: 216989097509.dkr.ecr.ap-northeast-2.amazonaws.com/fairbid-backend:latest
+    ports:
+      - "8081:8080"
+    environment:
+      # 서버 역할: WebSocket 전용
+      SERVER_ROLE: ws
+      # DB (JPA 초기화에 필요, 실제 쿼리는 거의 없음)
+      SPRING_DATASOURCE_URL: jdbc:mysql://${INFRA_HOST}:3306/fairbid?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      # Redis (Pub/Sub 구독용)
+      SPRING_DATA_REDIS_HOST: ${INFRA_HOST}
+      REDIS_SENTINEL_NODES: ${INFRA_HOST}:26379,${INFRA_HOST}:26380,${INFRA_HOST}:26381
+      # WS 서버에서는 OAuth2/쿠키 불필요하지만, Spring Security 초기화에 필요
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI:-}
+      NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
