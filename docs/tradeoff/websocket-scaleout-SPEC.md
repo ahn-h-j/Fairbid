@@ -679,6 +679,91 @@ REST 핫픽스 하나 배포할 때마다 실시간 경매 참여자 전원이 �
 
 ---
 
+## Step 5-1 테스트 결과: 모놀리스 문제 재현 (2026-03-26)
+
+### 테스트 환경
+- 날짜: 2026-03-26
+- 인스턴스: t3.small x 1 (ASG), ALB
+- 테스트 도구: k6 (로컬, 100 VUs)
+- 프로필: sentinel, load-test
+
+### 구현 (테스트 인프라)
+- `WebSocketConnectionsEndpoint`: 커스텀 Actuator 엔드포인트 (`/actuator/wsconnections`)
+  - EC2 메타데이터 API로 서버 IP 조회 (Docker 내부 IP 문제 회피)
+  - `WebSocketSessionTracker`로 활성 커넥션 수 반환
+- `ServerInstanceIdFilter`: REST 응답에 `X-Server-Ip` 헤더 추가 (서버 분산 추적)
+- k6 STOMP heartbeat 수동 전송 (ALB idle timeout 60초 대응)
+
+### 시나리오 A: 배포 시 WebSocket 커넥션 드롭
+
+```
+사전: ASG 1대
+  1. k6로 100명 WebSocket 연결 + 15초 간격 입찰
+  2. 30초 후 Instance Refresh 트리거
+  3. 구 인스턴스 draining → 종료
+```
+
+| 지표 | 기대 결과 | 실제 결과 |
+|------|----------|----------|
+| WebSocket 끊김 수 | 100명 전원 | **100명 전원 (100%)** |
+| 끊김 시점 | Instance Refresh 중 | 트리거 후 **~65초** (draining timeout) |
+| 커넥션 유지 시간 | - | **95초** (연결 후 ~ 끊김) |
+| 끊김 원인 | abnormal closure | `close 1006 (abnormal closure): unexpected EOF` |
+| 배포 중 입찰 실패 | 발생 | **10건 연속 실패** (503/504/502) |
+| 배포 후 입찰 복구 | 복구 | 새 인스턴스 뜬 후 정상 (서버 IP 변경 확인) |
+
+**핵심**: "무중단 배포"는 REST 기준이지 WebSocket은 무중단이 아니다.
+구 인스턴스 종료 시 해당 서버의 **WebSocket 구독자 전원이 강제 끊김**.
+
+### 시나리오 B: 스케일아웃 후 WebSocket 커넥션 쏠림
+
+```
+사전: ASG 1대 (서버A)
+  1. k6로 100명 WebSocket 연결 (전부 서버A)
+  2. ASG desired=2 → 서버B 추가
+  3. 서버B ALB healthy 후 60초 대기
+  4. /actuator/wsconnections로 서버별 커넥션 수 조회
+```
+
+| 지표 | 기대 결과 | 실제 결과 |
+|------|----------|----------|
+| 서버A WebSocket 커넥션 | 100명 | **100명** |
+| 서버B WebSocket 커넥션 | 0명 | **0명** |
+| ALB wsconnections 라운드로빈 | A/B 번갈아 | A 5회 / B 5회 (50:50) |
+| 서버B ALB healthy 소요 시간 | - | **약 3분** |
+
+**핵심**: 스케일아웃이 REST에만 효과 있고, WebSocket에는 무의미.
+기존 커넥션은 새 서버로 이동하지 않으며, 서버B는 커넥션 0명인 채로 리소스만 소비한다.
+
+### 트러블슈팅
+
+| 문제 | 원인 | 해결 |
+|------|------|------|
+| `/actuator/wsconnections` 500 에러 | ECR 이미지가 엔드포인트 추가 전 버전 | CD workflow_dispatch로 최신 이미지 push |
+| serverIp가 Docker 내부 IP (172.18.x.x) | `InetAddress.getLocalHost()`가 컨테이너 IP 반환 | EC2 메타데이터 API (`169.254.169.254`)로 변경 |
+| k6 60초만에 종료 | ALB idle timeout(60초)으로 WebSocket 끊김 | STOMP heartbeat 30초 간격 수동 전송 추가 |
+| 서버B healthy 전 k6 종료 | DURATION(300초) 시간제한 | 무제한 대기 방식으로 전환 (셸 스크립트가 데이터 수집 후 kill) |
+| ASG 인스턴스 MySQL 연결 실패 | fairbid-server 인프라 미기동 | docker-compose-infra.yml 수동 시작 |
+
+### 예상 vs 현실
+
+| 항목 | 예상 | 실제 | 배운 점 |
+|------|------|------|---------|
+| 시나리오 A 끊김 | 전원 끊김 | **전원 끊김** | Instance Refresh의 draining은 REST 요청 기준. WebSocket은 timeout 후 강제 종료 |
+| 시나리오 B 쏠림 | 서버A 전원, 서버B 0명 | **서버A 100명, 서버B 0명** | TCP 커넥션은 서버에 고정. LB는 새 연결만 분산 |
+| REST 분산 | 서버B healthy 후 분산 | 시나리오 B에서 wsconnections 조회가 50:50 분산 | ALB 라운드로빈은 새 요청 기준으로 정상 동작 |
+| 서버B 기동 시간 | 2~3분 | **약 3분** (InService까지) + 3분 (ALB healthy까지) | EC2 시작 + Docker pull + 앱 부팅 + 헬스체크 통과 시간 고려 필요 |
+
+### 결론
+
+모놀리스 구조에서 REST와 WebSocket이 같은 프로세스에 있으면:
+1. **배포 = WebSocket 끊김**: REST 한 줄 고쳐도 WebSocket 구독자 전원 강제 disconnect
+2. **스케일아웃 = WebSocket에 무의미**: 새 서버가 추가돼도 기존 커넥션은 이동하지 않음
+
+→ Step 5-2에서 Spring Profile로 REST/WebSocket을 분리하여 이 문제들이 해결되는 것을 검증한다.
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -689,3 +774,4 @@ REST 핫픽스 하나 배포할 때마다 실시간 경매 참여자 전원이 �
 | 2026-03-24 | 1.3 | Step 4 테스트 결과 기록 (Redis Pub/Sub 100% 수신율, Stateless 달성) |
 | 2026-03-25 | 1.4 | 트레이드오프 추가: Pub/Sub vs Stream, REST/WS 서버 분리 |
 | 2026-03-25 | 1.5 | Step 5 시나리오 재구성: 배포 끊김(A) + 커넥션 쏠림(B) + 장애 격리(C) |
+| 2026-03-26 | 1.6 | Step 5-1 테스트 결과 기록 (모놀리스 문제 재현: 배포 끊김 100%, 커넥션 쏠림 100:0) |
