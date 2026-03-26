@@ -10,16 +10,18 @@
 #
 # 흐름:
 #   1. ASG 1대 확인 (desired=1)
-#   2. k6 WebSocket 연결 시작 (백그라운드)
-#   3. 30초 후 ASG desired=2로 증가
-#   4. 서버B healthy 후 각 인스턴스의 커넥션 수 직접 조회
-#   5. 서버A=N명, 서버B=0명 확인
+#   2. k6 WebSocket 연결 시작 (백그라운드, 무제한 대기)
+#   3. 30초 후 스케일아웃 전 커넥션 확인
+#   4. ASG desired=2로 증가
+#   5. 서버B InService + ALB healthy 될 때까지 무제한 대기
+#   6. REST 분산 데이터 수집 (60초 대기)
+#   7. 서버별 wsconnections 조회
+#   8. k6 kill → 정리
 # =============================================================================
 
 ALB_URL="http://fairbid-alb-490283096.ap-northeast-2.elb.amazonaws.com"
 ASG_NAME="fairbid-app-asg"
 REGION="ap-northeast-2"
-DURATION=300
 
 echo ""
 echo "================================================================"
@@ -75,15 +77,14 @@ echo "  서버A : $SERVER_A_ID ($SERVER_A_PRIVATE_IP)"
 echo ""
 
 
-# ── 2. k6 시작 (백그라운드) ──
+# ── 2. k6 시작 (백그라운드, 무제한 대기) ──
 echo "────────────────────────────────────────"
-echo "  [2/8] k6 WebSocket 연결 시작"
+echo "  [2/8] k6 WebSocket 연결 시작 (무제한 대기)"
 echo "────────────────────────────────────────"
 echo ""
 
 k6 run \
     --env BASE_URL=$ALB_URL \
-    --env DURATION=$DURATION \
     k6/scenarios/ws-connection-skew-test.js &
 K6_PID=$!
 
@@ -127,7 +128,7 @@ echo "  ✅ desired=2 설정 완료"
 echo ""
 
 
-# ── 6. 서버B InService + ALB healthy 대기 ──
+# ── 6. 서버B InService + ALB healthy 대기 (무제한) ──
 echo "────────────────────────────────────────"
 echo "  [6/8] 서버B InService + ALB healthy 대기"
 echo "────────────────────────────────────────"
@@ -147,12 +148,6 @@ while true; do
     if [ "$CURRENT_IN_SERVICE" -ge 2 ] 2>/dev/null; then
         echo ""
         echo "  ✅ 서버B InService 완료!"
-        break
-    fi
-
-    if ! kill -0 $K6_PID 2>/dev/null; then
-        echo ""
-        echo "  ⚠️ k6가 먼저 종료됨 (서버B가 뜨기 전에 시간 초과)"
         break
     fi
 
@@ -179,14 +174,14 @@ while true; do
         break
     fi
 
-    if ! kill -0 $K6_PID 2>/dev/null; then
-        echo ""
-        echo "  ⚠️ k6가 먼저 종료됨"
-        break
-    fi
-
     sleep 15
 done
+echo ""
+
+# 6-3. REST 분산 데이터 수집 대기 (ALB healthy 후 60초 더 대기하여 충분한 REST 분산 데이터 확보)
+echo "  REST 분산 데이터 수집 중 (60초 대기)..."
+sleep 60
+echo "  ✅ 수집 완료"
 echo ""
 
 
@@ -253,8 +248,10 @@ echo "  [8/8] 정리"
 echo "────────────────────────────────────────"
 echo ""
 
-echo "  k6 결과 대기..."
-wait $K6_PID
+# k6 종료 (데이터 수집 완료했으므로 kill)
+echo "  k6 종료 중..."
+kill $K6_PID 2>/dev/null
+wait $K6_PID 2>/dev/null
 echo ""
 
 echo "  ASG desired=1로 복원..."

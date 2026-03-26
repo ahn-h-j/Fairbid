@@ -15,6 +15,9 @@
  *       동시에 WebSocket으로 실시간 가격을 받고 있는 상태.
  *       스케일아웃이 되면 REST는 분산되지만 WebSocket은 분산 안 됨.
  *
+ * 종료: 셸 스크립트가 데이터 수집 완료 후 k6 프로세스를 kill.
+ *       시간제한 없이 서버B가 뜰 때까지 무제한 대기.
+ *
  * 실행:
  *   k6 run --env BASE_URL=http://ALB_URL k6/scenarios/ws-connection-skew-test.js
  */
@@ -26,8 +29,6 @@ import ws from 'k6/ws';
 
 const BASE_URL = __ENV.BASE_URL || 'http://fairbid-alb-490283096.ap-northeast-2.elb.amazonaws.com';
 const WS_URL = BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/websocket';
-
-const TEST_DURATION_SEC = parseInt(__ENV.DURATION || '300');
 
 // ── 커스텀 메트릭 ──
 const wsConnected = new Counter('ws_connected');
@@ -41,17 +42,18 @@ const restToUnknown = new Counter('rest_to_unknown');
 // ── 테스트 설정 ──
 const SUBSCRIBER_COUNT = parseInt(__ENV.SUBSCRIBERS || '100');
 
+// 무제한 대기: 셸 스크립트가 데이터 수집 완료 후 kill하므로 넉넉히 30분 설정
+const MAX_DURATION_SEC = 1800;
+
 export const options = {
     scenarios: {
-        // 유저 시뮬레이션: WebSocket 연결 유지 + 주기적 REST 요청
-        // 각 유저가 경매 구독하면서 간간이 경매 조회도 하는 자연스러운 행동
         users: {
             executor: 'shared-iterations',
             vus: SUBSCRIBER_COUNT,
             iterations: SUBSCRIBER_COUNT,
             exec: 'auctionUser',
             startTime: '0s',
-            maxDuration: `${TEST_DURATION_SEC + 60}s`,
+            maxDuration: `${MAX_DURATION_SEC}s`,
         },
     },
     thresholds: {
@@ -63,7 +65,7 @@ export function setup() {
     console.log(`🎯 Target: ${BASE_URL}`);
     console.log(`📡 WebSocket: ${WS_URL}`);
     console.log(`👥 유저: ${SUBSCRIBER_COUNT}명`);
-    console.log(`⏱️ 테스트 지속 시간: ${TEST_DURATION_SEC}초`);
+    console.log(`⏱️ 셸 스크립트가 데이터 수집 완료 후 종료 (최대 ${MAX_DURATION_SEC}초)`);
     console.log('');
     console.log('⚠️  ASG desired 변경은 셸 스크립트에서 수행합니다.');
     console.log('');
@@ -132,6 +134,8 @@ export function setup() {
  *
  * WebSocket 연결 중에 REST 요청을 보내므로,
  * 스케일아웃 후 REST만 분산되고 WebSocket은 안 옮겨지는 걸 동시에 관찰 가능
+ *
+ * 종료는 셸 스크립트가 k6 프로세스를 kill하면 자동으로 이루어진다.
  */
 export function auctionUser(data) {
     const { auctionId, serverAIp } = data;
@@ -168,7 +172,7 @@ export function auctionUser(data) {
             socket.send('\n');
         }, 30000);
 
-        // 10초마다 REST 요청 (경매 조회 — 유저가 자연스럽게 하는 행동)
+        // 10초마다 REST 요청 (경매 조회 — 유저가 자연스러운 행동)
         // WebSocket 연결 유지하면서 동시에 REST를 보냄
         socket.setInterval(function () {
             const restRes = http.get(`${BASE_URL}/api/v1/auctions/${auctionId}`, {
@@ -186,10 +190,10 @@ export function auctionUser(data) {
             }
         }, 10000); // 10초 간격
 
-        // 테스트 지속 시간 후 종료
+        // 최대 대기 시간 (셸 스크립트가 kill하지 않을 경우 안전장치)
         socket.setTimeout(function () {
             socket.close();
-        }, TEST_DURATION_SEC * 1000);
+        }, MAX_DURATION_SEC * 1000);
     });
 
     check(res, {
