@@ -1,5 +1,6 @@
 package com.cos.fairbid.notification.adapter.out.websocket;
 
+import com.cos.fairbid.common.config.serverrole.EnabledOnRole;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ import java.util.Map;
  */
 @Component
 @Endpoint(id = "wsconnections")
+@EnabledOnRole({"ws", "all"})
 public class WebSocketConnectionsEndpoint {
 
     private final WebSocketSessionTracker sessionTracker;

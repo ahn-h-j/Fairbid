@@ -1,5 +1,6 @@
 package com.cos.fairbid.notification.adapter.out.websocket;
 
+import com.cos.fairbid.common.config.serverrole.EnabledOnRole;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectEvent;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * /actuator/ws-connections 엔드포인트에서 이 값을 노출한다.
  */
 @Component
+@EnabledOnRole({"ws", "all"})
 public class WebSocketSessionTracker {
 
     private final AtomicInteger activeConnections = new AtomicInteger(0);

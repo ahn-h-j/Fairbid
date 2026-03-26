@@ -1,5 +1,6 @@
 package com.cos.fairbid.notification.adapter.out.pubsub;
 
+import com.cos.fairbid.common.config.serverrole.EnabledOnRole;
 import com.cos.fairbid.notification.application.port.out.AuctionBroadcastPort;
 import com.cos.fairbid.notification.dto.AuctionClosedMessage;
 import com.cos.fairbid.notification.dto.BidUpdateMessage;
@@ -11,16 +12,20 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Redis Pub/Sub을 통한 경매 브로드캐스트 어댑터
+ * Redis Pub/Sub을 통한 경매 브로드캐스트 어댑터 (발행 전용)
  *
  * 입찰/종료 메시지를 Redis 채널에 발행하여 모든 서버 인스턴스가 수신할 수 있게 한다.
  * 각 서버의 RedisMessageSubscriber가 메시지를 받아 로컬 WebSocket 구독자에게 전달한다.
  *
  * [입찰 발생] → [이 어댑터: Redis 발행] → [Redis Pub/Sub] → [각 서버: RedisMessageSubscriber] → [SimpMessagingTemplate] → [WS 구독자]
+ *
+ * server.role=api 또는 all에서만 활성화.
+ * WS 서버는 메시지를 구독만 하고, 발행은 API 서버가 담당한다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@EnabledOnRole({"api", "all"})
 public class RedisPubSubBroadcastAdapter implements AuctionBroadcastPort {
 
     private final StringRedisTemplate redisTemplate;

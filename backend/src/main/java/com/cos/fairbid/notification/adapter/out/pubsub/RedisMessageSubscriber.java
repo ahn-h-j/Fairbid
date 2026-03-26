@@ -1,5 +1,6 @@
 package com.cos.fairbid.notification.adapter.out.pubsub;
 
+import com.cos.fairbid.common.config.serverrole.EnabledOnRole;
 import com.cos.fairbid.notification.dto.AuctionClosedMessage;
 import com.cos.fairbid.notification.dto.BidUpdateMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,10 +17,14 @@ import org.springframework.stereotype.Component;
  * Redis 채널에서 메시지를 수신하여 이 서버의 WebSocket 구독자에게 전달한다.
  * 모든 서버 인스턴스에서 동일하게 동작하므로, 어떤 서버에서 입찰이 발생하든
  * 모든 서버의 구독자가 메시지를 받을 수 있다.
+ *
+ * server.role=ws 또는 all에서만 활성화.
+ * API 서버는 메시지를 발행만 하고, 구독(수신→WebSocket 전달)은 WS 서버만 담당한다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@EnabledOnRole({"ws", "all"})
 public class RedisMessageSubscriber implements MessageListener {
 
     private final SimpMessagingTemplate messagingTemplate;
