@@ -150,6 +150,7 @@ export function subscriber(data) {
     const res = ws.connect(WS_URL, {}, function (socket) {
         let connected = false;
         let messagesReceived = 0;
+        let gracefulClose = false; // 정상 종료 플래그
 
         socket.on('open', function () {
             socket.send('CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n\0');
@@ -164,8 +165,6 @@ export function subscriber(data) {
                 socket.send(
                     `SUBSCRIBE\nid:sub-${userId}\ndestination:/topic/auctions/${auctionId}\n\n\0`
                 );
-
-                console.log(`  ✅ VU${__VU} 연결 + 구독 완료`);
                 return;
             }
 
@@ -180,10 +179,11 @@ export function subscriber(data) {
             const durationSec = (Date.now() - connectTime) / 1000;
             wsConnectionDuration.add(durationSec);
 
-            if (connected) {
+            if (connected && !gracefulClose) {
+                // 비정상 끊김 (서버 측에서 끊김)
                 wsDisconnected.add(1);
                 wsDisconnectRate.add(1);
-                console.log(`  🔌 VU${__VU} 연결 끊김 (유지 시간: ${durationSec.toFixed(1)}초, 수신 메시지: ${messagesReceived}건)`);
+                console.log(`  🔌 VU${__VU} 비정상 끊김 (유지: ${durationSec.toFixed(1)}초, 수신: ${messagesReceived}건)`);
             }
         });
 
@@ -191,13 +191,17 @@ export function subscriber(data) {
             console.error(`  ❌ VU${__VU} WebSocket 에러: ${e.error()}`);
         });
 
+        // STOMP heartbeat 전송 (ALB idle timeout 60초 대응, 30초 간격)
+        socket.setInterval(function () {
+            socket.send('\n');
+        }, 30000);
+
         // 테스트 지속 시간만큼 연결 유지
         socket.setTimeout(function () {
-            // 정상 종료 (타임아웃까지 끊기지 않았으면 끊김 없음)
+            // 정상 종료 (타임아웃까지 끊기지 않았으면 성공)
             if (connected) {
-                wsDisconnectRate.add(0); // 끊기지 않음
-                const durationSec = (Date.now() - connectTime) / 1000;
-                console.log(`  ✅ VU${__VU} 정상 유지 (${durationSec.toFixed(1)}초, 수신 메시지: ${messagesReceived}건)`);
+                gracefulClose = true;
+                wsDisconnectRate.add(0);
             }
             socket.close();
         }, TEST_DURATION_SEC * 1000);

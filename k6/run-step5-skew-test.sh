@@ -1,18 +1,18 @@
 #!/bin/bash -l
 # =============================================================================
-# Step 5-1 시나리오 B: 스케일아웃 후 WebSocket 커넥션 쏠림 테스트
+# Step 5-2 시나리오 B: WS 독립 스케일링 테스트
 #
-# 모놀리스 환경에서 스케일아웃 후에도 기존 WebSocket 커넥션이
-# 새 서버로 이동하지 않는 것을 증명한다.
+# REST/WS 분리 환경에서 WS ASG만 스케일아웃하고
+# REST ASG는 영향 없이 독립적으로 동작하는 것을 증명한다.
 #
 # 사용법:
 #   bash k6/run-step5-skew-test.sh
 #
 # 흐름:
-#   1. ASG 1대 확인 (desired=1)
+#   1. WS ASG 1대 확인 (desired=1)
 #   2. k6 WebSocket 연결 시작 (백그라운드, 무제한 대기)
 #   3. 30초 후 스케일아웃 전 커넥션 확인
-#   4. ASG desired=2로 증가
+#   4. WS ASG desired=2로 증가
 #   5. 서버B InService + ALB healthy 될 때까지 무제한 대기
 #   6. REST 분산 데이터 수집 (60초 대기)
 #   7. 서버별 wsconnections 조회
@@ -20,15 +20,15 @@
 # =============================================================================
 
 ALB_URL="http://fairbid-alb-490283096.ap-northeast-2.elb.amazonaws.com"
-ASG_NAME="fairbid-app-asg"
+ASG_NAME="fairbid-websocket-asg"
 REGION="ap-northeast-2"
 
 echo ""
 echo "================================================================"
-echo "  Step 5-1 시나리오 B: 스케일아웃 후 WebSocket 커넥션 쏠림 테스트"
+echo "  Step 5-2 시나리오 B: WS 독립 스케일링 테스트"
 echo "================================================================"
 echo ""
-echo "  목적: 스케일아웃 후에도 WebSocket 커넥션이 새 서버로 안 옮겨가는 것을 증명"
+echo "  목적: WS ASG만 스케일아웃 → REST ASG 영향 없이 독립 동작 증명"
 echo ""
 
 
@@ -156,7 +156,7 @@ done
 echo ""
 
 # 6-2. ALB healthy 대기
-TG_ARN=$(aws elbv2 describe-target-groups --names fairbid-app-tg \
+TG_ARN=$(aws elbv2 describe-target-groups --names fairbid-websocket-tg \
     --region $REGION --query "TargetGroups[0].TargetGroupArn" --output text 2>/dev/null)
 
 echo "  [ALB healthy 대기]"
@@ -215,30 +215,43 @@ for INSTANCE_ID in $INSTANCE_IDS; do
     echo "    $LABEL : $INSTANCE_ID ($PRIVATE_IP)"
 done
 
+# 인프라 서버 IP 조회 (SSH 경유용)
+INFRA_IP=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=fairbid-infra" "Name=instance-state-name,Values=running" \
+    --region $REGION --query "Reservations[0].Instances[0].PublicIpAddress" --output text 2>/dev/null)
+echo "  인프라 서버: $INFRA_IP (SSH 경유 조회)"
+
 echo ""
-echo "  ALB를 통한 wsconnections 조회 (10회):"
-echo "  ┌──────┬──────────────────┬────────────────┐"
-echo "  │  #   │  서버 IP         │  커넥션 수     │"
-echo "  ├──────┼──────────────────┼────────────────┤"
+echo "  WS 인스턴스 직접 wsconnections 조회:"
+echo "  ┌──────────────────┬──────────────────┬────────────────┐"
+echo "  │  역할            │  서버 IP         │  커넥션 수     │"
+echo "  ├──────────────────┼──────────────────┼────────────────┤"
 
-for i in $(seq 1 10); do
-    RESULT=$(curl -s "$ALB_URL/actuator/wsconnections" 2>/dev/null)
-    # JSON에서 serverIp와 activeConnections 추출
-    IP=$(echo "$RESULT" | grep -o '"serverIp":"[^"]*"' | cut -d'"' -f4 2>/dev/null)
-    CONN=$(echo "$RESULT" | grep -o '"activeConnections":[0-9]*' | cut -d: -f2 2>/dev/null)
+for INSTANCE_ID in $INSTANCE_IDS; do
+    PRIVATE_IP=$(aws ec2 describe-instances \
+        --instance-ids $INSTANCE_ID \
+        --region $REGION \
+        --query "Reservations[0].Instances[0].PrivateIpAddress" \
+        --output text 2>/dev/null)
 
-    if [ -n "$IP" ] && [ -n "$CONN" ]; then
-        printf "  │  %-3s │  %-15s │  %-13s │\n" "$i" "$IP" "${CONN}명"
+    if [ "$INSTANCE_ID" = "$SERVER_A_ID" ]; then
+        LABEL="서버A (기존)"
     else
-        printf "  │  %-3s │  %-15s │  %-13s │\n" "$i" "(실패)" "-"
+        LABEL="서버B (신규)"
     fi
-    sleep 1
+
+    # WS 인스턴스에 직접 조회 (인프라 서버 SSH 경유, 로컬에서 private IP 접근 불가)
+    RESULT=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 -i ~/Downloads/fairbid-key.pem ubuntu@$INFRA_IP \
+        "curl -s --max-time 3 http://$PRIVATE_IP:8080/actuator/wsconnections" 2>/dev/null)
+    CONN=$(echo "$RESULT" | grep -o '"activeConnections":[0-9]*' | cut -d: -f2 2>/dev/null)
+    CONN=${CONN:-"N/A"}
+
+    printf "  │  %-15s │  %-15s │  %-13s │\n" "$LABEL" "$PRIVATE_IP" "${CONN}명"
 done
 
-echo "  └──────┴──────────────────┴────────────────┘"
+echo "  └──────────────────┴──────────────────┴────────────────┘"
 echo ""
 echo "  기대 결과: 서버A = 100명, 서버B = 0명"
-echo "  → REST는 분산되지만 WebSocket 커넥션은 서버A에 고정"
+echo "  → 기존 WS 커넥션은 새 서버로 이동하지 않음 (독립 스케일링 증명)"
 echo ""
 
 

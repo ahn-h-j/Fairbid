@@ -169,6 +169,7 @@ export function subscriber(data) {
     const res = ws.connect(WS_URL, {}, function (socket) {
         let connected = false;
         let messagesReceived = 0;
+        let gracefulClose = false;
 
         socket.on('open', function () {
             socket.send('CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n\0');
@@ -194,18 +195,27 @@ export function subscriber(data) {
             const durationSec = (Date.now() - connectTime) / 1000;
             const elapsedSec = (Date.now() - startTime) / 1000;
 
-            if (connected) {
+            if (connected && !gracefulClose) {
                 wsDisconnected.add(1);
                 wsDisconnectRate.add(1);
                 const phase = elapsedSec < KILL_TIME_SEC ? 'kill 전' : 'kill 후';
-                console.log(`  🔌 VU${__VU} 끊김 [${phase}] (유지: ${durationSec.toFixed(1)}초, 수신: ${messagesReceived}건)`);
+                console.log(`  🔌 VU${__VU} 비정상 끊김 [${phase}] (유지: ${durationSec.toFixed(1)}초, 수신: ${messagesReceived}건)`);
             }
         });
 
+        socket.on('error', function (e) {
+            console.error(`  ❌ VU${__VU} WebSocket 에러: ${e.error()}`);
+        });
+
+        // STOMP heartbeat 전송 (ALB idle timeout 60초 대응, 30초 간격)
+        socket.setInterval(function () {
+            socket.send('\n');
+        }, 30000);
+
         socket.setTimeout(function () {
             if (connected) {
-                wsDisconnectRate.add(0); // 끊기지 않음
-                console.log(`  ✅ VU${__VU} 정상 유지 (수신: ${messagesReceived}건)`);
+                gracefulClose = true;
+                wsDisconnectRate.add(0);
             }
             socket.close();
         }, TEST_DURATION_SEC * 1000);

@@ -1,31 +1,31 @@
 #!/bin/bash -l
 # =============================================================================
-# Step 5-1 시나리오 A: 배포 시 WebSocket 커넥션 드롭 테스트
+# Step 5-2 시나리오 A: REST 배포 → WebSocket 커넥션 유지 테스트
 #
-# 모놀리스 환경에서 Instance Refresh(롤링 배포)를 트리거하고
-# WebSocket 커넥션이 끊기는 것을 증명한다.
+# REST/WS 분리 환경에서 REST ASG만 Instance Refresh하고
+# WebSocket 커넥션이 끊기지 않는 것을 증명한다.
 #
 # 사용법:
 #   bash k6/run-step5-deploy-test.sh
 #
 # 흐름:
-#   1. ASG 상태 확인
+#   1. REST ASG 상태 확인
 #   2. k6 WebSocket 연결 시작 (백그라운드)
-#   3. 30초 후 Instance Refresh 트리거
-#   4. k6 결과에서 커넥션 끊김 수 확인
+#   3. 30초 후 REST ASG Instance Refresh 트리거
+#   4. k6 결과에서 커넥션 끊김 수 확인 (기대: 0건)
 # =============================================================================
 
 ALB_URL="http://fairbid-alb-490283096.ap-northeast-2.elb.amazonaws.com"
-ASG_NAME="fairbid-app-asg"
+ASG_NAME="fairbid-rest-asg"
 REGION="ap-northeast-2"
 DURATION=300  # Instance Refresh 완료까지 5분
 
 echo ""
 echo "================================================================"
-echo "  Step 5-1 시나리오 A: 배포 시 WebSocket 커넥션 드롭 테스트"
+echo "  Step 5-2 시나리오 A: REST 배포 → WebSocket 커넥션 유지 테스트"
 echo "================================================================"
 echo ""
-echo "  목적: 롤링 배포(Instance Refresh) 시 WebSocket 커넥션이 끊기는 것을 증명"
+echo "  목적: REST ASG만 롤링 배포 시 WebSocket 커넥션이 끊기지 않는 것을 증명"
 echo ""
 
 

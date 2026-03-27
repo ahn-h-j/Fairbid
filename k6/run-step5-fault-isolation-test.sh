@@ -21,7 +21,7 @@ KILL_DELAY=30
 
 # ── ASG 이름 설정 (분리 후 구성에 맞게 수정) ──
 REST_ASG_NAME="${REST_ASG_NAME:-fairbid-rest-asg}"
-WS_ASG_NAME="${WS_ASG_NAME:-fairbid-ws-asg}"
+WS_ASG_NAME="${WS_ASG_NAME:-fairbid-websocket-asg}"
 
 CASE="${1:-rest_kill}"
 
