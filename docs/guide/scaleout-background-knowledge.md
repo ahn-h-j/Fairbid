@@ -24,6 +24,10 @@
 14. [Redis Pub/Sub을 이용한 메시지 동기화](#14-redis-pubsub을-이용한-메시지-동기화)
 15. [k6 부하 테스트](#15-k6-부하-테스트)
 16. [삽질 모음 & 교훈](#16-삽질-모음--교훈)
+17. [REST/WebSocket 서버 분리](#17-restwebsocket-서버-분리)
+18. [Terraform으로 인프라 관리](#18-terraform으로-인프라-관리)
+19. [ALB 경로 기반 라우팅](#19-alb-경로-기반-라우팅)
+20. [Spring 빈 조건부 활성화](#20-spring-빈-조건부-활성화)
 
 ---
 
@@ -668,6 +672,139 @@ const wsReceiveRate = new Rate('ws_receive_rate');        // 수신율
 6. **t3 버스트 크레딧 이해 필수** — 연속 부하 테스트 시 크레딧 소진으로 성능 제한
 7. **Docker 내부 IP vs 외부 IP 구분** — announce-ip 같은 설정 누락 시 외부 통신 불가
 8. **Instance Refresh 전에 수동 테스트** — 1대 먼저 띄워서 검증 후 전체 교체
+9. **Terraform state와 실제 AWS 리소스 동기화** — 수동으로 만든 리소스는 import하거나 삭제 후 재생성
+10. **ALB 경로 기반 라우팅은 SockJS 하위 경로까지 고려** — `/ws`만으로는 부족, `/ws/*`도 필요
+11. **정상 종료와 비정상 끊김은 명시적으로 구분** — close 이벤트만으로는 판별 불가
+
+---
+
+## 17. REST/WebSocket 서버 분리
+
+### 왜 분리하냐
+
+모놀리스에서 REST와 WebSocket이 같은 프로세스에 있으면:
+- **배포 = WebSocket 끊김**: REST 코드 한 줄 수정해도 전체 프로세스를 재시작해야 하므로 WebSocket 커넥션이 끊김
+- **장애 전파**: REST에서 OOM이 터지면 WebSocket도 같이 죽음
+- **스케일링 비효율**: REST는 CPU 바운드(요청 처리), WebSocket은 메모리 바운드(커넥션 유지)인데 같은 기준으로 스케일링
+
+### 분리 방식
+
+같은 코드베이스에서 환경변수(`SERVER_ROLE`)로 역할을 분리한다. 멀티 모듈로 코드를 물리적으로 나눌 필요 없음.
+
+```
+[같은 Docker 이미지]
+├── SERVER_ROLE=api → REST Controller, 스케줄러, Stream 컨슈머, Pub/Sub 발행
+├── SERVER_ROLE=ws  → WebSocket Config, Pub/Sub 구독
+└── SERVER_ROLE=all → 전부 (로컬 개발용)
+```
+
+### 알아야 할 것
+- `@Conditional`은 `@Configuration` 클래스 전체의 로딩을 제어한다 — `@EnableWebSocketMessageBroker` 같은 어노테이션도 같이 비활성화됨
+- WS 서버에서 `AuctionBroadcastPort` 구현체(`RedisPubSubBroadcastAdapter`)가 없어도 되는 이유: 이 포트를 주입받는 `BidEventListener`도 API 전용이라 같이 비활성화됨
+- 빈 의존성 체인을 따라가며 한쪽에서 누락되는 빈이 없는지 확인해야 한다
+
+### 면접 예상 질문
+
+| 질문 | 답변 포인트 |
+|------|------------|
+| 왜 멀티 모듈로 안 나눴나? | 헥사고날 구조 덕분에 의존성이 이미 깔끔하게 분리되어 있음. 어노테이션 태깅만으로 충분, 멀티 모듈은 빌드/배포 복잡도만 증가 |
+| 분리했을 때 메시지 흐름은? | API 서버: 입찰 → Redis Pub/Sub 발행. WS 서버: Redis Pub/Sub 구독 → 로컬 WebSocket 구독자에게 전달 |
+| WS 서버가 DB를 안 쓰나? | JPA 초기화에 필요해서 연결은 하지만, 실제 쿼리는 거의 없음. 향후 완전 분리하려면 WS 전용 경량 설정 필요 |
+
+---
+
+## 18. Terraform으로 인프라 관리
+
+### 왜 Terraform이냐
+
+AWS CLI나 셸 스크립트로 인프라를 만들면:
+- 다른 계정/환경에서 재현 불가
+- 리소스 간 의존 관계 파악 어려움
+- 삭제/변경 시 어떤 리소스가 영향받는지 모름
+
+Terraform은 `.tf` 파일에 선언적으로 정의하고, `plan`으로 변경사항을 미리 확인, `apply`로 적용한다.
+
+### 핵심 개념
+
+| 개념 | 설명 |
+|------|------|
+| `terraform plan` | 현재 상태(state) vs 코드를 비교해서 뭘 만들고/바꾸고/지울지 보여줌 |
+| `terraform apply` | plan 결과를 실제로 적용 |
+| `terraform state` | Terraform이 관리하는 리소스 목록. 실제 AWS와 동기화해야 함 |
+| `terraform import` | 수동으로 만든 AWS 리소스를 Terraform 관리 대상으로 가져옴 |
+| `lifecycle.ignore_changes` | 특정 속성 변경을 Terraform이 무시하게 함 (예: AMI 업데이트로 EC2 교체 방지) |
+
+### 삽질 포인트
+
+| 문제 | 원인 | 교훈 |
+|------|------|------|
+| `terraform apply` 시 인프라 EC2 교체 시도 | `data.aws_ami.ubuntu`가 최신 AMI를 자동 조회 → 기존과 다름 | stateful 리소스는 `ignore_changes = [ami]` 필수 |
+| SG description 변경으로 SG 교체 | AWS SG는 description 변경 시 삭제+재생성 (in-place 불가) | import 후 코드를 실제 값에 맞춰야 함 |
+| SG 규칙이 state에만 있고 AWS에 없음 | import 형식 오류로 실패했지만 state에 남음 | `state rm` 후 재생성 |
+| 수동 리소스와 Terraform 리소스 충돌 | 같은 이름의 TG/ASG가 이미 존재 | 수동 리소스 삭제 후 Terraform으로 통일 |
+
+### 면접 예상 질문
+
+| 질문 | 답변 포인트 |
+|------|------------|
+| Terraform state가 뭐예요? | 실제 인프라와 코드 사이의 매핑 정보. state가 없으면 Terraform은 전부 새로 만들려고 함 |
+| import는 언제 쓰나요? | 수동으로 만든 리소스를 Terraform 관리로 편입할 때. import 후 코드도 실제 설정과 일치시켜야 함 |
+| plan에서 destroy가 뜨면? | 이유 확인 필수. AMI 변경, description 불일치 등 사소한 차이로 리소스 교체가 발생할 수 있음 |
+
+---
+
+## 19. ALB 경로 기반 라우팅
+
+### 뭐하는 거냐
+
+하나의 ALB에서 URL 경로에 따라 다른 Target Group으로 보내는 것.
+
+```
+[ALB]
+├── /ws, /ws/*  → fairbid-websocket-tg (WS 서버)
+└── 나머지 전부  → fairbid-rest-tg (REST 서버)
+```
+
+### 알아야 할 것
+
+- **리스너 규칙 우선순위**: 숫자가 낮을수록 먼저 매칭. `default`는 항상 마지막
+- **SockJS 하위 경로**: SockJS는 `/ws/websocket`, `/ws/info`, `/ws/xxx/websocket` 같은 경로를 사용. `/ws`만 매칭하면 이런 요청이 REST 서버로 감
+- **health check 경로**: WS TG도 `/actuator/health`를 사용. WS 서버에서 actuator가 떠야 함
+
+### 면접 예상 질문
+
+| 질문 | 답변 포인트 |
+|------|------------|
+| 왜 ALB를 2개 안 만들었나? | 비용 절감 + 도메인 하나로 통합. 경로 기반 라우팅이면 충분 |
+| WebSocket은 NLB가 낫지 않나? | ALB도 WebSocket 지원함 (HTTP Upgrade). NLB는 L4라 경로 기반 라우팅 불가 |
+
+---
+
+## 20. Spring 빈 조건부 활성화
+
+### 방법들
+
+| 방식 | 사용 예 | 특징 |
+|------|--------|------|
+| `@Profile("api")` | 프로필별 활성화 | `spring.profiles.active`에 포함되어야 함. 복수 프로필 OR 조건 번거로움 |
+| `@ConditionalOnProperty` | 프로퍼티 값 기반 | `havingValue`로 단일 값만 비교. "not equal" 조건 불가 |
+| 커스텀 `@Conditional` | 복잡한 조건 | `Condition` 인터페이스 구현. 유연하지만 코드 추가 필요 |
+
+### 우리가 선택한 방식
+
+커스텀 `@EnabledOnRole` 어노테이션 + `ServerRoleCondition`:
+- `@EnabledOnRole({"api", "all"})` — api 또는 all일 때 활성화
+- `@EnabledOnRole({"ws", "all"})` — ws 또는 all일 때 활성화
+- 기본값 `all`이면 모든 빈 활성화 (로컬 개발 환경)
+
+### 왜 `@Profile`을 안 썼나
+
+`@Profile("api")` + `@Profile("all")` 이렇게 쓰면 **둘 다 active**여야 해서 OR 조건이 안 됨. `@Profile({"api", "all"})` 이렇게 하면 OR이긴 한데, `spring.profiles.active=sentinel,load-test`처럼 다른 프로필과 함께 쓸 때 `all`을 항상 넣어야 하는 번거로움이 있음. `server.role`이라는 별도 프로퍼티로 분리하는 게 깔끔.
+
+### 주의점
+- `@Conditional`은 `@Configuration` 클래스에 붙이면 해당 클래스의 모든 `@Bean` 메서드도 비활성화됨
+- 빈 의존성 체인 확인 필수: A가 B를 주입받는데 B만 비활성화하면 에러
+- `@Component`와 `@Configuration` 모두에 적용 가능
 
 ---
 
@@ -676,3 +813,4 @@ const wsReceiveRate = new Rate('ws_receive_rate');        // 수신율
 | 날짜 | 버전 | 변경 내용 |
 |------|------|----------|
 | 2026-03-23 | 1.0 | 초안 작성 — 기존 문서 통합 정리 |
+| 2026-03-27 | 1.1 | Step 5-2 배경지식 추가 — 서버 분리, Terraform, ALB 라우팅, 빈 조건부 활성화 |
