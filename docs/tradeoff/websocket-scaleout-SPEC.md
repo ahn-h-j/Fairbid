@@ -764,6 +764,115 @@ REST 핫픽스 하나 배포할 때마다 실시간 경매 참여자 전원이 �
 
 ---
 
+## Step 5-2 테스트 결과: REST/WebSocket 분리 → 문제 해결 (2026-03-27)
+
+### 테스트 환경
+- 날짜: 2026-03-27
+- 인스턴스: t3.small x 3 (인프라 1대 + REST ASG 1대 + WS ASG 1대)
+- ALB 경로 기반 라우팅: `/ws*` → WS TG, 나머지 → REST TG
+- 테스트 도구: k6 (로컬, 100 VUs)
+- 인프라 관리: Terraform
+
+### 구현
+
+**서버 역할 분리 (`server.role` 프로퍼티)**
+- `@EnabledOnRole` 커스텀 어노테이션 + `ServerRoleCondition`으로 빈 활성화 제어
+- `SERVER_ROLE=api`: REST Controller, 스케줄러, Redis Pub/Sub 발행, Stream 컨슈머만 활성화
+- `SERVER_ROLE=ws`: WebSocket Config, Redis Pub/Sub 구독만 활성화
+- `SERVER_ROLE=all`: 전체 활성화 (로컬 개발용, 기본값)
+
+**인프라 (Terraform)**
+- `fairbid-rest-asg` / `fairbid-rest-tg` / `fairbid-rest-lt` — REST 전용 ASG
+- `fairbid-websocket-asg` / `fairbid-websocket-tg` / `fairbid-websocket-lt` — WS 전용 ASG
+- ALB 리스너 규칙: priority 10, `/ws`, `/ws/*` → WS TG
+- CD workflow: 양쪽 ASG 모두 Instance Refresh
+
+### 시나리오 A 재검증: REST 배포 → WebSocket 커넥션 유지
+
+```
+사전: REST ASG 1대, WS ASG 1대
+  1. k6로 100명 WebSocket 연결 (WS TG 경유)
+  2. 30초 후 REST ASG만 Instance Refresh 트리거
+  3. WebSocket 커넥션 끊김 수 측정
+```
+
+| 지표 | Step 5-1 (모놀리스) | Step 5-2 (분리) |
+|------|-------------------|----------------|
+| WebSocket 끊김 수 | **100명 (100%)** | **0명 (0%)** |
+| REST 배포 중 입찰 실패 | 10건 연속 실패 | 발생 (REST 서버 교체 중이므로 정상) |
+| WS 서버 영향 | 같이 죽음 | **영향 없음** |
+
+**핵심**: REST 코드 한 줄 고쳐서 배포해도 WebSocket 구독자는 끊기지 않는다.
+
+### 시나리오 C: 장애 격리 — REST kill → WebSocket 생존
+
+```
+사전: REST ASG 1대, WS ASG 1대
+  1. k6로 100명 WebSocket 연결 + REST 요청 동시 진행
+  2. 30초 후 REST 인스턴스 terminate
+  3. WebSocket 커넥션 유지 여부 + REST 복구 확인
+```
+
+| 지표 | 결과 |
+|------|------|
+| WebSocket 끊김 수 | **0명 (0%)** |
+| REST kill 전 성공률 | 100.0% |
+| REST kill 후 성공률 | 2.2% (서버 없으므로 정상) |
+| REST ASG 자동 복구 | InService=1 (자가 치유) |
+
+**핵심**: REST 서버가 죽어도 WebSocket 커넥션은 전원 생존한다. ASG가 REST 인스턴스를 자동 교체한다.
+
+### 시나리오 C: 장애 격리 — WS kill → REST 생존
+
+```
+사전: REST ASG 1대, WS ASG 2대 (이전 테스트에서 증가된 상태)
+  1. k6로 100명 WebSocket 연결 + REST 요청 동시 진행
+  2. 30초 후 WS 인스턴스 1대 terminate
+  3. REST 정상 응답 여부 + WS 끊김 범위 확인
+```
+
+| 지표 | 결과 |
+|------|------|
+| REST kill 전 성공률 | 100.0% |
+| REST kill 후 성공률 | **100.0%** (WS 죽어도 REST 영향 없음) |
+| WS 연결 성공 | 99명 |
+| WS 끊김 수 | 50명 (50.5%) — kill된 서버에 붙은 커넥션만 끊김 |
+| WS ASG 자동 복구 | InService=2 (자가 치유) |
+
+**핵심**: WS 서버가 죽어도 REST API는 100% 정상 응답한다. WS 끊김은 kill된 서버에 붙은 커넥션만 영향받으며, 나머지 WS 서버의 커넥션은 생존한다.
+
+### Step 5-1 vs Step 5-2 비교 요약
+
+| 지표 | Step 5-1 (모놀리스) | Step 5-2 (분리) |
+|------|-------------------|----------------|
+| REST 배포 시 WS 끊김 | 100명 전원 끊김 | **0건** |
+| REST kill 시 WS 영향 | 같이 죽음 | **WS 전원 생존** |
+| WS kill 시 REST 영향 | 같이 죽음 | **REST 100% 정상 응답** |
+| 독립 스케일링 | 불가 (같은 ASG) | **REST/WS 각각 독립 ASG** |
+
+### 트러블슈팅
+
+| 문제 | 원인 | 해결 |
+|------|------|------|
+| k6 WS 60초 후 전원 끊김 | ALB idle timeout 60초, heartbeat 미전송 | k6 스크립트에 STOMP heartbeat 30초 간격 전송 추가 |
+| k6 정상 종료도 "끊김"으로 카운트 | `socket.close()` 호출 시 close 이벤트 발생, 정상/비정상 미구분 | `gracefulClose` 플래그로 정상 종료와 비정상 끊김 구분 |
+| `/actuator/wsconnections` 0명 반환 | ALB default 규칙으로 REST 서버에 라우팅, REST 서버에서는 WS 빈 비활성화 | WS 인스턴스 private IP로 직접 조회 (인프라 서버 SSH 경유) |
+| Terraform apply 시 인프라 서버 교체 시도 | `data.aws_ami.ubuntu`가 최신 AMI를 조회, 기존과 다름 | `lifecycle { ignore_changes = [ami, user_data] }` 추가 |
+| ALB SG 교체 시도 | description 불일치 (`forces replacement`) | 테라폼 코드의 description을 기존 AWS 값과 일치시킴 |
+| SG 규칙 누락으로 MySQL 연결 실패 | 수동 생성한 SG 규칙이 Terraform state에 없어 적용 안 됨 | state에서 제거 후 `terraform apply`로 재생성 |
+| IAM Instance Profile 이름 오류 | `fairbid-ec2-role` → 실제 이름 `fairbid-app-profile` | 실제 이름으로 수정 |
+
+### 결론
+
+REST/WebSocket 서버를 같은 코드베이스에서 `server.role` 프로퍼티로 분리한 결과:
+1. **배포 격리**: REST 배포해도 WebSocket 구독자 끊김 0건
+2. **장애 격리**: REST 서버 죽어도 WebSocket 전원 생존
+3. **독립 스케일링**: REST는 RPS 기반, WebSocket은 커넥션 수 기반으로 각각 오토스케일링 가능
+
+모놀리스 대비 코드 변경은 최소화하면서(어노테이션 태깅만), 인프라 수준에서 완전한 독립성을 달성했다.
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -775,3 +884,4 @@ REST 핫픽스 하나 배포할 때마다 실시간 경매 참여자 전원이 �
 | 2026-03-25 | 1.4 | 트레이드오프 추가: Pub/Sub vs Stream, REST/WS 서버 분리 |
 | 2026-03-25 | 1.5 | Step 5 시나리오 재구성: 배포 끊김(A) + 커넥션 쏠림(B) + 장애 격리(C) |
 | 2026-03-26 | 1.6 | Step 5-1 테스트 결과 기록 (모놀리스 문제 재현: 배포 끊김 100%, 커넥션 쏠림 100:0) |
+| 2026-03-27 | 1.7 | Step 5-2 테스트 결과 기록 (REST/WS 분리: 배포 끊김 0%, 장애 격리 성공) |
