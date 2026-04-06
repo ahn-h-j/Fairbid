@@ -153,13 +153,14 @@ class HexagonalArchitectureTest {
         }
 
         @Test
-        @DisplayName("Port Out은 인터페이스여야 한다 (inner record 제외)")
+        @DisplayName("Port Out은 인터페이스여야 한다 (record/inner class 제외)")
         void port_out_should_be_interfaces() {
             classes()
                     .that().resideInAnyPackage("..application.port.out..")
                     .and().areNotMemberClasses() // Port Out 내부 record 제외
+                    .and().areNotRecords() // top-level record (OAuthUserInfo 등 DTO) 제외
                     .should().beInterfaces()
-                    .because("Port Out은 인터페이스로 정의하고, Adapter가 구현해야 한다.")
+                    .because("Port Out은 인터페이스로 정의하고, Adapter가 구현해야 한다. DTO record는 허용.")
                     .check(classes);
         }
     }
