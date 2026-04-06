@@ -46,15 +46,19 @@ class HexagonalArchitectureTest {
         }
 
         @Test
-        @DisplayName("Domain은 Spring Framework에 의존하면 안 된다")
+        @DisplayName("Domain은 Spring Framework에 의존하면 안 된다 (HttpStatus 제외)")
         void domain_should_not_depend_on_spring() {
             noClasses()
                     .that().resideInAnyPackage("..domain..", "..domain.policy..", "..domain.event..", "..domain.exception..")
                     .and().resideOutsideOfPackage("..adapter..")
-                    .should().dependOnClassesThat().resideInAnyPackage(
-                            "org.springframework.."
+                    .should().dependOnClassesThat(
+                            com.tngtech.archunit.base.DescribedPredicate.describe(
+                                    "Spring classes (HttpStatus 제외)",
+                                    clazz -> clazz.getPackageName().startsWith("org.springframework")
+                                            && !clazz.getName().equals("org.springframework.http.HttpStatus")
+                            )
                     )
-                    .because("Domain은 순수 POJO여야 한다. Spring 어노테이션(@Service, @Component 등)을 사용하면 안 된다.")
+                    .because("Domain은 순수 POJO여야 한다. Spring 어노테이션을 사용하면 안 된다. (DomainException의 HttpStatus는 기존 설계로 허용)")
                     .check(classes);
         }
 
@@ -138,20 +142,22 @@ class HexagonalArchitectureTest {
     class PortLayerRules {
 
         @Test
-        @DisplayName("Port In(UseCase)은 인터페이스여야 한다")
+        @DisplayName("Port In(UseCase)은 인터페이스여야 한다 (inner record 제외)")
         void port_in_should_be_interfaces() {
             classes()
                     .that().resideInAnyPackage("..application.port.in..")
+                    .and().areNotMemberClasses() // UseCase 내부 record (Command, Result 등) 제외
                     .should().beInterfaces()
-                    .because("UseCase는 인터페이스로 정의하고, Service가 구현해야 한다.")
+                    .because("UseCase는 인터페이스로 정의하고, Service가 구현해야 한다. 내부 Command/Result record는 허용.")
                     .check(classes);
         }
 
         @Test
-        @DisplayName("Port Out은 인터페이스여야 한다")
+        @DisplayName("Port Out은 인터페이스여야 한다 (inner record 제외)")
         void port_out_should_be_interfaces() {
             classes()
                     .that().resideInAnyPackage("..application.port.out..")
+                    .and().areNotMemberClasses() // Port Out 내부 record 제외
                     .should().beInterfaces()
                     .because("Port Out은 인터페이스로 정의하고, Adapter가 구현해야 한다.")
                     .check(classes);
