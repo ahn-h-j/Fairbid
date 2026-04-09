@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Lombok @Getter가 List/Date 등 가변 객체를 직접 노출하는 것은 의도된 패턴 (JPA Entity에서만 허용) -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~.*\.adapter\.out\.persistence\.entity\..*"/>
+    </Match>
+</FindBugsFilter>
