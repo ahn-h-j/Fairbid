@@ -300,7 +300,7 @@ export default function MyPage() {
           )}
         </div>
 
-        {isEditingAddress ? (
+        {isEditingAddress && (
           <div className="space-y-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">수령인</label>
@@ -390,7 +390,8 @@ export default function MyPage() {
               </button>
             </div>
           </div>
-        ) : profile?.shippingAddress ? (
+        )}
+        {!isEditingAddress && profile?.shippingAddress && (
           <div className="text-sm text-gray-700 space-y-1">
             <p className="font-semibold">
               {profile.shippingAddress.recipientName} ({profile.shippingAddress.recipientPhone})
@@ -403,7 +404,8 @@ export default function MyPage() {
               <p>{profile.shippingAddress.addressDetail}</p>
             )}
           </div>
-        ) : (
+        )}
+        {!isEditingAddress && !profile?.shippingAddress && (
           <p className="text-sm text-gray-400">등록된 배송지가 없습니다.</p>
         )}
       </section>
@@ -423,7 +425,7 @@ export default function MyPage() {
           )}
         </div>
 
-        {isEditingBank ? (
+        {isEditingBank && (
           <div className="space-y-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">은행명</label>
@@ -481,13 +483,15 @@ export default function MyPage() {
               </button>
             </div>
           </div>
-        ) : profile?.bankAccount ? (
+        )}
+        {!isEditingBank && profile?.bankAccount && (
           <div className="text-sm text-gray-700 space-y-1">
             <p className="font-semibold">{profile.bankAccount.bankName}</p>
             <p>{profile.bankAccount.accountNumber}</p>
             <p className="text-gray-500">{profile.bankAccount.accountHolder}</p>
           </div>
-        ) : (
+        )}
+        {!isEditingBank && !profile?.bankAccount && (
           <p className="text-sm text-gray-400">
             등록된 계좌가 없습니다. 판매 시 구매자에게 계좌를 알려주려면 등록해주세요.
           </p>

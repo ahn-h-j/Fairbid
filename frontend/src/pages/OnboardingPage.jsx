@@ -54,7 +54,7 @@ export default function OnboardingPage() {
 
   /** 닉네임 입력 핸들러 */
   const handleNicknameChange = (e) => {
-    const value = e.target.value;
+    const {value} = e.target;
     setNickname(value);
     setErrors((prev) => ({ ...prev, nickname: undefined }));
 
@@ -108,7 +108,7 @@ export default function OnboardingPage() {
         method: 'POST',
         body: JSON.stringify({
           nickname: nickname.trim(),
-          phoneNumber: phoneNumber,
+          phoneNumber,
         }),
       });
 

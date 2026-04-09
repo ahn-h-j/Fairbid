@@ -70,7 +70,7 @@ export default function AuctionManagePage() {
 
   // 노쇼 강제 처리
   const handleForceNoShow = async (auctionId) => {
-    if (!confirm(`경매 #${auctionId}의 1순위 낙찰자를 노쇼 처리하시겠습니까?`)) return;
+    if (!window.confirm(`경매 #${auctionId}의 1순위 낙찰자를 노쇼 처리하시겠습니까?`)) return;
 
     setNoShowLoading(auctionId);
     setNoShowResult(null);
@@ -190,13 +190,15 @@ export default function AuctionManagePage() {
 
       {/* 모바일: 카드 리스트 */}
       <div className="sm:hidden space-y-3">
-        {loading ? (
+        {loading && (
           <div className="py-12 text-center">
             <LoadingSpinner />
           </div>
-        ) : auctions.length === 0 ? (
+        )}
+        {!loading && auctions.length === 0 && (
           <div className="py-12 text-center text-gray-400 text-sm">경매가 없습니다</div>
-        ) : (
+        )}
+        {!loading && auctions.length > 0 && (
           auctions.map((auction) => (
             <div
               key={auction.id}
@@ -282,23 +284,25 @@ export default function AuctionManagePage() {
                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase whitespace-nowrap w-20">
                   상태
                 </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase whitespace-nowrap w-20"></th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase whitespace-nowrap w-20" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading ? (
+              {loading && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center">
                     <LoadingSpinner />
                   </td>
                 </tr>
-              ) : auctions.length === 0 ? (
+              )}
+              {!loading && auctions.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400 text-sm">
                     경매가 없습니다
                   </td>
                 </tr>
-              ) : (
+              )}
+              {!loading && auctions.length > 0 && (
                 auctions.map((auction) => (
                   <tr key={auction.id} className="hover:bg-gray-50">
                     <td className="px-3 py-3 text-sm text-gray-500">{auction.id}</td>
@@ -410,7 +414,7 @@ function WinningStatusDisplay({ data, isNoShow }) {
     CANCELLED: '취소',
   };
 
-  const formatPrice = (price) => price?.toLocaleString() + '원';
+  const formatPrice = (price) => `${price?.toLocaleString()  }원`;
 
   return (
     <div className="space-y-4">
@@ -518,11 +522,11 @@ function WinningStatusDisplay({ data, isNoShow }) {
             <div>
               <span className="text-gray-500">방식:</span>{' '}
               <span className="font-medium">
-                {data.trade.method === 'DIRECT'
-                  ? '직거래'
-                  : data.trade.method === 'DELIVERY'
-                    ? '택배'
-                    : data.trade.method || '미정'}
+                {(() => {
+                  if (data.trade.method === 'DIRECT') return '직거래';
+                  if (data.trade.method === 'DELIVERY') return '택배';
+                  return data.trade.method || '미정';
+                })()}
               </span>
             </div>
           </div>

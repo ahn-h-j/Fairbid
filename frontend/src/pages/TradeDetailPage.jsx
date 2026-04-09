@@ -298,12 +298,11 @@ function DirectTradeUI({ trade, isSeller, onAction, submitting }) {
 
   // 제안이 있음 - isSeller로 내 제안인지 판단
   const isMyProposal = isSeller === (directInfo.proposedBy === trade.sellerId);
-  const statusText =
-    directInfo.status === 'PROPOSED'
-      ? '제안됨'
-      : directInfo.status === 'COUNTER_PROPOSED'
-        ? '역제안됨'
-        : '수락됨';
+  const statusText = (() => {
+    if (directInfo.status === 'PROPOSED') return '제안됨';
+    if (directInfo.status === 'COUNTER_PROPOSED') return '역제안됨';
+    return '수락됨';
+  })();
 
   return (
     <div className="bg-white rounded-2xl p-5 ring-1 ring-black/[0.04] space-y-4">
@@ -403,7 +402,7 @@ function DirectTradeUI({ trade, isSeller, onAction, submitting }) {
 
 // 택배 UI
 function DeliveryUI({ trade, isSeller, onAction, submitting }) {
-  const deliveryInfo = trade.deliveryInfo;
+  const {deliveryInfo} = trade;
   const [savedAddress, setSavedAddress] = useState(null);
   const [useSavedAddress, setUseSavedAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({
@@ -648,23 +647,23 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
             </div>
           )}
 
-          {deliveryInfo.paymentConfirmed ? (
-            deliveryInfo.paymentVerified ? (
-              <div className="bg-green-50 rounded-xl p-4 text-center">
-                <p className="text-[14px] font-semibold text-green-700">입금 확인 완료</p>
-                <p className="text-[12px] text-green-600 mt-1">
-                  판매자가 입금을 확인했습니다. 곧 발송될 예정입니다.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-yellow-50 rounded-xl p-4 text-center">
-                <p className="text-[14px] font-semibold text-yellow-700">입금 완료 처리됨</p>
-                <p className="text-[12px] text-yellow-600 mt-1">
-                  판매자의 입금 확인을 기다리는 중...
-                </p>
-              </div>
-            )
-          ) : (
+          {deliveryInfo.paymentConfirmed && deliveryInfo.paymentVerified && (
+            <div className="bg-green-50 rounded-xl p-4 text-center">
+              <p className="text-[14px] font-semibold text-green-700">입금 확인 완료</p>
+              <p className="text-[12px] text-green-600 mt-1">
+                판매자가 입금을 확인했습니다. 곧 발송될 예정입니다.
+              </p>
+            </div>
+          )}
+          {deliveryInfo.paymentConfirmed && !deliveryInfo.paymentVerified && (
+            <div className="bg-yellow-50 rounded-xl p-4 text-center">
+              <p className="text-[14px] font-semibold text-yellow-700">입금 완료 처리됨</p>
+              <p className="text-[12px] text-yellow-600 mt-1">
+                판매자의 입금 확인을 기다리는 중...
+              </p>
+            </div>
+          )}
+          {!deliveryInfo.paymentConfirmed && (
             <button
               onClick={() => onAction(() => confirmPayment(trade.id))}
               disabled={submitting || !bankAccount}
@@ -752,8 +751,8 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
             <p className="text-[13px] text-gray-600">📞 {deliveryInfo.recipientPhone}</p>
           </div>
 
-          {deliveryInfo.paymentConfirmed && deliveryInfo.paymentVerified ? (
-            /* 입금 확인 완료 → 송장 입력 가능 */
+          {/* 입금 확인 완료 → 송장 입력 가능 */}
+          {deliveryInfo.paymentConfirmed && deliveryInfo.paymentVerified && (
             <>
               <div className="bg-green-50 rounded-xl p-3">
                 <p className="text-[13px] font-semibold text-green-700">
@@ -791,8 +790,9 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
                 {submitting ? '등록 중...' : '발송 완료'}
               </button>
             </>
-          ) : deliveryInfo.paymentConfirmed && !deliveryInfo.paymentVerified ? (
-            /* 구매자가 입금 완료 알림 → 판매자가 확인/거절 선택 */
+          )}
+          {/* 구매자가 입금 완료 알림 → 판매자가 확인/거절 선택 */}
+          {deliveryInfo.paymentConfirmed && !deliveryInfo.paymentVerified && (
             <>
               <div className="bg-blue-50 rounded-xl p-4">
                 <p className="text-[14px] font-semibold text-blue-800">
@@ -819,8 +819,9 @@ function DeliveryUI({ trade, isSeller, onAction, submitting }) {
                 </button>
               </div>
             </>
-          ) : (
-            /* 아직 구매자가 입금 완료를 누르지 않음 */
+          )}
+          {/* 아직 구매자가 입금 완료를 누르지 않음 */}
+          {!deliveryInfo.paymentConfirmed && (
             <div className="bg-yellow-50 rounded-xl p-4">
               <p className="text-[14px] text-yellow-800">구매자의 입금을 기다리는 중입니다.</p>
               <p className="text-[13px] text-yellow-600 mt-1">

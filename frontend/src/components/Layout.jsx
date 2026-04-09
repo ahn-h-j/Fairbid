@@ -144,19 +144,21 @@ export default function Layout() {
               {/* 인증 영역: 모바일/PC 모두 표시 */}
               {!isOnboardingRequired && (
                 <div className="flex items-center gap-2 sm:border-l sm:border-gray-200/60 sm:pl-3 sm:ml-2">
-                  {authState === AUTH_STATE.LOADING ? (
-                    /* 로딩 중에는 빈 공간 (깜빡임 방지) */
+                  {/* 로딩 중에는 빈 공간 (깜빡임 방지) */}
+                  {authState === AUTH_STATE.LOADING && (
                     <div className="w-8 h-8" />
-                  ) : isLoggedIn ? (
-                    /* 로그인 상태: 알림 (+ PC에서만 닉네임 드롭다운) */
+                  )}
+                  {/* 로그인 상태: 알림 (+ PC에서만 닉네임 드롭다운) */}
+                  {authState !== AUTH_STATE.LOADING && isLoggedIn && (
                     <>
                       <NotificationDropdown />
                       <div className="hidden sm:block">
                         <UserDropdown />
                       </div>
                     </>
-                  ) : (
-                    /* 비로그인 상태: 로그인 버튼 (PC에서만) */
+                  )}
+                  {/* 비로그인 상태: 로그인 버튼 (PC에서만) */}
+                  {authState !== AUTH_STATE.LOADING && !isLoggedIn && (
                     <Link
                       to="/login"
                       state={{ from: location.pathname + location.search + location.hash }}

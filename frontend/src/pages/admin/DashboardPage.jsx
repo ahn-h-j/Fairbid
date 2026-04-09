@@ -151,15 +151,17 @@ export default function DashboardPage() {
         {/* 일별 경매 현황 차트 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm ring-1 ring-gray-100">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">일별 경매 현황</h3>
-          {loading ? (
+          {loading && (
             <div className="h-64 flex items-center justify-center">
               <LoadingSpinner />
             </div>
-          ) : dailyChartData.length === 0 ? (
+          )}
+          {!loading && dailyChartData.length === 0 && (
             <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
               데이터가 없습니다
             </div>
-          ) : (
+          )}
+          {!loading && dailyChartData.length > 0 && (
             <ResponsiveContainer width="100%" height={256}>
               <LineChart data={dailyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -218,15 +220,17 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          {loading ? (
+          {loading && (
             <div className="h-64 flex items-center justify-center">
               <LoadingSpinner />
             </div>
-          ) : hourlyChartData.length === 0 ? (
+          )}
+          {!loading && hourlyChartData.length === 0 && (
             <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
               데이터가 없습니다
             </div>
-          ) : (
+          )}
+          {!loading && hourlyChartData.length > 0 && (
             <ResponsiveContainer width="100%" height={256}>
               <BarChart data={hourlyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />

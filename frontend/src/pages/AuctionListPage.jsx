@@ -157,11 +157,12 @@ export default function AuctionListPage() {
       </div>
 
       {/* 콘텐츠 */}
-      {isLoading ? (
+      {isLoading && (
         <div className="flex justify-center py-24">
           <Spinner size="lg" />
         </div>
-      ) : error ? (
+      )}
+      {!isLoading && error && (
         <div className="text-center py-24 animate-fade-in">
           <div className="w-16 h-16 mx-auto mb-4 bg-red-50 rounded-2xl flex items-center justify-center">
             <svg
@@ -182,7 +183,8 @@ export default function AuctionListPage() {
           <p className="text-gray-700 font-semibold text-[15px]">경매 목록을 불러올 수 없습니다</p>
           <p className="text-sm text-gray-400 mt-1.5">{error.message}</p>
         </div>
-      ) : auctions.length === 0 ? (
+      )}
+      {!isLoading && !error && auctions.length === 0 && (
         <div className="text-center py-24 animate-fade-in">
           <div className="w-20 h-20 mx-auto mb-4 bg-gray-50 rounded-3xl flex items-center justify-center">
             <svg
@@ -203,7 +205,8 @@ export default function AuctionListPage() {
           <p className="text-gray-600 font-semibold text-[15px]">등록된 경매가 없습니다</p>
           <p className="text-sm text-gray-400 mt-1.5">새로운 경매를 등록해보세요</p>
         </div>
-      ) : (
+      )}
+      {!isLoading && !error && auctions.length > 0 && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {auctions.map((auction) => (

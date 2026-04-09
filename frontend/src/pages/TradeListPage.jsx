@@ -260,11 +260,12 @@ export default function TradeListPage() {
 
         {/* 콘텐츠 */}
         <div className="divide-y divide-gray-50">
-          {isLoading || tradesLoading ? (
+          {(isLoading || tradesLoading) && (
             <div className="flex justify-center py-12">
               <Spinner />
             </div>
-          ) : items.length === 0 ? (
+          )}
+          {!isLoading && !tradesLoading && items.length === 0 && (
             <div className="text-center py-12">
               <div className="text-4xl mb-3">{activeTab === 'buy' ? '🛒' : '📦'}</div>
               <p className="text-gray-500 text-[14px]">
@@ -277,7 +278,8 @@ export default function TradeListPage() {
                 {activeTab === 'buy' ? '경매 둘러보기' : '경매 등록하기'}
               </Link>
             </div>
-          ) : (
+          )}
+          {!isLoading && !tradesLoading && items.length > 0 && (
             items.map((item) => {
               const auctionId = item.id || item.auctionId;
               const trade = findTradeForAuction(auctionId);

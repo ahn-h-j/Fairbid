@@ -106,15 +106,16 @@ export default function Timer({ endTime, compact = false }) {
           textClass={colors.text}
         />
       </div>
-      {timerState === 'warning' ? (
+      {timerState === 'warning' && (
         <span className="text-[11px] text-orange-500 font-semibold bg-orange-50 px-2.5 py-0.5 rounded-full">
           곧 종료됩니다
         </span>
-      ) : timerState === 'danger' ? (
+      )}
+      {timerState === 'danger' && (
         <span className="text-[11px] text-red-600 font-bold bg-red-50 px-2.5 py-0.5 rounded-full">
           마감 임박!
         </span>
-      ) : null}
+      )}
     </div>
   );
 }

@@ -88,13 +88,15 @@ export default function UserManagePage() {
 
       {/* 모바일: 카드 리스트 */}
       <div className="sm:hidden space-y-3">
-        {loading ? (
+        {loading && (
           <div className="py-12 text-center">
             <LoadingSpinner />
           </div>
-        ) : users.length === 0 ? (
+        )}
+        {!loading && users.length === 0 && (
           <div className="py-12 text-center text-gray-400 text-sm">유저가 없습니다</div>
-        ) : (
+        )}
+        {!loading && users.length > 0 && (
           users.map((user) => (
             <div key={user.id} className="bg-white rounded-xl p-4 ring-1 ring-gray-100 shadow-sm">
               <div className="flex items-start justify-between gap-3 mb-2">
@@ -161,19 +163,21 @@ export default function UserManagePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading ? (
+              {loading && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center">
                     <LoadingSpinner />
                   </td>
                 </tr>
-              ) : users.length === 0 ? (
+              )}
+              {!loading && users.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-400 text-sm">
                     유저가 없습니다
                   </td>
                 </tr>
-              ) : (
+              )}
+              {!loading && users.length > 0 && (
                 users.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-500">{user.id}</td>
