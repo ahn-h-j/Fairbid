@@ -96,9 +96,7 @@ export default function AuctionCreatePage() {
         description: formData.description.trim() || null,
         category: formData.category,
         startPrice: parseInt(formData.startPrice, 10),
-        instantBuyPrice: formData.instantBuyPrice
-          ? parseInt(formData.instantBuyPrice, 10)
-          : null,
+        instantBuyPrice: formData.instantBuyPrice ? parseInt(formData.instantBuyPrice, 10) : null,
         duration: formData.duration,
         // 거래 방식 설정
         directTradeAvailable: formData.directTradeAvailable,
@@ -124,8 +122,19 @@ export default function AuctionCreatePage() {
       <div className="max-w-md mx-auto animate-scale-pop">
         <div className="bg-white rounded-2xl p-8 ring-1 ring-black/[0.04] shadow-lg shadow-green-500/5 text-center">
           <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">경매가 등록되었습니다!</h2>
@@ -156,7 +165,9 @@ export default function AuctionCreatePage() {
       {/* 페이지 헤더 */}
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">경매 등록</h1>
-        <p className="text-[13px] text-gray-400 mt-0.5">새로운 경매를 등록하고 적정가를 찾아보세요</p>
+        <p className="text-[13px] text-gray-400 mt-0.5">
+          새로운 경매를 등록하고 적정가를 찾아보세요
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -165,7 +176,9 @@ export default function AuctionCreatePage() {
 
         {/* 상품 이미지 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
-          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">상품 이미지</h2>
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">
+            상품 이미지
+          </h2>
           <ImageUpload
             images={formData.imageUrls}
             onChange={handleImagesChange}
@@ -176,7 +189,9 @@ export default function AuctionCreatePage() {
 
         {/* 기본 정보 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
-          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">기본 정보</h2>
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">
+            기본 정보
+          </h2>
 
           {/* 제목 */}
           <div>
@@ -198,7 +213,10 @@ export default function AuctionCreatePage() {
 
           {/* 설명 */}
           <div>
-            <label htmlFor="description" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+            <label
+              htmlFor="description"
+              className="block text-[13px] font-semibold text-gray-700 mb-1.5"
+            >
               설명
             </label>
             <textarea
@@ -214,7 +232,10 @@ export default function AuctionCreatePage() {
 
           {/* 카테고리 */}
           <div>
-            <label htmlFor="category" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+            <label
+              htmlFor="category"
+              className="block text-[13px] font-semibold text-gray-700 mb-1.5"
+            >
               카테고리 <span className="text-red-400 font-normal">*</span>
             </label>
             <select
@@ -224,11 +245,20 @@ export default function AuctionCreatePage() {
               onChange={handleChange}
               className="w-full px-4 py-3 bg-gray-50 border-0 rounded-xl text-sm text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors duration-200 cursor-pointer appearance-none"
               required
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`, backgroundPosition: 'right 12px center', backgroundSize: '16px', backgroundRepeat: 'no-repeat' }}
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+                backgroundPosition: 'right 12px center',
+                backgroundSize: '16px',
+                backgroundRepeat: 'no-repeat',
+              }}
             >
-              <option value="" disabled>카테고리를 선택하세요</option>
+              <option value="" disabled>
+                카테고리를 선택하세요
+              </option>
               {Object.entries(CATEGORIES).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
+                <option key={key} value={key}>
+                  {label}
+                </option>
               ))}
             </select>
           </div>
@@ -236,12 +266,17 @@ export default function AuctionCreatePage() {
 
         {/* 가격 설정 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
-          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">가격 설정</h2>
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">
+            가격 설정
+          </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* 시작 가격 */}
             <div>
-              <label htmlFor="startPrice" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+              <label
+                htmlFor="startPrice"
+                className="block text-[13px] font-semibold text-gray-700 mb-1.5"
+              >
                 시작 가격 <span className="text-red-400 font-normal">*</span>
               </label>
               <div className="relative">
@@ -256,13 +291,18 @@ export default function AuctionCreatePage() {
                   required
                   inputMode="numeric"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">원</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">
+                  원
+                </span>
               </div>
             </div>
 
             {/* 즉시 구매가 */}
             <div>
-              <label htmlFor="instantBuyPrice" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+              <label
+                htmlFor="instantBuyPrice"
+                className="block text-[13px] font-semibold text-gray-700 mb-1.5"
+              >
                 즉시 구매가 <span className="text-gray-400 font-normal text-[11px]">(선택)</span>
               </label>
               <div className="relative">
@@ -276,7 +316,9 @@ export default function AuctionCreatePage() {
                   className="w-full pl-4 pr-10 py-3 bg-gray-50 border-0 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 input-glow transition-colors duration-200"
                   inputMode="numeric"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">원</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">
+                  원
+                </span>
               </div>
               <p className="text-[11px] text-gray-400 mt-1.5 ml-1">시작 가격보다 높게 설정하세요</p>
             </div>
@@ -285,7 +327,9 @@ export default function AuctionCreatePage() {
 
         {/* 경매 기간 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
-          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">경매 기간</h2>
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">
+            경매 기간
+          </h2>
 
           <div className="grid grid-cols-2 gap-3">
             {DURATIONS.map(({ value, label }) => (
@@ -313,14 +357,22 @@ export default function AuctionCreatePage() {
 
         {/* 거래 방식 섹션 */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-black/[0.04] space-y-4">
-          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">거래 방식</h2>
-          <p className="text-[12px] text-gray-400 -mt-2">최소 1개 이상의 거래 방식을 선택해주세요</p>
+          <h2 className="text-[13px] font-bold text-gray-500 uppercase tracking-wider">
+            거래 방식
+          </h2>
+          <p className="text-[12px] text-gray-400 -mt-2">
+            최소 1개 이상의 거래 방식을 선택해주세요
+          </p>
 
           <div className="space-y-3">
             {/* 직거래 옵션 */}
-            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors duration-200 ${
-              formData.directTradeAvailable ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
-            }`}>
+            <label
+              className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors duration-200 ${
+                formData.directTradeAvailable
+                  ? 'bg-blue-50 ring-1 ring-blue-200'
+                  : 'bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
               <input
                 type="checkbox"
                 name="directTradeAvailable"
@@ -337,7 +389,10 @@ export default function AuctionCreatePage() {
             {/* 직거래 위치 입력 (직거래 선택 시만 표시) */}
             {formData.directTradeAvailable && (
               <div className="ml-8 animate-fade-in">
-                <label htmlFor="directTradeLocation" className="block text-[13px] font-semibold text-gray-700 mb-1.5">
+                <label
+                  htmlFor="directTradeLocation"
+                  className="block text-[13px] font-semibold text-gray-700 mb-1.5"
+                >
                   희망 거래 위치 <span className="text-red-400 font-normal">*</span>
                 </label>
                 <input
@@ -349,14 +404,20 @@ export default function AuctionCreatePage() {
                   placeholder="예: 강남역 2번 출구, 홍대입구역 등"
                   className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-300 transition-colors duration-200"
                 />
-                <p className="text-[11px] text-gray-400 mt-1.5 ml-1">구매자에게 표시될 거래 희망 장소입니다</p>
+                <p className="text-[11px] text-gray-400 mt-1.5 ml-1">
+                  구매자에게 표시될 거래 희망 장소입니다
+                </p>
               </div>
             )}
 
             {/* 택배 옵션 */}
-            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors duration-200 ${
-              formData.deliveryAvailable ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
-            }`}>
+            <label
+              className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors duration-200 ${
+                formData.deliveryAvailable
+                  ? 'bg-blue-50 ring-1 ring-blue-200'
+                  : 'bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
               <input
                 type="checkbox"
                 name="deliveryAvailable"
@@ -385,8 +446,19 @@ export default function AuctionCreatePage() {
             </>
           ) : (
             <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
               경매 등록하기
             </>

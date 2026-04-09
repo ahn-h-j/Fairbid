@@ -59,18 +59,20 @@ export default function DashboardPage() {
   }, [days]);
 
   // 일별 차트 데이터 포맷팅
-  const dailyChartData = dailyStats?.dailyStats?.map((item) => ({
-    date: formatDate(item.date),
-    신규경매: item.newAuctions,
-    낙찰완료: item.completedAuctions,
-    입찰수: item.bids,
-  })) || [];
+  const dailyChartData =
+    dailyStats?.dailyStats?.map((item) => ({
+      date: formatDate(item.date),
+      신규경매: item.newAuctions,
+      낙찰완료: item.completedAuctions,
+      입찰수: item.bids,
+    })) || [];
 
   // 시간대별 차트 데이터 포맷팅
-  const hourlyChartData = timePattern?.hourlyBidCounts?.map((item) => ({
-    hour: `${item.hour}시`,
-    입찰수: item.count,
-  })) || [];
+  const hourlyChartData =
+    timePattern?.hourlyBidCounts?.map((item) => ({
+      hour: `${item.hour}시`,
+      입찰수: item.count,
+    })) || [];
 
   return (
     <div className="space-y-6">
@@ -114,31 +116,31 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="총 경매 수"
-          value={loading ? '-' : overview?.totalAuctions ?? 0}
+          value={loading ? '-' : (overview?.totalAuctions ?? 0)}
           unit="건"
           loading={loading}
         />
         <StatCard
           label="낙찰률"
-          value={loading ? '-' : overview?.completedRate ?? 0}
+          value={loading ? '-' : (overview?.completedRate ?? 0)}
           unit="%"
           loading={loading}
         />
         <StatCard
           label="평균 경쟁률"
-          value={loading ? '-' : overview?.avgBidCount ?? 0}
+          value={loading ? '-' : (overview?.avgBidCount ?? 0)}
           unit="명"
           loading={loading}
         />
         <StatCard
           label="평균 상승률"
-          value={loading ? '-' : overview?.avgPriceIncreaseRate ?? 0}
+          value={loading ? '-' : (overview?.avgPriceIncreaseRate ?? 0)}
           unit="%"
           loading={loading}
         />
         <StatCard
           label="연장 발생률"
-          value={loading ? '-' : overview?.extensionRate ?? 0}
+          value={loading ? '-' : (overview?.extensionRate ?? 0)}
           unit="%"
           loading={loading}
         />
@@ -167,11 +169,7 @@ export default function DashboardPage() {
                   tickLine={false}
                   axisLine={{ stroke: '#e5e7eb' }}
                 />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
@@ -239,11 +237,7 @@ export default function DashboardPage() {
                   axisLine={{ stroke: '#e5e7eb' }}
                   interval={2}
                 />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
@@ -252,12 +246,7 @@ export default function DashboardPage() {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   }}
                 />
-                <Bar
-                  dataKey="입찰수"
-                  fill="#6366f1"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={24}
-                />
+                <Bar dataKey="입찰수" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
           )}

@@ -34,4 +34,3 @@ export async function placeBid(auctionId, bidData) {
     body: JSON.stringify(bidData),
   });
 }
-

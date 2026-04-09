@@ -81,7 +81,9 @@ function AuctionStatusBadge({ status, winnerRank, winningStatus }) {
   const config = statusConfig[status] || { text: status, color: 'bg-gray-100 text-gray-500' };
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.color}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.color}`}
+    >
       {config.text}
     </span>
   );
@@ -102,7 +104,9 @@ function TradeStatusBadge({ status }) {
   const config = statusConfig[status] || { text: status, color: 'bg-gray-100 text-gray-500' };
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.color}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.color}`}
+    >
       {config.text}
     </span>
   );
@@ -121,11 +125,7 @@ function TradeMethodBadge({ method }) {
 
   const config = methodConfig[method] || { text: method, color: 'text-gray-500' };
 
-  return (
-    <span className={`text-[11px] font-medium ${config.color}`}>
-      {config.text}
-    </span>
-  );
+  return <span className={`text-[11px] font-medium ${config.color}`}>{config.text}</span>;
 }
 
 /**
@@ -196,7 +196,7 @@ export default function TradeListPage() {
           currentLoadMore();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     if (loadMoreRef.current) {
@@ -299,7 +299,11 @@ export default function TradeListPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <AuctionStatusBadge status={item.status} winnerRank={item.winnerRank} winningStatus={item.winningStatus} />
+                      <AuctionStatusBadge
+                        status={item.status}
+                        winnerRank={item.winnerRank}
+                        winningStatus={item.winningStatus}
+                      />
                       {trade && (
                         <>
                           <TradeStatusBadge status={trade.status} />
@@ -321,8 +325,18 @@ export default function TradeListPage() {
                     </p>
                   </div>
                   <div className="flex-shrink-0 ml-3">
-                    <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-5 h-5 text-gray-300"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </div>
                 </button>
