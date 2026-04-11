@@ -173,6 +173,69 @@ class DiscordReporter:
         }
         return self._post({"embeds": [embed]})
 
+    # === 주간 evolver 리포트 ===
+
+    def send_evolve_report(self, report) -> bool:
+        """주간 모니터링 정책 리뷰 리포트 (EvolveReport 객체)."""
+        if not self.webhook_url:
+            logger.warning("DISCORD_WEBHOOK_URL not configured — skip send")
+            return False
+
+        # 메트릭별 findings
+        findings_lines = []
+        for f in report.findings[:5]:
+            findings_lines.append(f"**{f.label or f.metric}**")
+            if f.observation:
+                findings_lines.append(f"▸ 관찰 · {f.observation}")
+            if f.interpretation:
+                findings_lines.append(f"▸ 해석 · {f.interpretation}")
+            if f.recommendation:
+                findings_lines.append(f"▸ 💡 제안 · {f.recommendation}")
+            findings_lines.append("")
+        findings_text = "\n".join(findings_lines).strip() or "(조정 제안 없음)"
+
+        stats_lines = [
+            f"• 기간 · `{report.period_start} ~ {report.period_end}` ({report.period_days}일)",
+            f"• 총 알람 건수 · `{report.total_alerts}건`",
+        ]
+        if report.noisiest_metric:
+            stats_lines.append(f"• 가장 시끄러운 메트릭 · `{report.noisiest_metric}`")
+        if report.most_stable_metric:
+            stats_lines.append(f"• 가장 안정적 메트릭 · `{report.most_stable_metric}`")
+        stats_text = "\n".join(stats_lines)
+
+        fields = [
+            {"name": "📊 주간 통계", "value": stats_text[:1024], "inline": False},
+            {"name": "🔍 메트릭별 분석 및 제안", "value": findings_text[:1024], "inline": False},
+        ]
+        if report.cooldown_tuning:
+            fields.append({
+                "name": "⏱ 쿨다운 튜닝",
+                "value": report.cooldown_tuning[:1024],
+                "inline": False,
+            })
+        if report.summary:
+            fields.append({
+                "name": "📝 총평",
+                "value": report.summary[:1024],
+                "inline": False,
+            })
+        if report.raw_text:
+            fields.append({
+                "name": "⚠️ 파싱 실패 — 원문",
+                "value": f"```\n{report.raw_text[:900]}\n```",
+                "inline": False,
+            })
+
+        embed = {
+            "title": f"🧪 [주간 모니터링 리뷰] {report.headline or '정책 조정 제안'}",
+            "description": "자동 적용되지 않습니다. 검토 후 `monitoring/ai-monitor/config.yaml`을 수동 수정하세요.",
+            "color": COLOR_INFO,
+            "timestamp": datetime.utcnow().isoformat(),
+            "fields": fields,
+        }
+        return self._post({"embeds": [embed]})
+
     # === 일일 요약 ===
 
     def send_daily_summary(self, summary_text: str, anomaly_count: int) -> bool:

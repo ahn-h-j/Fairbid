@@ -28,6 +28,14 @@ class MetricDef:
 
 
 @dataclass
+class EvolveConfig:
+    enabled: bool = True
+    day: str = "monday"       # monday/tuesday/.../sunday
+    time: str = "09:00"       # 로컬 타임존 (컨테이너 TZ 기준)
+    lookback_days: int = 7
+
+
+@dataclass
 class RuntimeConfig:
     check_interval_seconds: int = 30
     daily_summary_time: str = "09:00"
@@ -37,6 +45,7 @@ class RuntimeConfig:
     )
     escalation_threshold: float = 0.20
     send_recovery_notice: bool = True
+    evolve: EvolveConfig = field(default_factory=EvolveConfig)
     claude_model: str = "claude-sonnet-4-5-20250929"
     prometheus_timeout_seconds: int = 10
 
@@ -68,7 +77,10 @@ def load_settings(config_path: str | Path | None = None) -> Settings:
     with config_path.open(encoding="utf-8") as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
-    runtime = RuntimeConfig(**raw.get("runtime", {}))
+    runtime_raw = dict(raw.get("runtime", {}))
+    if "evolve" in runtime_raw and isinstance(runtime_raw["evolve"], dict):
+        runtime_raw["evolve"] = EvolveConfig(**runtime_raw["evolve"])
+    runtime = RuntimeConfig(**runtime_raw)
     metrics = [MetricDef(**m) for m in raw.get("metrics", [])]
     labels = raw.get("labels", {})
 

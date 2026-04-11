@@ -16,6 +16,13 @@ runtime:
   escalation_threshold: 0.20
   # 위반이 사라졌을 때 "해소" 알람을 보낼지 여부
   send_recovery_notice: true
+  # 주간 모니터링 정책 리뷰 (evolver)
+  # 매주 설정된 요일/시각에 지난 N일 이력 집계 → Claude → 조정 제안 Discord 발송
+  evolve:
+    enabled: true
+    day: "monday"          # monday/tuesday/.../sunday
+    time: "09:00"          # 로컬 타임존 (컨테이너 TZ=Asia/Seoul)
+    lookback_days: 7
   claude_model: "claude-sonnet-4-5-20250929"
   prometheus_timeout_seconds: 10
 

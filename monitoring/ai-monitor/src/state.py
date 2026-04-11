@@ -50,6 +50,23 @@ class StateStore:
                 anomaly_count     INTEGER NOT NULL DEFAULT 0,
                 last_summary_sent INTEGER NOT NULL DEFAULT 0
             );
+            -- 주간 evolver가 읽어가는 전체 발송 이력 (4가지 kind)
+            CREATE TABLE IF NOT EXISTS alert_history (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_key   TEXT NOT NULL,
+                severity   TEXT NOT NULL,
+                kind       TEXT NOT NULL,
+                value      REAL,
+                threshold  REAL,
+                fired_at   INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_history_time ON alert_history(fired_at);
+            CREATE INDEX IF NOT EXISTS idx_history_rule ON alert_history(rule_key);
+            -- 주간 evolver 중복 발송 방지용
+            CREATE TABLE IF NOT EXISTS evolve_runs (
+                run_date TEXT PRIMARY KEY,
+                sent_at  INTEGER NOT NULL
+            );
             """
         )
         self.conn.commit()
@@ -86,6 +103,128 @@ class StateStore:
     def clear_alert(self, rule_key: str) -> None:
         """위반 해소 시 활성 알람 목록에서 제거."""
         self.conn.execute("DELETE FROM active_alerts WHERE rule_key = ?", (rule_key,))
+        self.conn.commit()
+
+    # === 알람 이력 (주간 evolver용) ===
+
+    def record_history(
+        self,
+        rule_key: str,
+        severity: str,
+        kind: str,
+        value: float | None,
+        threshold: float | None,
+    ) -> None:
+        """모든 알람 발송(신규/악화/지속/해소)을 이력에 기록.
+
+        kind: new | escalation | persistence | recovery
+        """
+        self.conn.execute(
+            """
+            INSERT INTO alert_history(rule_key, severity, kind, value, threshold, fired_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (rule_key, severity, kind, value, threshold, int(time.time())),
+        )
+        self.conn.commit()
+
+    def aggregate_last_days(self, days: int) -> dict:
+        """지난 N일 이력을 집계하여 evolver에 전달할 dict를 반환."""
+        since_ts = int(time.time()) - days * 86400
+
+        cur = self.conn.execute(
+            """
+            SELECT rule_key, severity, kind, COUNT(*), MIN(value), MAX(value)
+            FROM alert_history
+            WHERE fired_at >= ?
+            GROUP BY rule_key, severity, kind
+            """,
+            (since_ts,),
+        )
+
+        metric_map: dict[str, dict] = {}
+        total = 0
+        for rule_key, severity, kind, count, vmin, vmax in cur.fetchall():
+            total += count
+            entry = metric_map.setdefault(
+                rule_key,
+                {
+                    "rule_key": rule_key,
+                    "severity": severity,
+                    "counts": {"new": 0, "escalation": 0, "persistence": 0, "recovery": 0},
+                    "value_min": None,
+                    "value_max": None,
+                    "avg_duration_minutes": None,
+                },
+            )
+            if kind in entry["counts"]:
+                entry["counts"][kind] = count
+            if vmin is not None:
+                cur_min = entry["value_min"]
+                entry["value_min"] = vmin if cur_min is None else min(cur_min, vmin)
+            if vmax is not None:
+                cur_max = entry["value_max"]
+                entry["value_max"] = vmax if cur_max is None else max(cur_max, vmax)
+
+        for rule_key, entry in metric_map.items():
+            entry["avg_duration_minutes"] = self._avg_alert_duration(rule_key, since_ts)
+
+        from datetime import datetime, timezone
+        return {
+            "period_days": days,
+            "period_start": datetime.fromtimestamp(since_ts, tz=timezone.utc).date().isoformat(),
+            "period_end": datetime.now(tz=timezone.utc).date().isoformat(),
+            "total_alerts": total,
+            "by_metric": list(metric_map.values()),
+        }
+
+    def _avg_alert_duration(self, rule_key: str, since_ts: int) -> float | None:
+        """특정 메트릭의 new → recovery 평균 지속 시간(분).
+
+        같은 rule_key에 대해 new와 recovery가 번갈아 발생한다고 가정하고
+        시간순으로 짝지어 지속 시간을 평균낸다. unresolved한 new는 제외.
+        """
+        cur = self.conn.execute(
+            """
+            SELECT kind, fired_at FROM alert_history
+            WHERE rule_key = ? AND fired_at >= ? AND kind IN ('new', 'recovery')
+            ORDER BY fired_at ASC
+            """,
+            (rule_key, since_ts),
+        )
+        rows = cur.fetchall()
+        durations: list[int] = []
+        current_new_at: int | None = None
+        for kind, ts in rows:
+            if kind == "new":
+                current_new_at = ts
+            elif kind == "recovery" and current_new_at is not None:
+                durations.append(ts - current_new_at)
+                current_new_at = None
+        if not durations:
+            return None
+        return round(sum(durations) / len(durations) / 60, 1)
+
+    # === evolver 중복 방지 ===
+
+    def is_evolve_sent_this_week(self) -> bool:
+        """이번 주(월요일 기준)에 이미 evolve 리포트를 발송했는지."""
+        from datetime import date as _date, timedelta
+        today = _date.today()
+        week_start = (today - timedelta(days=today.weekday())).isoformat()
+        cur = self.conn.execute(
+            "SELECT sent_at FROM evolve_runs WHERE run_date = ?", (week_start,)
+        )
+        return cur.fetchone() is not None
+
+    def mark_evolve_sent(self) -> None:
+        from datetime import date as _date, timedelta
+        today = _date.today()
+        week_start = (today - timedelta(days=today.weekday())).isoformat()
+        self.conn.execute(
+            "INSERT OR REPLACE INTO evolve_runs(run_date, sent_at) VALUES (?, ?)",
+            (week_start, int(time.time())),
+        )
         self.conn.commit()
 
     # === 일일 카운터 ===

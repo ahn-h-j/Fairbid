@@ -15,6 +15,7 @@ import schedule
 
 from .analyzer import ClaudeAnalyzer
 from .config import Settings, load_settings
+from .evolver import Evolver
 from .prometheus import PrometheusClient, QueryResult
 from .reporter import DiscordReporter
 from .rules import evaluate
@@ -34,6 +35,7 @@ def main() -> None:
     analyzer = ClaudeAnalyzer(settings)
     reporter = DiscordReporter(settings.discord_webhook_url)
     store = StateStore(settings.state_db_path)
+    evolver = Evolver(settings, store)
 
     def check_anomalies() -> None:
         try:
@@ -47,8 +49,27 @@ def main() -> None:
         except Exception as e:
             logger.exception("send_daily_summary failed: %s", e)
 
+    def run_evolver() -> None:
+        try:
+            _run_evolver(settings, evolver, reporter, store)
+        except Exception as e:
+            logger.exception("evolver run failed: %s", e)
+
     schedule.every(settings.runtime.check_interval_seconds).seconds.do(check_anomalies)
     schedule.every().day.at(settings.runtime.daily_summary_time).do(send_daily_summary)
+
+    # 주간 evolver 등록 — schedule 라이브러리 요일 메서드 사용
+    evolve_cfg = settings.runtime.evolve
+    if evolve_cfg.enabled:
+        day_method = getattr(schedule.every(), evolve_cfg.day.lower(), None)
+        if day_method is None:
+            logger.error("invalid evolve.day: %s — weekly evolver disabled", evolve_cfg.day)
+        else:
+            day_method.at(evolve_cfg.time).do(run_evolver)
+            logger.info(
+                "weekly evolver scheduled: %s %s (lookback %d days)",
+                evolve_cfg.day, evolve_cfg.time, evolve_cfg.lookback_days,
+            )
 
     # 시작 즉시 1회 헬스체크 (Prometheus 연결 확인)
     check_anomalies()
@@ -164,6 +185,9 @@ def _handle_new(violations, results, analyzer, reporter, store) -> None:
         logger.error("anomaly send failed")
     for v in violations:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
+        store.record_history(
+            v.metric.key, v.metric.severity, "new", v.value, v.metric.threshold
+        )
     store.increment_today_anomaly(len(violations))
 
 
@@ -174,9 +198,11 @@ def _handle_escalation(violations, previous, results, analyzer, reporter, store)
         logger.info("escalation report sent")
     else:
         logger.error("escalation send failed")
-    # cooldown 리셋 + 새 값 기록
     for v in violations:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
+        store.record_history(
+            v.metric.key, v.metric.severity, "escalation", v.value, v.metric.threshold
+        )
     store.increment_today_anomaly(len(violations))
 
 
@@ -187,9 +213,11 @@ def _handle_persistence(violations, previous, reporter, store) -> None:
         logger.info("persistence report sent")
     else:
         logger.error("persistence send failed")
-    # cooldown 리셋 (다음 cooldown_minutes 동안 다시 무시)
     for v in violations:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
+        store.record_history(
+            v.metric.key, v.metric.severity, "persistence", v.value, v.metric.threshold
+        )
 
 
 def _handle_recovery(recovered, results, reporter, store, label_map) -> None:
@@ -201,7 +229,34 @@ def _handle_recovery(recovered, results, reporter, store, label_map) -> None:
     else:
         logger.error("recovery send failed")
     for alert in recovered:
+        current_value = current_values.get(alert.rule_key)
+        store.record_history(
+            alert.rule_key, alert.severity, "recovery", current_value, None
+        )
         store.clear_alert(alert.rule_key)
+
+
+def _run_evolver(
+    settings: Settings,
+    evolver: Evolver,
+    reporter: DiscordReporter,
+    store: StateStore,
+) -> None:
+    """주간 모니터링 정책 리뷰. 이번 주 이미 발송했으면 skip."""
+    if store.is_evolve_sent_this_week():
+        logger.info("evolver already sent this week — skip")
+        return
+
+    report = evolver.run(days=settings.runtime.evolve.lookback_days)
+    if report is None:
+        logger.info("no data for evolver — skip")
+        return
+
+    if reporter.send_evolve_report(report):
+        store.mark_evolve_sent()
+        logger.info("evolve report sent")
+    else:
+        logger.error("evolve report send failed")
 
 
 def _send_daily_summary(
