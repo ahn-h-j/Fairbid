@@ -137,12 +137,12 @@ public class ClaudeApiAdapter implements AiClientPort {
                 throw AiGenerationFailedException.of();
             }
             return response;
-        } catch (RestClientResponseException e) {
-            throw mapHttpError(e);
-        } catch (ResourceAccessException e) {
+        } catch (RestClientResponseException ex) {
+            throw mapHttpError(ex);
+        } catch (ResourceAccessException ex) {
             // 타임아웃 / 연결 실패
-            log.warn("Claude API 네트워크 오류: {}", e.getMessage());
-            throw AiServiceUnavailableException.withCause(e);
+            log.warn("Claude API 네트워크 오류: {}", ex.getMessage());
+            throw AiServiceUnavailableException.withCause(ex);
         }
     }
 
@@ -215,9 +215,9 @@ public class ClaudeApiAdapter implements AiClientPort {
         ParsedPayload parsed;
         try {
             parsed = objectMapper.readValue(json, ParsedPayload.class);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             log.warn("Claude 응답 JSON 파싱 실패 - raw: {}", json);
-            throw AiGenerationFailedException.withCause(e);
+            throw AiGenerationFailedException.withCause(ex);
         }
 
         if (parsed == null || parsed.status() == null || parsed.status().isBlank()) {

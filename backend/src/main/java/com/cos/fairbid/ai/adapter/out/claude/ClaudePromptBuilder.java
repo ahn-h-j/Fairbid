@@ -90,6 +90,9 @@ public class ClaudePromptBuilder {
 
         if (command.category() != null) {
             sb.append("- 카테고리: ").append(command.category().name()).append('\n');
+        } else {
+            sb.append("- 카테고리: 미지정 (이미지와 상품 정보를 보고 추론하세요. ")
+                .append("ELECTRONICS / FASHION / HOME / SPORTS / HOBBY / OTHER 중 하나)\n");
         }
 
         if (command.memo() != null && !command.memo().isBlank()) {
