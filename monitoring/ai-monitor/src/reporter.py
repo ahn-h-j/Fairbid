@@ -132,13 +132,23 @@ class DiscordReporter:
     # === 4. 해소 알람 (Claude 호출 없음) ===
 
     def send_recovery(
-        self, recovered: list[ActiveAlert], current_results: dict
+        self,
+        recovered: list[ActiveAlert],
+        current_results: dict,
+        label_map: dict[str, str] | None = None,
     ) -> bool:
-        """이전엔 위반이었는데 현재 정상. 메트릭 키 → 현재 값 매핑."""
+        """이전엔 위반이었는데 현재 정상.
+
+        Args:
+            recovered: 해소된 알람 목록
+            current_results: 메트릭 키 → 현재 값
+            label_map: 메트릭 키 → 사용자 친화적 라벨 (없으면 key 그대로 사용)
+        """
         if not self.webhook_url:
             logger.warning("DISCORD_WEBHOOK_URL not configured — skip send")
             return False
 
+        label_map = label_map or {}
         now_ts = int(datetime.utcnow().timestamp())
         lines = []
         for alert in recovered:
@@ -147,8 +157,9 @@ class DiscordReporter:
                 f"{current_val:.4g}" if current_val is not None else "n/a"
             )
             duration_min = (now_ts - alert.fired_at) // 60
+            display_label = label_map.get(alert.rule_key, alert.rule_key)
             lines.append(
-                f"`{alert.severity.upper():<8}` **{alert.rule_key}**\n"
+                f"`{alert.severity.upper():<8}` **{display_label}**\n"
                 f"     └ 정상값 `{current_str}` (지속 {duration_min}분 후 해소)"
             )
 

@@ -232,6 +232,8 @@ services:
     environment:
       PROMETHEUS_URL: http://prometheus:9090
       STATE_DB_PATH: /data/state.db
+      # daily_summary_time이 로컬 타임존 기준이라 Asia/Seoul 강제 (기본 UTC 회피)
+      TZ: Asia/Seoul
     volumes:
       - ai_monitor_data:/data
       # config.yaml은 host에서 마운트 → 임계치/cooldown 조정 시 rebuild 없이 restart만으로 반영

@@ -148,7 +148,8 @@ def _check_anomalies(
     if persisted:
         _handle_persistence(persisted, active, reporter, store)
     if recovered and runtime.send_recovery_notice:
-        _handle_recovery(recovered, results, reporter, store)
+        label_map = {m.key: m.label for m in settings.metrics}
+        _handle_recovery(recovered, results, reporter, store, label_map)
 
     if not (new_violations or escalated or persisted or recovered):
         logger.debug("no actionable changes — skip")
@@ -191,11 +192,11 @@ def _handle_persistence(violations, previous, reporter, store) -> None:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
 
 
-def _handle_recovery(recovered, results, reporter, store) -> None:
+def _handle_recovery(recovered, results, reporter, store, label_map) -> None:
     """Claude 호출 없이 단순 해소 알람."""
     logger.info("sending recovery notice for %d alerts", len(recovered))
     current_values = {k: r.value for k, r in results.items() if r.value is not None}
-    if reporter.send_recovery(recovered, current_values):
+    if reporter.send_recovery(recovered, current_values, label_map):
         logger.info("recovery report sent")
     else:
         logger.error("recovery send failed")

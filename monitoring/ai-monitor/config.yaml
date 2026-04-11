@@ -62,9 +62,9 @@ metrics:
     label: 입찰 실패율
     promql: |
       (
-        sum(rate(fairbid_bid_total{result="fail"}[5m]))
+        sum(rate(fairbid_bid_total{application="fairbid",result="fail"}[5m]))
         /
-        sum(rate(fairbid_bid_total[5m]))
+        sum(rate(fairbid_bid_total{application="fairbid"}[5m]))
       ) or vector(0)
     threshold: 0.10
     comparator: gt
@@ -75,7 +75,7 @@ metrics:
     label: 입찰 RDB 동기화 p95(s)
     promql: |
       histogram_quantile(0.95,
-        sum by (le)(rate(fairbid_bid_rdb_sync_seconds_bucket[5m]))
+        sum by (le)(rate(fairbid_bid_rdb_sync_seconds_bucket{application="fairbid"}[5m]))
       ) or vector(0)
     threshold: 2.0
     comparator: gt
@@ -87,7 +87,7 @@ metrics:
   # load-test 프로필이 꺼져 있으면 메트릭 부재 → optional 처리.
   - key: bid_inconsistency
     label: Redis-RDB 입찰 불일치 건수
-    promql: fairbid_bid_inconsistency_count
+    promql: fairbid_bid_inconsistency_count{application="fairbid"}
     threshold: 100
     comparator: abs_gt
     severity: critical
@@ -96,7 +96,7 @@ metrics:
 
   - key: stream_pending
     label: Redis Stream PENDING 누적
-    promql: fairbid_stream_pending_count
+    promql: fairbid_stream_pending_count{application="fairbid"}
     threshold: 1000
     comparator: gt
     severity: warning
