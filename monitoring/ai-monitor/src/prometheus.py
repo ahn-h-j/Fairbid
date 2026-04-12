@@ -80,29 +80,3 @@ class PrometheusClient:
 
         return QueryResult(metric_key=metric_key, value=value, raw=data)
 
-    def query_range(
-        self, promql: str, start: int, end: int, step: str = "30s"
-    ) -> list[tuple[float, float]]:
-        """range 쿼리를 실행한다. (timestamp, value) 리스트를 반환.
-
-        리포트에 첨부할 5분치 시계열 등을 가져올 때 사용.
-        """
-        url = f"{self.base_url}/api/v1/query_range"
-        try:
-            resp = requests.get(
-                url,
-                params={"query": promql, "start": start, "end": end, "step": step},
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException as e:
-            logger.error("Prometheus range query failed: %s", e)
-            return []
-
-        result = data.get("data", {}).get("result", [])
-        if not result:
-            return []
-        # 첫 시리즈만 사용
-        values = result[0].get("values", [])
-        return [(float(ts), float(v)) for ts, v in values if v not in ("NaN", "+Inf", "-Inf")]

@@ -58,7 +58,6 @@ class RuntimeConfig:
 class Settings:
     runtime: RuntimeConfig
     metrics: list[MetricDef]
-    labels: dict[str, str] = field(default_factory=dict)
 
     # 환경변수에서 주입되는 값들
     prometheus_url: str = "http://prometheus:9090"
@@ -82,12 +81,10 @@ def load_settings(config_path: str | Path | None = None) -> Settings:
         runtime_raw["evolve"] = EvolveConfig(**runtime_raw["evolve"])
     runtime = RuntimeConfig(**runtime_raw)
     metrics = [MetricDef(**m) for m in raw.get("metrics", [])]
-    labels = raw.get("labels", {})
 
     return Settings(
         runtime=runtime,
         metrics=metrics,
-        labels=labels,
         prometheus_url=os.environ.get("PROMETHEUS_URL", "http://prometheus:9090"),
         claude_api_key=os.environ.get("CLAUDE_API_KEY", ""),
         discord_webhook_url=os.environ.get("DISCORD_WEBHOOK_URL", ""),
