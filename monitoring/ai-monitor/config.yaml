@@ -6,7 +6,6 @@
 # === 동작 파라미터 ===
 runtime:
   check_interval_seconds: 30        # 이상 탐지 폴링 주기
-  daily_summary_time: "09:00"       # 일일 요약 발송 시각 (서버 로컬 타임존)
   # severity별 cooldown (분). 같은 알람이 cooldown 동안은 단순 지속 알람으로 강등.
   cooldown_minutes:
     critical: 5
@@ -16,12 +15,18 @@ runtime:
   escalation_threshold: 0.20
   # 위반이 사라졌을 때 "해소" 알람을 보낼지 여부
   send_recovery_notice: true
+  # 야간 브리핑 — 어제 from_time ~ 오늘 to_time 범위 이상을 to_time에 발송
+  # 이상 0건이면 "평온한 밤" 임베드만 발송 (Claude 호출 X)
+  night_report:
+    enabled: true
+    from_time: "19:00"   # 전일 시각 (퇴근)
+    to_time: "09:00"     # 당일 시각 (출근, 발송 시각)
   # 주간 모니터링 정책 리뷰 (evolver)
   # 매주 설정된 요일/시각에 지난 N일 이력 집계 → Claude → 조정 제안 Discord 발송
   evolve:
     enabled: true
-    day: "monday"          # monday/tuesday/.../sunday
-    time: "09:00"          # 로컬 타임존 (컨테이너 TZ=Asia/Seoul)
+    day: "monday"        # monday/tuesday/.../sunday
+    time: "09:00"        # 로컬 타임존 (컨테이너 TZ=Asia/Seoul)
     lookback_days: 7
   claude_model: "claude-sonnet-4-5-20250929"
   prometheus_timeout_seconds: 10
@@ -156,6 +161,30 @@ metrics:
     comparator: gt
     severity: warning
     unit: ratio
+
+  # === 비즈니스 메트릭 ===
+  - key: auction_unsold_rate
+    label: 경매 유찰률
+    # sold + unsold 합계 대비 unsold 비율. 0/0 = NaN → 0 변환.
+    promql: |
+      (
+        sum(rate(fairbid_auction_closed_total{application="fairbid",result="unsold"}[1h]))
+        /
+        sum(rate(fairbid_auction_closed_total{application="fairbid"}[1h]))
+      ) or vector(0)
+    threshold: 0.50
+    comparator: gt
+    severity: warning
+    unit: ratio
+
+  - key: auction_extension_rate
+    label: 경매 연장 빈도 (회/분)
+    promql: sum(rate(fairbid_auction_extension_total{application="fairbid"}[5m])) * 60
+    threshold: 10
+    comparator: gt
+    severity: info
+    observe_only: true
+    unit: per_second
 
   # === Redis 서버 메트릭 (redis-exporter 필요) ===
   - key: redis_memory_usage

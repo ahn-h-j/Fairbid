@@ -36,15 +36,28 @@ class EvolveConfig:
 
 
 @dataclass
+class NightReportConfig:
+    """야간 브리핑 설정.
+
+    전일 'from' 시각부터 당일 'to' 시각까지의 알람 이력을 집계해서
+    'to' 시각에 발송한다. 매일 출근 시각에 밤사이 이상을 브리핑 받는 용도.
+    """
+
+    enabled: bool = True
+    from_time: str = "19:00"  # 전일 시각 (퇴근 기준)
+    to_time: str = "09:00"    # 당일 시각 (출근 기준, 발송 시각과 동일)
+
+
+@dataclass
 class RuntimeConfig:
     check_interval_seconds: int = 30
-    daily_summary_time: str = "09:00"
     # severity → cooldown 분. 알 수 없는 severity는 30분.
     cooldown_minutes: dict[str, int] = field(
         default_factory=lambda: {"critical": 5, "warning": 30, "info": 60}
     )
     escalation_threshold: float = 0.20
     send_recovery_notice: bool = True
+    night_report: NightReportConfig = field(default_factory=NightReportConfig)
     evolve: EvolveConfig = field(default_factory=EvolveConfig)
     claude_model: str = "claude-sonnet-4-5-20250929"
     prometheus_timeout_seconds: int = 10
@@ -79,6 +92,8 @@ def load_settings(config_path: str | Path | None = None) -> Settings:
     runtime_raw = dict(raw.get("runtime", {}))
     if "evolve" in runtime_raw and isinstance(runtime_raw["evolve"], dict):
         runtime_raw["evolve"] = EvolveConfig(**runtime_raw["evolve"])
+    if "night_report" in runtime_raw and isinstance(runtime_raw["night_report"], dict):
+        runtime_raw["night_report"] = NightReportConfig(**runtime_raw["night_report"])
     runtime = RuntimeConfig(**runtime_raw)
     metrics = [MetricDef(**m) for m in raw.get("metrics", [])]
 

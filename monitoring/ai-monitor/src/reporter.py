@@ -236,20 +236,40 @@ class DiscordReporter:
         }
         return self._post({"embeds": [embed]})
 
-    # === 일일 요약 ===
+    # === 야간 브리핑 ===
 
-    def send_daily_summary(self, summary_text: str, anomaly_count: int) -> bool:
+    def send_night_report(
+        self,
+        summary_text: str,
+        total_alerts: int,
+        period_start: str,
+        period_end: str,
+    ) -> bool:
+        """야간 브리핑 — 어제 퇴근 ~ 오늘 출근 사이 이벤트 요약.
+
+        이상 0건이면 초록 "평온한 밤" 임베드, 있으면 주황 브리핑 임베드.
+        Claude 호출 없이 단순 발송할 때는 summary_text에 기본 문구 넣어 호출.
+        """
         if not self.webhook_url:
             logger.warning("DISCORD_WEBHOOK_URL not configured — skip send")
             return False
 
-        color = COLOR_OK if anomaly_count == 0 else COLOR_WARNING
-        embed = {
-            "title": f"📋 [일일 모니터링 요약] {datetime.now().strftime('%Y-%m-%d')}",
-            "description": summary_text[:4000],
-            "color": color,
-            "footer": {"text": f"24h 이상 탐지: {anomaly_count}건"},
-        }
+        if total_alerts == 0:
+            embed = {
+                "title": f"🌙 [야간 브리핑] 평온한 밤이었습니다",
+                "description": f"`{period_start} ~ {period_end}` 사이 이상 탐지 0건.",
+                "color": COLOR_OK,
+                "footer": {"text": "AI monitor heartbeat"},
+            }
+        else:
+            embed = {
+                "title": f"🌙 [야간 브리핑] {datetime.now().strftime('%Y-%m-%d')}",
+                "description": summary_text[:4000],
+                "color": COLOR_WARNING,
+                "footer": {
+                    "text": f"{period_start} ~ {period_end} · 총 {total_alerts}건"
+                },
+            }
         return self._post({"embeds": [embed]})
 
     # === HTTP ===

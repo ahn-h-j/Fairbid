@@ -64,28 +64,33 @@ class ClaudeAnalyzer:
         text = "".join(block.text for block in response.content if hasattr(block, "text"))
         return self._parse_response(text, violations, all_results)
 
-    def daily_summary(
+    def night_report(
         self,
-        anomaly_count: int,
+        aggregate: dict,
         snapshot: dict[str, float | None],
     ) -> str:
-        """일일 요약 텍스트를 생성한다."""
-        prompt = (PROMPTS_DIR / "daily.md").read_text(encoding="utf-8")
+        """야간 브리핑 텍스트를 생성한다.
+
+        Args:
+            aggregate: state.aggregate_range() 결과 (period/total/by_metric)
+            snapshot: 현재 메트릭 값 (출근 시점 현재 상태)
+        """
+        prompt = (PROMPTS_DIR / "night-report.md").read_text(encoding="utf-8")
         user_msg = json.dumps(
-            {"anomaly_count_24h": anomaly_count, "snapshot": snapshot},
+            {"aggregate": aggregate, "current_snapshot": snapshot},
             ensure_ascii=False, indent=2,
         )
         try:
             response = self.client.messages.create(
                 model=self.settings.runtime.claude_model,
-                max_tokens=512,
+                max_tokens=768,
                 system=prompt,
                 messages=[{"role": "user", "content": user_msg}],
             )
             return "".join(b.text for b in response.content if hasattr(b, "text"))
         except Exception as e:
-            logger.exception("Daily summary generation failed: %s", e)
-            return f"일일 요약 생성 실패: {e}"
+            logger.exception("Night report generation failed: %s", e)
+            return f"야간 브리핑 생성 실패: {e}"
 
     # === internal ===
 

@@ -43,11 +43,11 @@ def main() -> None:
         except Exception as e:
             logger.exception("check_anomalies failed: %s", e)
 
-    def send_daily_summary() -> None:
+    def send_night_report() -> None:
         try:
-            _send_daily_summary(settings, prom, analyzer, reporter, store)
+            _send_night_report(settings, prom, analyzer, reporter, store)
         except Exception as e:
-            logger.exception("send_daily_summary failed: %s", e)
+            logger.exception("send_night_report failed: %s", e)
 
     def run_evolver() -> None:
         try:
@@ -56,7 +56,9 @@ def main() -> None:
             logger.exception("evolver run failed: %s", e)
 
     schedule.every(settings.runtime.check_interval_seconds).seconds.do(check_anomalies)
-    schedule.every().day.at(settings.runtime.daily_summary_time).do(send_daily_summary)
+    # 야간 브리핑 — 출근 시각(to_time)에 매일 발송
+    if settings.runtime.night_report.enabled:
+        schedule.every().day.at(settings.runtime.night_report.to_time).do(send_night_report)
 
     # 주간 evolver 등록 — schedule 라이브러리 요일 메서드 사용
     evolve_cfg = settings.runtime.evolve
@@ -188,7 +190,6 @@ def _handle_new(violations, results, analyzer, reporter, store) -> None:
         store.record_history(
             v.metric.key, v.metric.severity, "new", v.value, v.metric.threshold
         )
-    store.increment_today_anomaly(len(violations))
 
 
 def _handle_escalation(violations, previous, results, analyzer, reporter, store) -> None:
@@ -203,7 +204,6 @@ def _handle_escalation(violations, previous, results, analyzer, reporter, store)
         store.record_history(
             v.metric.key, v.metric.severity, "escalation", v.value, v.metric.threshold
         )
-    store.increment_today_anomaly(len(violations))
 
 
 def _handle_persistence(violations, previous, reporter, store) -> None:
@@ -259,30 +259,64 @@ def _run_evolver(
         logger.error("evolve report send failed")
 
 
-def _send_daily_summary(
+def _send_night_report(
     settings: Settings,
     prom: PrometheusClient,
     analyzer: ClaudeAnalyzer,
     reporter: DiscordReporter,
     store: StateStore,
 ) -> None:
-    """일일 요약 — 정상이어도 1회 발송 (heartbeat 역할)."""
-    if store.is_summary_sent_today():
-        logger.info("daily summary already sent today")
+    """야간 브리핑 — 어제 from_time ~ 오늘 to_time 사이의 이벤트 요약.
+
+    이상 0건이면 Claude 호출 없이 "평온한 밤" 임베드만 발송 (heartbeat).
+    이상 있으면 집계 + 현재 스냅샷 → Claude → 브리핑 텍스트 → 임베드.
+    """
+    if store.is_night_report_sent_today():
+        logger.info("night report already sent today — skip")
         return
 
-    # 현재 메트릭 스냅샷
+    from datetime import date, datetime, time as dtime, timedelta
+
+    cfg = settings.runtime.night_report
+    today = date.today()
+    from_h, from_m = _parse_hhmm(cfg.from_time)
+    to_h, to_m = _parse_hhmm(cfg.to_time)
+
+    start_dt = datetime.combine(today - timedelta(days=1), dtime(from_h, from_m))
+    end_dt = datetime.combine(today, dtime(to_h, to_m))
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    aggregate = store.aggregate_range(start_ts, end_ts)
+    period_label_start = start_dt.strftime("%Y-%m-%d %H:%M")
+    period_label_end = end_dt.strftime("%Y-%m-%d %H:%M")
+
+    if aggregate["total_alerts"] == 0:
+        # 평온한 밤 — Claude 호출 건너뛰기 (heartbeat 역할만)
+        if reporter.send_night_report("", 0, period_label_start, period_label_end):
+            store.mark_night_report_sent()
+            logger.info("night report sent (quiet night)")
+        return
+
+    # 이상 있음 — 현재 스냅샷 + Claude 브리핑
     snapshot: dict[str, float | None] = {}
     for metric in settings.metrics:
         result = prom.query(metric.key, metric.promql)
         snapshot[metric.key] = result.value
 
-    anomaly_count = store.get_today_anomaly_count()
-    summary_text = analyzer.daily_summary(anomaly_count, snapshot)
+    summary_text = analyzer.night_report(aggregate, snapshot)
 
-    if reporter.send_daily_summary(summary_text, anomaly_count):
-        store.mark_summary_sent()
-        logger.info("daily summary sent")
+    if reporter.send_night_report(
+        summary_text, aggregate["total_alerts"], period_label_start, period_label_end
+    ):
+        store.mark_night_report_sent()
+        logger.info("night report sent (%d events)", aggregate["total_alerts"])
+
+
+def _parse_hhmm(text: str) -> tuple[int, int]:
+    """HH:MM 문자열을 (hour, minute)로 파싱."""
+    hh, _, mm = text.partition(":")
+    return int(hh), int(mm)
 
 
 def _setup_logging(level: str) -> None:

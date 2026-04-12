@@ -34,10 +34,11 @@ class StateStore:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        # 구버전 cooldowns 테이블 제거 (단순한 dev 마이그레이션)
+        # 구버전 테이블 제거 (단순한 dev 마이그레이션)
         self.conn.executescript(
             """
             DROP TABLE IF EXISTS cooldowns;
+            DROP TABLE IF EXISTS daily_stats;
 
             CREATE TABLE IF NOT EXISTS active_alerts (
                 rule_key   TEXT PRIMARY KEY,
@@ -45,10 +46,10 @@ class StateStore:
                 last_value REAL NOT NULL,
                 severity   TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS daily_stats (
-                date              TEXT PRIMARY KEY,
-                anomaly_count     INTEGER NOT NULL DEFAULT 0,
-                last_summary_sent INTEGER NOT NULL DEFAULT 0
+            -- 야간 브리핑 발송 여부 (date 기준, 당일 09:00 발송 시점)
+            CREATE TABLE IF NOT EXISTS night_reports (
+                report_date TEXT PRIMARY KEY,  -- YYYY-MM-DD (발송 당일)
+                sent_at     INTEGER NOT NULL
             );
             -- 주간 evolver가 읽어가는 전체 발송 이력 (4가지 kind)
             CREATE TABLE IF NOT EXISTS alert_history (
@@ -130,16 +131,23 @@ class StateStore:
 
     def aggregate_last_days(self, days: int) -> dict:
         """지난 N일 이력을 집계하여 evolver에 전달할 dict를 반환."""
-        since_ts = int(time.time()) - days * 86400
+        end_ts = int(time.time())
+        start_ts = end_ts - days * 86400
+        return self.aggregate_range(start_ts, end_ts)
 
+    def aggregate_range(self, start_ts: int, end_ts: int) -> dict:
+        """임의 기간(start_ts ~ end_ts)의 이력을 집계해 dict 반환.
+
+        야간 브리핑과 주간 evolver가 공유하는 집계 로직.
+        """
         cur = self.conn.execute(
             """
             SELECT rule_key, severity, kind, COUNT(*), MIN(value), MAX(value)
             FROM alert_history
-            WHERE fired_at >= ?
+            WHERE fired_at >= ? AND fired_at < ?
             GROUP BY rule_key, severity, kind
             """,
-            (since_ts,),
+            (start_ts, end_ts),
         )
 
         metric_map: dict[str, dict] = {}
@@ -167,18 +175,21 @@ class StateStore:
                 entry["value_max"] = vmax if cur_max is None else max(cur_max, vmax)
 
         for rule_key, entry in metric_map.items():
-            entry["avg_duration_minutes"] = self._avg_alert_duration(rule_key, since_ts)
+            entry["avg_duration_minutes"] = self._avg_alert_duration(rule_key, start_ts, end_ts)
 
-        from datetime import datetime, timezone
+        from datetime import datetime
+        period_seconds = max(end_ts - start_ts, 1)
         return {
-            "period_days": days,
-            "period_start": datetime.fromtimestamp(since_ts, tz=timezone.utc).date().isoformat(),
-            "period_end": datetime.now(tz=timezone.utc).date().isoformat(),
+            "period_days": round(period_seconds / 86400, 2),
+            "period_start": datetime.fromtimestamp(start_ts).isoformat(timespec="minutes"),
+            "period_end": datetime.fromtimestamp(end_ts).isoformat(timespec="minutes"),
             "total_alerts": total,
             "by_metric": list(metric_map.values()),
         }
 
-    def _avg_alert_duration(self, rule_key: str, since_ts: int) -> float | None:
+    def _avg_alert_duration(
+        self, rule_key: str, start_ts: int, end_ts: int
+    ) -> float | None:
         """특정 메트릭의 new → recovery 평균 지속 시간(분).
 
         같은 rule_key에 대해 new와 recovery가 번갈아 발생한다고 가정하고
@@ -187,10 +198,11 @@ class StateStore:
         cur = self.conn.execute(
             """
             SELECT kind, fired_at FROM alert_history
-            WHERE rule_key = ? AND fired_at >= ? AND kind IN ('new', 'recovery')
+            WHERE rule_key = ? AND fired_at >= ? AND fired_at < ?
+              AND kind IN ('new', 'recovery')
             ORDER BY fired_at ASC
             """,
-            (rule_key, since_ts),
+            (rule_key, start_ts, end_ts),
         )
         rows = cur.fetchall()
         durations: list[int] = []
@@ -227,45 +239,22 @@ class StateStore:
         )
         self.conn.commit()
 
-    # === 일일 카운터 ===
+    # === 야간 브리핑 중복 방지 ===
 
-    def increment_today_anomaly(self, count: int = 1) -> None:
-        today = date.today().isoformat()
-        self.conn.execute(
-            """
-            INSERT INTO daily_stats(date, anomaly_count) VALUES (?, ?)
-            ON CONFLICT(date) DO UPDATE SET anomaly_count = anomaly_count + excluded.anomaly_count
-            """,
-            (today, count),
-        )
-        self.conn.commit()
-
-    def get_today_anomaly_count(self) -> int:
+    def is_night_report_sent_today(self) -> bool:
         today = date.today().isoformat()
         cur = self.conn.execute(
-            "SELECT anomaly_count FROM daily_stats WHERE date = ?", (today,)
+            "SELECT sent_at FROM night_reports WHERE report_date = ?", (today,)
         )
-        row = cur.fetchone()
-        return row[0] if row else 0
+        return cur.fetchone() is not None
 
-    def mark_summary_sent(self) -> None:
+    def mark_night_report_sent(self) -> None:
         today = date.today().isoformat()
         self.conn.execute(
-            """
-            INSERT INTO daily_stats(date, last_summary_sent) VALUES (?, ?)
-            ON CONFLICT(date) DO UPDATE SET last_summary_sent = excluded.last_summary_sent
-            """,
+            "INSERT OR REPLACE INTO night_reports(report_date, sent_at) VALUES (?, ?)",
             (today, int(time.time())),
         )
         self.conn.commit()
-
-    def is_summary_sent_today(self) -> bool:
-        today = date.today().isoformat()
-        cur = self.conn.execute(
-            "SELECT last_summary_sent FROM daily_stats WHERE date = ?", (today,)
-        )
-        row = cur.fetchone()
-        return bool(row and row[0] > 0)
 
     def close(self) -> None:
         self.conn.close()
