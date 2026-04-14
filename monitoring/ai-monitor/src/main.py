@@ -187,9 +187,11 @@ def _handle_new(violations, results, analyzer, reporter, store) -> None:
         logger.error("anomaly send failed")
     for v in violations:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
-        store.record_history(
+        history_id = store.record_history(
             v.metric.key, v.metric.severity, "new", v.value, v.metric.threshold
         )
+        # Claude 분석 결과 영속화 — 향후 비서(Bot)가 재참조 가능
+        _persist_report(store, history_id, report)
 
 
 def _handle_escalation(violations, previous, results, analyzer, reporter, store) -> None:
@@ -201,9 +203,26 @@ def _handle_escalation(violations, previous, results, analyzer, reporter, store)
         logger.error("escalation send failed")
     for v in violations:
         store.record_alert(v.metric.key, v.value, v.metric.severity)
-        store.record_history(
+        history_id = store.record_history(
             v.metric.key, v.metric.severity, "escalation", v.value, v.metric.threshold
         )
+        _persist_report(store, history_id, report)
+
+
+def _persist_report(store, history_id: int, report) -> None:
+    """AnalysisReport를 alert_reports 테이블에 저장."""
+    try:
+        store.record_report(
+            history_id=history_id,
+            summary=report.summary,
+            diagnosis=report.diagnosis,
+            causal_chain=report.causal_chain,
+            evidence=report.evidence,
+            suggestions=report.suggestions,
+            related_metrics=report.related_metrics,
+        )
+    except Exception as e:
+        logger.warning("failed to persist alert report: %s", e)
 
 
 def _handle_persistence(violations, previous, reporter, store) -> None:

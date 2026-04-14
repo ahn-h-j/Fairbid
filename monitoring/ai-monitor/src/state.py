@@ -63,6 +63,22 @@ class StateStore:
             );
             CREATE INDEX IF NOT EXISTS idx_history_time ON alert_history(fired_at);
             CREATE INDEX IF NOT EXISTS idx_history_rule ON alert_history(rule_key);
+            -- Claude가 생성한 분석 리포트 (신규/악화 알람에만 기록)
+            -- 비서(향후 Discord Bot)가 "그때 왜 튀었는지"를 물을 때
+            -- 같은 분석을 재추론하지 않고 이 테이블에서 꺼내 쓴다.
+            CREATE TABLE IF NOT EXISTS alert_reports (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                history_id       INTEGER NOT NULL,
+                summary          TEXT,
+                diagnosis        TEXT,
+                causal_chain     TEXT,       -- JSON array
+                evidence         TEXT,       -- JSON array
+                suggestions      TEXT,       -- JSON array
+                related_metrics  TEXT,       -- JSON object
+                created_at       INTEGER NOT NULL,
+                FOREIGN KEY (history_id) REFERENCES alert_history(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_report_history ON alert_reports(history_id);
             -- 주간 evolver 중복 발송 방지용
             CREATE TABLE IF NOT EXISTS evolve_runs (
                 run_date TEXT PRIMARY KEY,
@@ -115,12 +131,15 @@ class StateStore:
         kind: str,
         value: float | None,
         threshold: float | None,
-    ) -> None:
+    ) -> int:
         """모든 알람 발송(신규/악화/지속/해소)을 이력에 기록.
 
         kind: new | escalation | persistence | recovery
+
+        Returns:
+            새로 삽입된 row의 id (record_report 호출 시 FK로 사용)
         """
-        self.conn.execute(
+        cur = self.conn.execute(
             """
             INSERT INTO alert_history(rule_key, severity, kind, value, threshold, fired_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -128,6 +147,69 @@ class StateStore:
             (rule_key, severity, kind, value, threshold, int(time.time())),
         )
         self.conn.commit()
+        return cur.lastrowid
+
+    # === Claude 분석 리포트 (신규/악화 이벤트용) ===
+
+    def record_report(
+        self,
+        history_id: int,
+        summary: str,
+        diagnosis: str,
+        causal_chain: list[str],
+        evidence: list[str],
+        suggestions: list[str],
+        related_metrics: dict[str, float],
+    ) -> None:
+        """Claude 분석 결과를 영속화한다.
+
+        비서(Discord Bot)가 과거 이벤트에 대해 질문받을 때 재추론 없이
+        이 테이블의 기록을 꺼내 쓴다.
+        """
+        import json as _json
+        self.conn.execute(
+            """
+            INSERT INTO alert_reports(
+                history_id, summary, diagnosis, causal_chain, evidence,
+                suggestions, related_metrics, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                history_id,
+                summary,
+                diagnosis,
+                _json.dumps(causal_chain, ensure_ascii=False),
+                _json.dumps(evidence, ensure_ascii=False),
+                _json.dumps(suggestions, ensure_ascii=False),
+                _json.dumps(related_metrics, ensure_ascii=False),
+                int(time.time()),
+            ),
+        )
+        self.conn.commit()
+
+    def get_report_by_history_id(self, history_id: int) -> dict | None:
+        """history_id에 연결된 분석 리포트 조회. 없으면 None."""
+        cur = self.conn.execute(
+            """
+            SELECT summary, diagnosis, causal_chain, evidence,
+                   suggestions, related_metrics, created_at
+            FROM alert_reports WHERE history_id = ?
+            """,
+            (history_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        import json as _json
+        return {
+            "summary": row[0],
+            "diagnosis": row[1],
+            "causal_chain": _json.loads(row[2]) if row[2] else [],
+            "evidence": _json.loads(row[3]) if row[3] else [],
+            "suggestions": _json.loads(row[4]) if row[4] else [],
+            "related_metrics": _json.loads(row[5]) if row[5] else {},
+            "created_at": row[6],
+        }
 
     def aggregate_last_days(self, days: int) -> dict:
         """지난 N일 이력을 집계하여 evolver에 전달할 dict를 반환."""
