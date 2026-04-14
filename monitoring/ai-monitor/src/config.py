@@ -75,7 +75,8 @@ class Settings:
     # 환경변수에서 주입되는 값들
     prometheus_url: str = "http://prometheus:9090"
     claude_api_key: str = ""
-    discord_webhook_url: str = ""
+    discord_bot_token: str = ""
+    discord_channel_id: int = 0
     state_db_path: str = "/data/state.db"
     log_level: str = "INFO"
 
@@ -97,12 +98,19 @@ def load_settings(config_path: str | Path | None = None) -> Settings:
     runtime = RuntimeConfig(**runtime_raw)
     metrics = [MetricDef(**m) for m in raw.get("metrics", [])]
 
+    channel_id_raw = os.environ.get("DISCORD_CHANNEL_ID", "0")
+    try:
+        channel_id = int(channel_id_raw)
+    except ValueError:
+        channel_id = 0
+
     return Settings(
         runtime=runtime,
         metrics=metrics,
         prometheus_url=os.environ.get("PROMETHEUS_URL", "http://prometheus:9090"),
         claude_api_key=os.environ.get("CLAUDE_API_KEY", ""),
-        discord_webhook_url=os.environ.get("DISCORD_WEBHOOK_URL", ""),
+        discord_bot_token=os.environ.get("DISCORD_BOT_TOKEN", ""),
+        discord_channel_id=channel_id,
         state_db_path=os.environ.get("STATE_DB_PATH", "/data/state.db"),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
     )

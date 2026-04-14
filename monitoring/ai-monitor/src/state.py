@@ -51,18 +51,24 @@ class StateStore:
                 report_date TEXT PRIMARY KEY,  -- YYYY-MM-DD (발송 당일)
                 sent_at     INTEGER NOT NULL
             );
-            -- 주간 evolver가 읽어가는 전체 발송 이력 (4가지 kind)
+            -- 주간 evolver + 비서 Bot이 읽어가는 전체 발송 이력 (4가지 kind)
+            -- discord_message_id / discord_thread_id: Bot이 발송한 메시지 및 그 아래
+            -- 자동 생성한 스레드의 ID. 비서가 스레드에서 질문받을 때 thread_id로
+            -- 역조회하여 해당 알람 컨텍스트 특정.
             CREATE TABLE IF NOT EXISTS alert_history (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                rule_key   TEXT NOT NULL,
-                severity   TEXT NOT NULL,
-                kind       TEXT NOT NULL,
-                value      REAL,
-                threshold  REAL,
-                fired_at   INTEGER NOT NULL
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_key             TEXT NOT NULL,
+                severity             TEXT NOT NULL,
+                kind                 TEXT NOT NULL,
+                value                REAL,
+                threshold            REAL,
+                fired_at             INTEGER NOT NULL,
+                discord_message_id   TEXT,
+                discord_thread_id    TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_history_time ON alert_history(fired_at);
             CREATE INDEX IF NOT EXISTS idx_history_rule ON alert_history(rule_key);
+            CREATE INDEX IF NOT EXISTS idx_history_thread ON alert_history(discord_thread_id);
             -- Claude가 생성한 분석 리포트 (신규/악화 알람에만 기록)
             -- 비서(향후 Discord Bot)가 "그때 왜 튀었는지"를 물을 때
             -- 같은 분석을 재추론하지 않고 이 테이블에서 꺼내 쓴다.
@@ -137,7 +143,8 @@ class StateStore:
         kind: new | escalation | persistence | recovery
 
         Returns:
-            새로 삽입된 row의 id (record_report 호출 시 FK로 사용)
+            새로 삽입된 row의 id
+            (record_report FK + attach_discord_ids 용)
         """
         cur = self.conn.execute(
             """
@@ -148,6 +155,77 @@ class StateStore:
         )
         self.conn.commit()
         return cur.lastrowid
+
+    def attach_discord_ids(
+        self, history_id: int, message_id: str, thread_id: str | None = None
+    ) -> None:
+        """알람 발송 후 Discord 메시지/스레드 ID를 이력에 붙인다.
+
+        비서 Bot이 스레드에서 질문 받을 때 thread_id → history_id 역조회.
+        """
+        self.conn.execute(
+            """
+            UPDATE alert_history
+            SET discord_message_id = ?, discord_thread_id = ?
+            WHERE id = ?
+            """,
+            (message_id, thread_id, history_id),
+        )
+        self.conn.commit()
+
+    def find_history_by_thread_id(self, thread_id: str) -> dict | None:
+        """스레드 ID로 알람 이력 역조회.
+
+        비서 Bot이 '이 스레드가 어떤 알람인지' 파악할 때 사용.
+        """
+        cur = self.conn.execute(
+            """
+            SELECT id, rule_key, severity, kind, value, threshold, fired_at
+            FROM alert_history
+            WHERE discord_thread_id = ?
+            """,
+            (thread_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "rule_key": row[1],
+            "severity": row[2],
+            "kind": row[3],
+            "value": row[4],
+            "threshold": row[5],
+            "fired_at": row[6],
+        }
+
+    def list_recent_history(self, hours: int, limit: int = 50) -> list[dict]:
+        """최근 N시간 이력 반환 (비서 Bot 도구 `get_recent_alerts`용)."""
+        since_ts = int(time.time()) - hours * 3600
+        cur = self.conn.execute(
+            """
+            SELECT id, rule_key, severity, kind, value, threshold, fired_at,
+                   discord_thread_id
+            FROM alert_history
+            WHERE fired_at >= ?
+            ORDER BY fired_at DESC
+            LIMIT ?
+            """,
+            (since_ts, limit),
+        )
+        return [
+            {
+                "id": r[0],
+                "rule_key": r[1],
+                "severity": r[2],
+                "kind": r[3],
+                "value": r[4],
+                "threshold": r[5],
+                "fired_at": r[6],
+                "discord_thread_id": r[7],
+            }
+            for r in cur.fetchall()
+        ]
 
     # === Claude 분석 리포트 (신규/악화 이벤트용) ===
 
