@@ -28,7 +28,7 @@ class AiMonitorBot(commands.Bot):
 
     def __init__(self, channel_id: int, question_handler: Optional[Callable] = None):
         intents = discord.Intents.default()
-        intents.message_content = True  # Bot이 메시지 내용을 읽으려면 필요
+        intents.message_content = True  # 스레드 내 자연어 멘션 질문 읽기용
         super().__init__(command_prefix="!", intents=intents)
 
         self.channel_id = channel_id
@@ -68,7 +68,6 @@ class AiMonitorBot(commands.Bot):
         try:
             async with message.channel.typing():
                 answer = await self.question_handler(message.channel, question)
-            # Discord 메시지 2000자 제한 — embed 사용
             await _send_long(message.channel, answer)
         except Exception as e:
             logger.exception("question handler failed: %s", e)

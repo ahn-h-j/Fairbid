@@ -29,7 +29,10 @@ class ActiveAlert:
 class StateStore:
     def __init__(self, db_path: str):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(db_path)
+        # check_same_thread=False: 비서 Bot의 question_handler가 asyncio.to_thread로
+        # 별도 스레드에서 store를 호출하기 때문. WAL 모드라 동시 read는 안전하고,
+        # write는 짧은 트랜잭션뿐이라 충돌 위험 낮음.
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
