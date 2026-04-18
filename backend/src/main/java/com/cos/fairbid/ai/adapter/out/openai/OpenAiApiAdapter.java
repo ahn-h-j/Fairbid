@@ -1,4 +1,4 @@
-package com.cos.fairbid.ai.adapter.out.claude;
+package com.cos.fairbid.ai.adapter.out.openai;
 
 import java.util.List;
 
@@ -17,8 +17,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest;
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageResponse;
+import com.cos.fairbid.ai.adapter.out.openai.dto.OpenAiChatRequest;
+import com.cos.fairbid.ai.adapter.out.openai.dto.OpenAiChatResponse;
 import com.cos.fairbid.ai.application.dto.AiAssistCommand;
 import com.cos.fairbid.ai.application.dto.PriceItem;
 import com.cos.fairbid.ai.application.dto.ProductAnalysis;
@@ -31,27 +31,33 @@ import com.cos.fairbid.ai.domain.exception.InvalidImageException;
 import com.cos.fairbid.ai.domain.guardrail.GuardrailViolation;
 
 /**
- * Anthropic Claude Messages API 어댑터 (AiClientPort 구현).
+ * OpenAI Chat Completions API 어댑터 (AiClientPort 구현).
  *
- * - RestClient 동기 호출 (기존 OAuth 클라이언트와 동일 패턴)
- * - 프롬프트 캐싱은 ClaudePromptBuilder 가 담당하고, 여기서는 단순 호출/응답 매핑만 처리
- * - 외부 API 오류는 도메인 예외(AiServiceUnavailable / AiGenerationFailed / InvalidImage) 로 변환
+ * ClaudeApiAdapter 와 동일한 계약을 따른다:
+ * - RestClient 동기 호출
+ * - 외부 API 오류 → 도메인 예외 변환
+ * - AI_METRIC 로그로 per-call 메트릭 기록 (베이스라인 러너가 grep 파싱)
+ *
+ * 차이점:
+ * - Chat Completions 응답 shape: choices[0].message.content
+ * - 토큰 필드명: prompt_tokens / completion_tokens / prompt_tokens_details.cached_tokens
+ * - web_search 미사용 (시세는 Naver API 로 외부에서 주입)
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "ai.provider", havingValue = "claude", matchIfMissing = true)
-public class ClaudeApiAdapter implements AiClientPort {
+@ConditionalOnProperty(name = "ai.provider", havingValue = "openai")
+public class OpenAiApiAdapter implements AiClientPort {
 
-    private static final String MESSAGES_PATH = "/v1/messages";
+    private static final String CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 
     private final RestClient restClient;
-    private final AnthropicProperties properties;
-    private final ClaudePromptBuilder promptBuilder;
+    private final OpenAiProperties properties;
+    private final OpenAiPromptBuilder promptBuilder;
     private final ObjectMapper objectMapper;
 
-    public ClaudeApiAdapter(
-            AnthropicProperties properties,
-            ClaudePromptBuilder promptBuilder,
+    public OpenAiApiAdapter(
+            OpenAiProperties properties,
+            OpenAiPromptBuilder promptBuilder,
             ObjectMapper objectMapper
     ) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -72,8 +78,8 @@ public class ClaudeApiAdapter implements AiClientPort {
     @Override
     public ProductAnalysis analyzeProduct(AiAssistCommand command) {
         long startNanos = System.nanoTime();
-        ClaudeMessageRequest request = promptBuilder.buildPhase1(command);
-        ClaudeMessageResponse response = null;
+        OpenAiChatRequest request = promptBuilder.buildPhase1(command);
+        OpenAiChatResponse response = null;
         String outcome = "error";
         Throwable thrown = null;
         try {
@@ -99,10 +105,10 @@ public class ClaudeApiAdapter implements AiClientPort {
             List<GuardrailViolation> retryViolations
     ) {
         long startNanos = System.nanoTime();
-        ClaudeMessageRequest request = promptBuilder.buildPhase2(
+        OpenAiChatRequest request = promptBuilder.buildPhase2(
                 command, analysis.productName(), analysis.grade(),
                 analysis.gradeReason(), priceItems, retryViolations);
-        ClaudeMessageResponse response = null;
+        OpenAiChatResponse response = null;
         String outcome = "error";
         Throwable thrown = null;
         try {
@@ -120,44 +126,33 @@ public class ClaudeApiAdapter implements AiClientPort {
         }
     }
 
-    /**
-     * Anthropic Messages API 호출. HTTP/네트워크 오류는 도메인 예외로 변환한다.
-     */
-    private ClaudeMessageResponse callApi(ClaudeMessageRequest request) {
+    private OpenAiChatResponse callApi(OpenAiChatRequest request) {
         try {
-            ClaudeMessageResponse response = restClient.post()
-                    .uri(MESSAGES_PATH)
-                    .header("x-api-key", properties.getApiKey())
-                    .header("anthropic-version", properties.getAnthropicVersion())
+            OpenAiChatResponse response = restClient.post()
+                    .uri(CHAT_COMPLETIONS_PATH)
+                    .header("Authorization", "Bearer " + properties.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
                     .retrieve()
-                    .body(ClaudeMessageResponse.class);
+                    .body(OpenAiChatResponse.class);
 
             if (response == null) {
-                log.warn("Anthropic 응답 본문이 null");
+                log.warn("OpenAI 응답 본문이 null");
                 throw AiGenerationFailedException.of();
             }
             return response;
         } catch (RestClientResponseException ex) {
             throw mapHttpError(ex);
         } catch (ResourceAccessException ex) {
-            // 타임아웃 / 연결 실패
-            log.warn("Claude API 네트워크 오류: {}", ex.getMessage());
+            log.warn("OpenAI API 네트워크 오류: {}", ex.getMessage());
             throw AiServiceUnavailableException.withCause(ex);
         }
     }
 
-    /**
-     * HTTP 에러를 도메인 예외로 매핑.
-     * - 5xx → 서비스 장애
-     * - 4xx + image 관련 메시지 → 이미지 오류
-     * - 그 외 4xx → 생성 실패
-     */
     private RuntimeException mapHttpError(RestClientResponseException ex) {
         HttpStatusCode status = ex.getStatusCode();
         String body = ex.getResponseBodyAsString();
-        log.warn("Claude API HTTP 에러: status={}, body={}", status.value(), body);
+        log.warn("OpenAI API HTTP 에러: status={}, body={}", status.value(), body);
 
         if (status.is5xxServerError() || status.value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
             return AiServiceUnavailableException.withCause(ex);
@@ -175,42 +170,31 @@ public class ClaudeApiAdapter implements AiClientPort {
             return false;
         }
         String lower = body.toLowerCase();
-        return lower.contains("image") || lower.contains("source") || lower.contains("url");
+        return lower.contains("image") || lower.contains("image_url") || lower.contains("invalid_image");
     }
 
     /**
-     * 응답에서 최종 text 블록을 꺼낸다.
-     *
-     * 웹 서치 활성화 시 응답에는 여러 블록이 순차적으로 섞여 들어온다:
-     *   server_tool_use → web_search_tool_result → text(중간 추론) → ... → text(최종 답변)
-     *
-     * 최종 JSON 응답은 마지막 text 블록에 들어 있으므로 첫 번째가 아닌 마지막 text 를 사용한다.
+     * 응답에서 assistant 메시지의 content 문자열을 꺼낸다.
+     * Chat Completions 은 항상 choices[0].message.content 에 최종 텍스트가 들어온다.
      */
-    private String extractText(ClaudeMessageResponse response) {
-        if (response.content() == null || response.content().isEmpty()) {
-            log.warn("Claude 응답 content 가 비어있음");
+    private String extractText(OpenAiChatResponse response) {
+        if (response.choices() == null || response.choices().isEmpty()) {
+            log.warn("OpenAI 응답 choices 가 비어있음");
             throw AiGenerationFailedException.of();
         }
-        return response.content().stream()
-                .filter(block -> "text".equals(block.type()))
-                .map(ClaudeMessageResponse.ContentBlock::text)
-                .filter(text -> text != null && !text.isBlank())
-                .reduce((first, second) -> second)
-                .orElseThrow(() -> {
-                    log.warn("Claude 응답에 text 블록이 없음");
-                    return AiGenerationFailedException.of();
-                });
+        OpenAiChatResponse.Choice choice = response.choices().get(0);
+        if (choice.message() == null
+                || choice.message().content() == null
+                || choice.message().content().isBlank()) {
+            log.warn("OpenAI 응답 message.content 가 비어있음 - finish_reason={}",
+                    choice.finishReason());
+            throw AiGenerationFailedException.of();
+        }
+        return choice.message().content();
     }
 
     /**
-     * Claude 가 출력한 JSON 문자열을 파싱해 도메인 객체로 변환한다.
-     *
-     * Claude 는 항상 JSON 으로 응답하되, status 필드로 성공/실패를 구분한다:
-     *   - status="success": suggestedPrices + generatedDescription 이 채워져 있음 → 정상 반환
-     *   - status!="success" (need_more_info, mismatch, image_unreadable 등):
-     *       userMessage 필드에 Claude 가 자기 말로 쓴 한국어 안내문이 있음 → 그대로 사용자에게 노출
-     *
-     * 내부 실패 사유(파싱 실패 / 필드 누락)는 로그에만 남긴다.
+     * 2차 응답 JSON 파싱. Claude 와 동일한 스키마(status / suggestedPrices / generatedDescription).
      */
     private AiAssistResult parseResult(String rawText) {
         String json = stripCodeFence(rawText).trim();
@@ -218,33 +202,31 @@ public class ClaudeApiAdapter implements AiClientPort {
         try {
             parsed = objectMapper.readValue(json, ParsedPayload.class);
         } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            log.warn("Claude 응답 JSON 파싱 실패 - raw: {}", json);
+            log.warn("OpenAI 응답 JSON 파싱 실패 - raw: {}", json);
             throw AiGenerationFailedException.withCause(ex);
         }
 
         if (parsed == null || parsed.status() == null || parsed.status().isBlank()) {
-            log.warn("Claude 응답에 status 필드 없음 - raw: {}", json);
+            log.warn("OpenAI 응답에 status 필드 없음 - raw: {}", json);
             throw AiGenerationFailedException.of();
         }
 
-        // 실패 분기 — Claude 가 직접 작성한 userMessage 를 사용자에게 그대로 전달
         if (!"success".equalsIgnoreCase(parsed.status())) {
             String userMessage = parsed.userMessage();
             if (userMessage == null || userMessage.isBlank()) {
-                log.warn("Claude 실패 응답에 userMessage 누락 - status={}, raw={}", parsed.status(), json);
+                log.warn("OpenAI 실패 응답에 userMessage 누락 - status={}, raw={}", parsed.status(), json);
                 throw AiGenerationFailedException.of();
             }
-            log.info("Claude 실패 응답 - status={}, userMessage={}", parsed.status(), userMessage);
+            log.info("OpenAI 실패 응답 - status={}, userMessage={}", parsed.status(), userMessage);
             throw AiGenerationFailedException.fromAi(userMessage);
         }
 
-        // 성공 분기
         if (parsed.suggestedPrices() == null
                 || parsed.suggestedPrices().low() == null
                 || parsed.suggestedPrices().mid() == null
                 || parsed.suggestedPrices().high() == null
                 || parsed.generatedDescription() == null) {
-            log.warn("Claude 성공 응답 필수 필드 누락 - raw: {}", json);
+            log.warn("OpenAI 성공 응답 필수 필드 누락 - raw: {}", json);
             throw AiGenerationFailedException.of();
         }
 
@@ -254,7 +236,6 @@ public class ClaudeApiAdapter implements AiClientPort {
                 parsed.suggestedPrices().high()
         );
 
-        // confidence 처리 — null/빈 값이면 기본 "high"
         String confidence = parsed.confidence();
         if (confidence == null || confidence.isBlank()) {
             confidence = "high";
@@ -262,14 +243,14 @@ public class ClaudeApiAdapter implements AiClientPort {
         String confidenceReason = "low".equalsIgnoreCase(confidence) ? parsed.confidenceReason() : null;
 
         if ("low".equalsIgnoreCase(confidence)) {
-            log.info("Claude 낮은 신뢰도 응답 - reason={}", confidenceReason);
+            log.info("OpenAI 낮은 신뢰도 응답 - reason={}", confidenceReason);
         }
 
         return new AiAssistResult(prices, parsed.generatedDescription(), confidence, confidenceReason);
     }
 
     /**
-     * 응답 텍스트가 ```json ... ``` 으로 감싸져 있으면 fence 를 제거한다.
+     * json_object 모드에서는 코드펜스가 거의 나오지 않지만 방어적으로 제거한다.
      */
     private String stripCodeFence(String text) {
         String trimmed = text.trim();
@@ -289,40 +270,34 @@ public class ClaudeApiAdapter implements AiClientPort {
     }
 
     /**
-     * 호출당 메트릭을 한 줄짜리 구조화 로그로 남긴다.
+     * Claude 어댑터와 동일한 AI_METRIC 포맷으로 기록한다. 러너가 양쪽을 동일하게 파싱한다.
      *
-     * 형식 (key=value, 공백 구분):
-     *   AI_METRIC outcome=... latency_ms=... model=... input_tokens=... output_tokens=...
-     *             cache_creation=... cache_read=... web_search_requests=... error_type=...
-     *
-     * - 누락 필드는 "-" 로 표기한다 (회귀 러너가 grep + split 으로 파싱).
-     * - 응답 자체를 받지 못한 실패(네트워크/5xx)도 latency 와 outcome 은 항상 기록된다.
-     * - JSON 응답의 status (success / need_more_info / mismatch / image_unreadable) 는
-     *   parseResult 에서 별도로 로그하므로 여기서는 outcome(success/error) 만 본다.
+     * 필드 매핑:
+     * - input_tokens  = usage.prompt_tokens
+     * - output_tokens = usage.completion_tokens
+     * - cache_read    = usage.prompt_tokens_details.cached_tokens (없으면 0)
+     * - cache_creation = "-" (OpenAI 는 캐시 생성 별도 과금/필드 없음)
+     * - web_search_requests = "-" (미사용)
      */
     private void recordCallMetric(
-            ClaudeMessageResponse response,
+            OpenAiChatResponse response,
             long elapsedMs,
             String outcome,
             Throwable thrown
     ) {
         Integer inputTokens = null;
         Integer outputTokens = null;
-        Integer cacheCreation = null;
         Integer cacheRead = null;
-        Integer webSearchRequests = null;
         String model = null;
 
         if (response != null) {
             model = response.model();
-            ClaudeMessageResponse.Usage usage = response.usage();
+            OpenAiChatResponse.Usage usage = response.usage();
             if (usage != null) {
-                inputTokens = usage.inputTokens();
-                outputTokens = usage.outputTokens();
-                cacheCreation = usage.cacheCreationInputTokens();
-                cacheRead = usage.cacheReadInputTokens();
-                if (usage.serverToolUse() != null) {
-                    webSearchRequests = usage.serverToolUse().webSearchRequests();
+                inputTokens = usage.promptTokens();
+                outputTokens = usage.completionTokens();
+                if (usage.promptTokensDetails() != null) {
+                    cacheRead = usage.promptTokensDetails().cachedTokens();
                 }
             }
         }
@@ -337,9 +312,9 @@ public class ClaudeApiAdapter implements AiClientPort {
                 nullToDash(model),
                 nullToDash(inputTokens),
                 nullToDash(outputTokens),
-                nullToDash(cacheCreation),
+                "-",
                 nullToDash(cacheRead),
-                nullToDash(webSearchRequests),
+                "-",
                 errorType
         );
     }
@@ -348,9 +323,6 @@ public class ClaudeApiAdapter implements AiClientPort {
         return value == null ? "-" : value.toString();
     }
 
-    /**
-     * 1차 호출(상품 분석) 응답을 파싱한다.
-     */
     private ProductAnalysis parsePhase1Result(String rawText) {
         String json = stripCodeFence(rawText).trim();
         ParsedPhase1 parsed;
@@ -366,7 +338,6 @@ public class ClaudeApiAdapter implements AiClientPort {
             throw AiGenerationFailedException.of();
         }
 
-        // 실패 분기
         if (!"success".equalsIgnoreCase(parsed.status())) {
             String userMessage = parsed.userMessage();
             if (userMessage == null || userMessage.isBlank()) {
@@ -390,9 +361,8 @@ public class ClaudeApiAdapter implements AiClientPort {
         );
     }
 
-    // ── 내부 파싱 DTO ──
+    // ── 내부 파싱 DTO (Claude 와 동일 스키마) ──
 
-    /** 1차 호출 응답 파싱용 */
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ParsedPhase1(
             String status,
@@ -405,7 +375,6 @@ public class ClaudeApiAdapter implements AiClientPort {
     ) {
     }
 
-    /** 2차 호출 응답 파싱용 — success / 실패 */
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ParsedPayload(
             String status,

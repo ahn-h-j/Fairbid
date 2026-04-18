@@ -1,4 +1,4 @@
-package com.cos.fairbid.ai.adapter.out.claude;
+package com.cos.fairbid.ai.adapter.out.openai;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -15,32 +15,32 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest;
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest.ContentItem;
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest.Message;
+import com.cos.fairbid.ai.adapter.out.openai.dto.OpenAiChatRequest;
+import com.cos.fairbid.ai.adapter.out.openai.dto.OpenAiChatRequest.ContentPart;
+import com.cos.fairbid.ai.adapter.out.openai.dto.OpenAiChatRequest.Message;
 import com.cos.fairbid.ai.application.dto.AiAssistCommand;
 import com.cos.fairbid.ai.application.dto.PriceItem;
 import com.cos.fairbid.ai.domain.guardrail.GuardrailViolation;
 
 /**
- * Claude Messages API 요청을 조립한다.
+ * OpenAI Chat Completions 요청을 조립한다.
  *
- * v2 2단계 호출 구조:
- * - 1차 (Phase1): 이미지 + memo → 상품 식별 + 등급 판정 + 검색 키워드
- * - 2차 (Phase2): 1차 결과 + 검색 결과 → 가격 산정 + 상품 설명 생성
- *
- * 두 프롬프트 모두 cache_control: ephemeral 로 Prompt Caching 적용.
+ * Claude 용 프롬프트 리소스(phase1/phase2 txt)를 그대로 재사용한다 — 프롬프트 텍스트는 모델 독립.
+ * 차이는 envelope 뿐:
+ * - system 은 messages[0] 로 합침 (Claude 는 별도 system 필드)
+ * - cache_control 없음 (OpenAI 는 자동 캐싱)
+ * - tools 없음 (시세는 Naver API 로 외부에서 주입)
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "ai.provider", havingValue = "claude", matchIfMissing = true)
-public class ClaudePromptBuilder {
+@ConditionalOnProperty(name = "ai.provider", havingValue = "openai")
+public class OpenAiPromptBuilder {
 
     private static final String PHASE1_PROMPT_RESOURCE = "prompts/auction-assist-phase1.txt";
     private static final String PHASE2_PROMPT_RESOURCE = "prompts/auction-assist-system.txt";
 
-    private final AnthropicProperties properties;
+    private final OpenAiProperties properties;
 
     private String phase1Prompt;
     private String phase2Prompt;
@@ -49,7 +49,7 @@ public class ClaudePromptBuilder {
     public void loadSystemPrompt() {
         this.phase1Prompt = loadResource(PHASE1_PROMPT_RESOURCE);
         this.phase2Prompt = loadResource(PHASE2_PROMPT_RESOURCE);
-        log.info("Claude prompts loaded - phase1: {} chars, phase2: {} chars",
+        log.info("OpenAI prompts loaded - phase1: {} chars, phase2: {} chars",
                 phase1Prompt.length(), phase2Prompt.length());
     }
 
@@ -64,25 +64,25 @@ public class ClaudePromptBuilder {
 
     // ── 1차 호출: 상품 식별 + 등급 판정 ──
 
-    /**
-     * 1차 호출 요청을 조립한다.
-     * 이미지 + memo 를 보고 상품명, 등급, 검색 키워드를 출력하게 한다.
-     */
-    public ClaudeMessageRequest buildPhase1(AiAssistCommand command) {
-        Object system = List.of(ClaudeMessageRequest.SystemBlock.cached(phase1Prompt));
-
-        List<ContentItem> userContent = new ArrayList<>(command.imageUrls().size() + 1);
+    public OpenAiChatRequest buildPhase1(AiAssistCommand command) {
+        List<ContentPart> userContent = new ArrayList<>(command.imageUrls().size() + 1);
         for (String imageUrl : command.imageUrls()) {
-            userContent.add(ContentItem.imageUrl(imageUrl));
+            userContent.add(ContentPart.imageUrl(imageUrl));
         }
-        userContent.add(ContentItem.text(buildPhase1Text(command)));
+        userContent.add(ContentPart.text(buildPhase1Text(command)));
 
-        return new ClaudeMessageRequest(
+        List<Message> messages = List.of(
+                Message.system(phase1Prompt),
+                Message.user(userContent)
+        );
+
+        return new OpenAiChatRequest(
                 properties.getModel(),
-                properties.getMaxTokens(),
-                system,
-                List.of(Message.user(userContent)),
-                null  // 1차는 도구 불필요
+                messages,
+                // GPT-5.x reasoning 모델은 max_completion_tokens 안에 reasoning 토큰까지 포함되므로
+                // 짧은 cap 을 두면 reasoning 만 하다 출력이 빈다. 모델 기본값 사용.
+                null,
+                OpenAiChatRequest.ResponseFormat.jsonObject()
         );
     }
 
@@ -109,19 +109,7 @@ public class ClaudePromptBuilder {
 
     // ── 2차 호출: 가격 산정 + 설명 생성 ──
 
-    /**
-     * 2차 호출 요청을 조립한다.
-     * 1차 결과(상품명, 등급, 등급 근거) + 검색 결과 리스트를 보고
-     * 최종 추천가(low/mid/high) + 상품 설명을 생성한다.
-     *
-     * @param command     원본 커맨드 (이미지, memo, category)
-     * @param productName 1차에서 식별한 상품명
-     * @param grade       1차에서 판정한 등급 (S/A/B/C/D)
-     * @param gradeReason 1차에서 판정한 등급 근거
-     * @param priceItems  네이버 검색 결과 (null 이면 검색 없이 추론)
-     * @param retryViolations 재시도 시 이전 위반 항목 (null 이면 첫 시도)
-     */
-    public ClaudeMessageRequest buildPhase2(
+    public OpenAiChatRequest buildPhase2(
             AiAssistCommand command,
             String productName,
             String grade,
@@ -129,13 +117,11 @@ public class ClaudePromptBuilder {
             List<PriceItem> priceItems,
             List<GuardrailViolation> retryViolations
     ) {
-        Object system = List.of(ClaudeMessageRequest.SystemBlock.cached(phase2Prompt));
-
-        List<ContentItem> userContent = new ArrayList<>(command.imageUrls().size() + 1);
+        List<ContentPart> userContent = new ArrayList<>(command.imageUrls().size() + 2);
         for (String imageUrl : command.imageUrls()) {
-            userContent.add(ContentItem.imageUrl(imageUrl));
+            userContent.add(ContentPart.imageUrl(imageUrl));
         }
-        userContent.add(ContentItem.text(buildPhase2Text(command, productName, grade, gradeReason, priceItems)));
+        userContent.add(ContentPart.text(buildPhase2Text(command, productName, grade, gradeReason, priceItems)));
 
         // 재시도 피드백 주입
         if (retryViolations != null && !retryViolations.isEmpty()) {
@@ -145,15 +131,19 @@ public class ClaudePromptBuilder {
                 feedback.append("- ").append(v.message()).append('\n');
             }
             feedback.append("\n위 문제를 수정하여 다시 JSON을 생성해주세요.");
-            userContent.add(ContentItem.text(feedback.toString()));
+            userContent.add(ContentPart.text(feedback.toString()));
         }
 
-        return new ClaudeMessageRequest(
+        List<Message> messages = List.of(
+                Message.system(phase2Prompt),
+                Message.user(userContent)
+        );
+
+        return new OpenAiChatRequest(
                 properties.getModel(),
-                properties.getMaxTokens(),
-                system,
-                List.of(Message.user(userContent)),
-                null
+                messages,
+                null,
+                OpenAiChatRequest.ResponseFormat.jsonObject()
         );
     }
 
@@ -167,7 +157,6 @@ public class ClaudePromptBuilder {
         StringBuilder sb = new StringBuilder(512);
         sb.append("다음 상품의 시작가 추천과 상품 설명을 생성해주세요.\n\n");
 
-        // 1차 분석 결과
         sb.append("## 상품 분석 결과\n");
         sb.append("- 상품명: ").append(productName).append('\n');
         sb.append("- 등급: ").append(grade).append("급\n");
@@ -181,7 +170,6 @@ public class ClaudePromptBuilder {
             sb.append("- 사용자 입력 정보:\n").append(command.memo()).append('\n');
         }
 
-        // 검색 결과 리스트 (제목: 가격 형식)
         if (priceItems != null && !priceItems.isEmpty()) {
             List<PriceItem> shopItems = priceItems.stream()
                     .filter(i -> i.description() == null)
@@ -208,7 +196,6 @@ public class ClaudePromptBuilder {
                     sb.append("  ").append(item.description()).append('\n');
                 }
             }
-
         }
 
         sb.append('\n');
@@ -217,5 +204,4 @@ public class ClaudePromptBuilder {
         sb.append("사용자가 명시하지 않은 외관 상태/사용감/연식은 절대 추측해서 작성하지 마세요.");
         return sb.toString();
     }
-
 }

@@ -1,9 +1,15 @@
-package com.cos.fairbid.ai.adapter.out.claude;
+package com.cos.fairbid.ai.adapter.out.gemini;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,41 +21,47 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest;
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest.ContentItem;
-import com.cos.fairbid.ai.adapter.out.claude.dto.ClaudeMessageRequest.Message;
+import com.cos.fairbid.ai.adapter.out.gemini.dto.GeminiGenerateRequest;
+import com.cos.fairbid.ai.adapter.out.gemini.dto.GeminiGenerateRequest.Content;
+import com.cos.fairbid.ai.adapter.out.gemini.dto.GeminiGenerateRequest.GenerationConfig;
+import com.cos.fairbid.ai.adapter.out.gemini.dto.GeminiGenerateRequest.Part;
 import com.cos.fairbid.ai.application.dto.AiAssistCommand;
 import com.cos.fairbid.ai.application.dto.PriceItem;
+import com.cos.fairbid.ai.domain.exception.InvalidImageException;
 import com.cos.fairbid.ai.domain.guardrail.GuardrailViolation;
 
 /**
- * Claude Messages API 요청을 조립한다.
+ * Gemini generateContent 요청을 조립한다.
  *
- * v2 2단계 호출 구조:
- * - 1차 (Phase1): 이미지 + memo → 상품 식별 + 등급 판정 + 검색 키워드
- * - 2차 (Phase2): 1차 결과 + 검색 결과 → 가격 산정 + 상품 설명 생성
- *
- * 두 프롬프트 모두 cache_control: ephemeral 로 Prompt Caching 적용.
+ * Claude 프롬프트 리소스(phase1/phase2 txt)를 그대로 재사용한다. 차이:
+ * - system_instruction 필드 별도 (Claude 와 유사)
+ * - 이미지는 base64 inline_data 로 전달 (임의 URL 직접 전달 불가) — 러너에서 네트워크 한 번 더 탐
+ * - Prompt caching 은 별도 API (createCachedContent) 필요해서 v1 에서는 미사용
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "ai.provider", havingValue = "claude", matchIfMissing = true)
-public class ClaudePromptBuilder {
+@ConditionalOnProperty(name = "ai.provider", havingValue = "gemini")
+public class GeminiPromptBuilder {
 
     private static final String PHASE1_PROMPT_RESOURCE = "prompts/auction-assist-phase1.txt";
     private static final String PHASE2_PROMPT_RESOURCE = "prompts/auction-assist-system.txt";
 
-    private final AnthropicProperties properties;
+    private final GeminiProperties properties;
 
     private String phase1Prompt;
     private String phase2Prompt;
+
+    /** 이미지 다운로드용 클라이언트. 10초 커넥트, 응답은 body 받을 때 제한. */
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     @PostConstruct
     public void loadSystemPrompt() {
         this.phase1Prompt = loadResource(PHASE1_PROMPT_RESOURCE);
         this.phase2Prompt = loadResource(PHASE2_PROMPT_RESOURCE);
-        log.info("Claude prompts loaded - phase1: {} chars, phase2: {} chars",
+        log.info("Gemini prompts loaded - phase1: {} chars, phase2: {} chars",
                 phase1Prompt.length(), phase2Prompt.length());
     }
 
@@ -64,25 +76,18 @@ public class ClaudePromptBuilder {
 
     // ── 1차 호출: 상품 식별 + 등급 판정 ──
 
-    /**
-     * 1차 호출 요청을 조립한다.
-     * 이미지 + memo 를 보고 상품명, 등급, 검색 키워드를 출력하게 한다.
-     */
-    public ClaudeMessageRequest buildPhase1(AiAssistCommand command) {
-        Object system = List.of(ClaudeMessageRequest.SystemBlock.cached(phase1Prompt));
-
-        List<ContentItem> userContent = new ArrayList<>(command.imageUrls().size() + 1);
+    public GeminiGenerateRequest buildPhase1(AiAssistCommand command) {
+        List<Part> userParts = new ArrayList<>(command.imageUrls().size() + 1);
         for (String imageUrl : command.imageUrls()) {
-            userContent.add(ContentItem.imageUrl(imageUrl));
+            userParts.add(downloadAsPart(imageUrl));
         }
-        userContent.add(ContentItem.text(buildPhase1Text(command)));
+        userParts.add(Part.text(buildPhase1Text(command)));
 
-        return new ClaudeMessageRequest(
-                properties.getModel(),
-                properties.getMaxTokens(),
-                system,
-                List.of(Message.user(userContent)),
-                null  // 1차는 도구 불필요
+        return new GeminiGenerateRequest(
+                Content.system(phase1Prompt),
+                List.of(Content.user(userParts)),
+                // Gemini 2.5 thinking 모델은 maxOutputTokens 안에 추론 토큰까지 포함되므로 명시 제한 없음(모델 기본값).
+                GenerationConfig.jsonOutput(null)
         );
     }
 
@@ -109,19 +114,7 @@ public class ClaudePromptBuilder {
 
     // ── 2차 호출: 가격 산정 + 설명 생성 ──
 
-    /**
-     * 2차 호출 요청을 조립한다.
-     * 1차 결과(상품명, 등급, 등급 근거) + 검색 결과 리스트를 보고
-     * 최종 추천가(low/mid/high) + 상품 설명을 생성한다.
-     *
-     * @param command     원본 커맨드 (이미지, memo, category)
-     * @param productName 1차에서 식별한 상품명
-     * @param grade       1차에서 판정한 등급 (S/A/B/C/D)
-     * @param gradeReason 1차에서 판정한 등급 근거
-     * @param priceItems  네이버 검색 결과 (null 이면 검색 없이 추론)
-     * @param retryViolations 재시도 시 이전 위반 항목 (null 이면 첫 시도)
-     */
-    public ClaudeMessageRequest buildPhase2(
+    public GeminiGenerateRequest buildPhase2(
             AiAssistCommand command,
             String productName,
             String grade,
@@ -129,15 +122,12 @@ public class ClaudePromptBuilder {
             List<PriceItem> priceItems,
             List<GuardrailViolation> retryViolations
     ) {
-        Object system = List.of(ClaudeMessageRequest.SystemBlock.cached(phase2Prompt));
-
-        List<ContentItem> userContent = new ArrayList<>(command.imageUrls().size() + 1);
+        List<Part> userParts = new ArrayList<>(command.imageUrls().size() + 2);
         for (String imageUrl : command.imageUrls()) {
-            userContent.add(ContentItem.imageUrl(imageUrl));
+            userParts.add(downloadAsPart(imageUrl));
         }
-        userContent.add(ContentItem.text(buildPhase2Text(command, productName, grade, gradeReason, priceItems)));
+        userParts.add(Part.text(buildPhase2Text(command, productName, grade, gradeReason, priceItems)));
 
-        // 재시도 피드백 주입
         if (retryViolations != null && !retryViolations.isEmpty()) {
             StringBuilder feedback = new StringBuilder("\n[이전 응답 검증 결과]\n");
             feedback.append("아래 문제가 발견되어 다시 생성합니다:\n");
@@ -145,15 +135,13 @@ public class ClaudePromptBuilder {
                 feedback.append("- ").append(v.message()).append('\n');
             }
             feedback.append("\n위 문제를 수정하여 다시 JSON을 생성해주세요.");
-            userContent.add(ContentItem.text(feedback.toString()));
+            userParts.add(Part.text(feedback.toString()));
         }
 
-        return new ClaudeMessageRequest(
-                properties.getModel(),
-                properties.getMaxTokens(),
-                system,
-                List.of(Message.user(userContent)),
-                null
+        return new GeminiGenerateRequest(
+                Content.system(phase2Prompt),
+                List.of(Content.user(userParts)),
+                GenerationConfig.jsonOutput(null)
         );
     }
 
@@ -167,7 +155,6 @@ public class ClaudePromptBuilder {
         StringBuilder sb = new StringBuilder(512);
         sb.append("다음 상품의 시작가 추천과 상품 설명을 생성해주세요.\n\n");
 
-        // 1차 분석 결과
         sb.append("## 상품 분석 결과\n");
         sb.append("- 상품명: ").append(productName).append('\n');
         sb.append("- 등급: ").append(grade).append("급\n");
@@ -181,7 +168,6 @@ public class ClaudePromptBuilder {
             sb.append("- 사용자 입력 정보:\n").append(command.memo()).append('\n');
         }
 
-        // 검색 결과 리스트 (제목: 가격 형식)
         if (priceItems != null && !priceItems.isEmpty()) {
             List<PriceItem> shopItems = priceItems.stream()
                     .filter(i -> i.description() == null)
@@ -208,7 +194,6 @@ public class ClaudePromptBuilder {
                     sb.append("  ").append(item.description()).append('\n');
                 }
             }
-
         }
 
         sb.append('\n');
@@ -218,4 +203,54 @@ public class ClaudePromptBuilder {
         return sb.toString();
     }
 
+    /**
+     * HTTP(S) URL 에서 이미지를 다운로드해 Base64 Part 로 변환한다.
+     * Gemini inline_data 는 최대 20MB 까지 수용하지만, 대부분 케이스는 1MB 이하라 단순 bytes 로 처리.
+     *
+     * - mime type 은 응답 Content-Type 에서 추출, 없으면 확장자로 추론, 그래도 없으면 image/jpeg 기본값
+     * - 다운로드 실패/비이미지 응답은 InvalidImageException 으로 변환 (어댑터에서 도메인 예외로 재-매핑)
+     */
+    private Part downloadAsPart(String imageUrl) {
+        try {
+            // Wikipedia 등 일부 호스트가 Java HttpClient 기본 UA 를 차단하므로 명시적 UA 지정
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(imageUrl))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("User-Agent", "FairBid-AiAssist/1.0 (+https://github.com/fairbid)")
+                    .header("Accept", "image/*")
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() / 100 != 2) {
+                log.warn("이미지 다운로드 실패 url={} status={}", imageUrl, response.statusCode());
+                throw InvalidImageException.of();
+            }
+            String mimeType = response.headers().firstValue("Content-Type")
+                    .map(ct -> ct.split(";")[0].trim())
+                    .filter(ct -> ct.startsWith("image/"))
+                    .orElse(guessMimeFromUrl(imageUrl));
+            String base64 = Base64.getEncoder().encodeToString(response.body());
+            return Part.image(mimeType, base64);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw InvalidImageException.of();
+        } catch (IOException e) {
+            log.warn("이미지 다운로드 네트워크 오류 url={}: {}", imageUrl, e.getMessage());
+            throw InvalidImageException.of();
+        }
+    }
+
+    private String guessMimeFromUrl(String url) {
+        String lower = url.toLowerCase();
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".webp")) {
+            return "image/webp";
+        }
+        if (lower.endsWith(".gif")) {
+            return "image/gif";
+        }
+        return "image/jpeg";
+    }
 }
