@@ -41,7 +41,7 @@ export default function ConfirmModal({
 
   return (
     // 백드롭은 클릭으로만 닫히고 키보드 ESC는 window.keydown 으로 처리 (useEffect 참고)
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       role="dialog"

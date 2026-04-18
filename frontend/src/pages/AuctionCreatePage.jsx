@@ -740,9 +740,9 @@ export default function AuctionCreatePage() {
 
       <ConfirmModal
         open={pendingAiResult !== null}
-        message={'이미 입력하신 설명이 있습니다.\nAI가 생성한 설명으로 덮어쓸까요?'}
-        confirmLabel="덮어쓰기"
-        cancelLabel="유지"
+        message="AI 추천 결과를 어떻게 반영할까요?"
+        confirmLabel="시작가, 설명 받기"
+        cancelLabel="시작가만 받기"
         onConfirm={handleConfirmOverwrite}
         onCancel={handleCancelOverwrite}
       />
