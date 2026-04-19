@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 MAX_TOOL_ROUNDS = 5
+# 스레드 내 이전 대화 최대 개수 (현재 질문은 별도 추가)
+THREAD_CONTEXT_LIMIT = 10
 
 
 class QuestionHandler:
@@ -40,12 +42,72 @@ class QuestionHandler:
         """Discord 스레드에서 받은 질문에 답.
 
         내부 Claude 호출은 blocking이므로 asyncio.to_thread로 이벤트 루프 분리.
+        스레드 히스토리 로드는 async라 to_thread 진입 전에 수행.
         """
         import asyncio
-        return await asyncio.to_thread(self._answer_sync, thread, question)
 
-    def _answer_sync(self, thread, question: str) -> str:
-        """실제 동기 구현 — Claude tool_use 루프."""
+        history_messages: list[dict] = []
+        if thread is not None:
+            try:
+                history_messages = await self._load_thread_context(thread)
+            except Exception as e:
+                logger.warning("thread history load failed: %s", e)
+
+        return await asyncio.to_thread(
+            self._answer_sync, thread, question, history_messages
+        )
+
+    async def _load_thread_context(self, thread) -> list[dict]:
+        """스레드의 이전 대화를 Claude 메시지 포맷으로 변환.
+
+        규칙:
+        - Bot 메시지 → assistant role, 사용자 메시지 → user role
+        - content 없는 메시지(임베드만, 시스템 알림) 스킵
+        - 가장 최근 메시지(현재 질문 자체)는 제외
+        - 연속 같은 role은 병합 (Claude API 요구사항)
+        - 첫 메시지는 반드시 user (assistant로 시작하면 앞쪽 제거)
+        """
+        raw_msgs = []
+        # limit+1: 가장 최근 1개는 현재 질문이라 제외하고 N개 확보
+        async for m in thread.history(limit=THREAD_CONTEXT_LIMIT + 1, oldest_first=False):
+            raw_msgs.append(m)
+        if len(raw_msgs) <= 1:
+            return []
+
+        # 최신 1개(현재 질문) 제외, 오래된 것부터로 정렬
+        raw_msgs = raw_msgs[1:]
+        raw_msgs.reverse()
+
+        bot_id = thread.guild.me.id if thread.guild else thread.me.id
+
+        claude_msgs: list[dict] = []
+        for m in raw_msgs:
+            is_bot = m.author.id == bot_id
+            role = "assistant" if is_bot else "user"
+            content = (m.content or "").strip()
+            if not is_bot and m.mentions:
+                for mention in m.mentions:
+                    content = content.replace(f"<@{mention.id}>", "").replace(f"<@!{mention.id}>", "")
+                content = content.strip()
+            if not content:
+                continue
+            # 연속 같은 role은 병합
+            if claude_msgs and claude_msgs[-1]["role"] == role:
+                claude_msgs[-1]["content"] += "\n\n" + content
+            else:
+                claude_msgs.append({"role": role, "content": content})
+
+        # 첫 메시지는 user여야 함 (Claude API)
+        while claude_msgs and claude_msgs[0]["role"] != "user":
+            claude_msgs = claude_msgs[1:]
+
+        return claude_msgs
+
+    def _answer_sync(self, thread, question: str, history_messages: list[dict]) -> str:
+        """실제 동기 구현 — Claude tool_use 루프.
+
+        history_messages: async로 미리 로드된 스레드 이전 대화.
+        """
         # 스레드가 알람 스레드인지 식별
         alert_context = ""
         if thread is not None:
@@ -62,7 +124,8 @@ class QuestionHandler:
                     f"필요하면 get_alert_report({history['id']})로 당시 분석을 확인해라."
                 )
 
-        messages = [{"role": "user", "content": question}]
+        # 이전 대화 + 현재 질문
+        messages = list(history_messages) + [{"role": "user", "content": question}]
         system_with_context = self.system_prompt + alert_context
 
         for round_num in range(MAX_TOOL_ROUNDS):
