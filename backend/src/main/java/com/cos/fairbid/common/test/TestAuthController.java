@@ -76,10 +76,15 @@ public class TestAuthController {
         User user = result.user();
 
         // 4. 온보딩 자동 완료 (신규 사용자만)
+        //    완료 후 JWT를 재발급한다 — 3단계에서 발급된 accessToken의 claim에는
+        //    onboarded=false가 박혀있어, @RequireOnboarding 가드를 통과하지 못한다.
         if (!user.isOnboarded()) {
             user.completeOnboarding(request.nickname(), request.phoneNumber());
-            user = saveUserPort.save(user);
-            log.info("[SIM] 온보딩 자동 완료: userId={}, nickname={}", user.getId(), request.nickname());
+            saveUserPort.save(user);
+            result = oAuthLoginUseCase.loginWithUserInfo(userInfo);
+            user = result.user();
+            log.info("[SIM] 온보딩 자동 완료 + 토큰 재발급: userId={}, nickname={}",
+                    user.getId(), request.nickname());
         }
 
         log.info("[SIM] Mock 로그인: userId={}, email={}, isNewUser={}",
