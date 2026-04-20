@@ -1221,7 +1221,36 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 - Claude 설명이 벤치에서 다양한 점수 분포를 보인 케이스 우선
 - Gemini 가 이미지 거부했던 케이스는 제외 (이미 phase1 에서 걸러지므로 설명 품질 평가 무의미)
 
-**결과 저장**: 기본 `docs/benchmark-results/runs/{timestamp}/` (gitignored). 측정 확정 시 `BENCHMARK_OUTPUT_DIR=docs/benchmark-results/raw/description-smoke-{date}` 로 지정해 `raw/` 에 바로 떨어뜨리고 커밋. 요약은 `docs/benchmark-results/description-smoke-{date}.md` 에 수기.
+**결과 저장**: 기본 `docs/benchmark-results/runs/{timestamp}/` (gitignored). 측정 확정 시 `BENCHMARK_OUTPUT_DIR=docs/benchmark-results/raw/description-smoke-{date}` 로 지정해 `raw/` 에 바로 떨어뜨리고 커밋.
+
+##### 실측 결과 (2026-04-20)
+
+- 케이스: 10건 (run-1). Gemini phase1 이미지 거부로 2건 예외 → run-2 에서 재돌림 (Claude phase1 공유 + 양쪽 phase2 구조)
+- judge: Claude Opus 4.7 (`claude-opus-4-7`)
+- raw: `docs/benchmark-results/raw/description-smoke-2026-04-20/{run-1-full-10, run-2-rerun-2}/`
+
+**Pairwise (10건 통합, 재돌림 2건 반영)**:
+
+| 기준 | Claude 승 | Gemini 승 | TIE | Gemini 승률(비-TIE) |
+|---|---|---|---|---|
+| hook | 2 | 5 | 3 | 71.4% |
+| no_spec_dump | 0 | 7 | 3 | 100.0% |
+| hidden_value | 8 | 2 | 0 | 20.0% ← < 25% |
+| persona_clarity | 3 | 6 | 1 | 66.7% |
+| no_reformat | 5 | 5 | 0 | 50.0% |
+| **합계** | **18** | **25** | **7** | **58.1%** (≥ 40%) |
+
+**절대 점수 평균 (/25)**: Claude 16.6, Gemini 16.8
+
+**판정**: **Port 재설계 진행** (전체 승률 58.1% ≥ 40%).
+
+**잔여 리스크**:
+- `hidden_value` 20% < 25% 기준 미달. 다만 샘플 3건 (`ikea-billy-bookcase`, `la-mer-creme-60ml`, `basketball`) 수동 검수 결과 양측 치명적 할루시네이션 없고, 점수 차이는 "Claude 담백 / Gemini 마케팅 톤" 문체 차이가 주요인. 할루시네이션 관점에선 오히려 Claude 가 memo 에 없는 가격 수치("새 공은 10만원이 넘지만")를 언급하는 사례가 있어 주의 필요
+- 자동 지표 `guardrailViolations` 는 양쪽 모두 10건 중 7건 위반 (주로 `DESCRIPTION_NO_PERSONA`). 본 작업에서 가드레일 재튜닝 필수
+
+**후속 조치**:
+- Port 재설계 본 작업 진입 시 Gemini 프롬프트에 "구매자가 스펙만으로 모를 숨은 가치 강조" 지시 명시적으로 포함 → 재측정 없이 본 작업 내에서 보강
+- 본 작업 PR 에 스모크 재실행 서브셋 (2~3건) 포함해 회귀 감시
 
 #### 결론
 
