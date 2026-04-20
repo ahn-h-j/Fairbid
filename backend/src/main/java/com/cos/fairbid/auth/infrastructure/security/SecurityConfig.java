@@ -77,6 +77,9 @@ public class SecurityConfig {
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 
+                        // 시뮬레이션 Mock 로그인 — Controller가 @Profile("simulation")이라 운영에선 404
+                        .requestMatchers("/api/v1/test/auth/**").permitAll()
+
                         // 개발용 테스트 엔드포인트 (ADMIN 역할 필요)
                         .requestMatchers("/api/v1/test/**").hasRole("ADMIN")
 
