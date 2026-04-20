@@ -25,6 +25,7 @@
 - `END_AT_EPOCH`: 종료 시각 (Unix epoch seconds)
 - (선택) `MODE=seed`, `AUCTION_COUNT=N` — 시딩 모드
 - (블랙햇 전용) `TARGET_USER_IDS` — 다른 유저 ID 목록 (IDOR 테스트용)
+- (AI 판매자 전용) `GOLDEN_CASES` — AI 어시스턴트 골든 케이스 JSONL 경로. 각 줄에 `image_url`, `memo`, `expected.low`, `expected.high` 포함. 시딩 시 한 줄 랜덤 pick해서 AI 호출 입력으로 씀. 응답의 `suggestedPrices.low/high`를 `expected.low/high`와 대조하면 AI 정확도도 같이 검증됨
 
 ---
 
@@ -130,15 +131,36 @@ END_AT_EPOCH 넘으면 즉시 종료.
 
 ## 시딩 모드 (판매자 페르소나 전용)
 
-`MODE=seed` + `AUCTION_COUNT=N` 이면 N개 경매 등록:
+`MODE=seed` + `AUCTION_COUNT=N` 이면 N개 경매 등록.
+
+### 한글 payload는 반드시 파일 기반 `--data @`
+
+Git Bash에서 `curl -d '{"title":"맥북"}'` 같이 한글을 인라인으로 주면 인코딩 꼬여서 `INVALID_REQUEST_BODY` 400이 난다.
+반드시 임시 JSON 파일을 먼저 쓰고 `--data @` 로 전송:
 
 ```bash
+cat > /tmp/seed.json <<'EOF'
+{"title":"맥북 프로 M3","category":"ELECTRONICS","startPrice":50000,"instantBuyPrice":200000,"duration":"HOURS_24","deliveryAvailable":true}
+EOF
 curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
-  -d '{"title":"...","category":"ELECTRONICS","startPrice":50000,"instantBuyPrice":200000,"duration":"HOURS_24","deliveryAvailable":true}' \
-  "$BASE_URL/api/v1/auctions"
+  --data @/tmp/seed.json "$BASE_URL/api/v1/auctions"
 ```
 
+AI 어시스턴트 호출(`/api/v1/ai/auction-assist`), 거래 메모, 닉네임 등 **모든 한글 body는 동일 규칙**.
+
 **다양성 최우선** — 카테고리, 가격대, title 섞기. 너의 페르소나 스타일로.
+
+### AI 판매자 (`GOLDEN_CASES` 주입 시)
+
+`GOLDEN_CASES` 있으면 각 경매 등록 전에:
+
+1. JSONL에서 랜덤 한 줄 pick — `image_url`, `memo`, `expected.low/high` 획득
+2. `POST /api/v1/ai/auction-assist` 호출 (`memo` + `imageUrls=[image_url]`)
+3. 응답의 `suggestedPrices.low`를 `startPrice`, `.high`를 `instantBuyPrice`로 사용 (페르소나 판단에 따라 조정)
+4. LOG_FILE에 AI 응답 vs `expected.low/high` 비교 기록:
+   ```
+   [HH:MM:SS] 🤖 AI_ASSIST case#17 → low=1800000 (expected 1700000~1900000) ✅
+   ```
 
 완료 후:
 ```json

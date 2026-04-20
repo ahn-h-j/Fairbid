@@ -120,7 +120,11 @@ done
 
 `sim-junghyun`과 `sim-miyoung`을 **동기**로 호출해서 정상 경매 각 5개씩, **총 10개** 등록.
 
+AI 어시스턴트가 활성이면(`ai-status.txt`에 `AVAILABLE`) 두 페르소나에게 `GOLDEN_CASES` 경로를 주입. 판매자가 경매 등록 전 AI를 호출해 실시세 기반 추천가를 받고, 동시에 골든 케이스 `expected.low/high`와 대조해서 AI 정확도도 평가한다.
+
 ```
+GOLDEN_CASES=/c/Users/tkgkd/Desktop/Workspace/FairBid-ai-assist/backend/src/test/resources/ai/golden/cases.jsonl
+
 Agent(
   subagent_type="sim-junghyun",
   description="Seed normal auctions",
@@ -131,14 +135,16 @@ Agent(
   LOG_FILE={WORK_DIR}/logs/junghyun-seed.log
   MODE=seed
   AUCTION_COUNT=5
+  GOLDEN_CASES=/c/Users/tkgkd/Desktop/Workspace/FairBid-ai-assist/backend/src/test/resources/ai/golden/cases.jsonl
 
   playbook 참고해서 5개 경매 등록. 다양한 deliveryAvailable/directTradeAvailable 조합 섞어라 (택배/직거래/둘다).
+  GOLDEN_CASES가 있고 AI 활성이면 각 경매마다 한 줄 랜덤 pick해서 AI 어시스턴트 호출 후 추천가 사용 + expected.low/high 대조 기록.
   완료 후 {"auctionIds":[...]}.
   """
 )
 ```
 
-`sim-miyoung`도 동일.
+`sim-miyoung`도 동일 (`GOLDEN_CASES` 포함).
 
 ### 시간 가속 (경매 종료 시각을 22분 후로)
 
