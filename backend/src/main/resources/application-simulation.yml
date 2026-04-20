@@ -1,0 +1,25 @@
+# 시뮬레이션 프로파일
+#
+# AI 에이전트 경매 시뮬레이션 전용 설정.
+# 활성화: SPRING_PROFILES_ACTIVE=simulation
+#
+# - TestAuthController(@Profile("simulation"))가 활성화되어 Mock OAuth 로그인 가능
+# - JWT 만료 시간을 길게 설정 (시뮬레이션 도중 토큰 만료 방지)
+# - 쿠키 secure 비활성화 (로컬 HTTP 환경)
+#
+# 주의: 운영/스테이징 환경에서 절대 사용 금지
+
+# JWT 만료 시간 연장 (시뮬레이션은 보통 30분~1시간 진행)
+jwt:
+  access-expiration: 7200000      # 2시간
+  refresh-expiration: 86400000    # 24시간
+
+# 로컬 HTTP 환경
+app:
+  cookie:
+    secure: false
+
+logging:
+  level:
+    com.cos.fairbid.common.test: INFO
+    com.cos.fairbid.auth.application.service.AuthService: INFO
