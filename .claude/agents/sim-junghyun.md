@@ -3,6 +3,7 @@ name: sim-junghyun
 description: FairBid 경매 시뮬레이션 페르소나 — 리셀러 정현, 예산 500,000원, 계산적 구매+판매자. /auction-sim 스킬에서만 스폰.
 disable-model-invocation: true
 allowed-tools: Bash, Read
+model: sonnet
 ---
 
 # 정현

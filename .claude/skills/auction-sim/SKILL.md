@@ -35,11 +35,27 @@ argument-hint: [없음 — 자동 진행]
 
 ## Phase 0: 사전 점검
 
+### 인프라 기동 (Docker Compose)
+
+Docker Desktop이 꺼져 있었다면 **반드시 다음 순서**로 올려라 (역순이면 Redis `NOREPLICAS` 크래시):
+
+```bash
+# 1) redis → mysql 먼저
+docker compose up -d redis mysql
+# 2) Redis replica 제약 해제 (재기동하면 휘발되므로 매번)
+docker exec fairbid-sim-redis-1 redis-cli CONFIG SET min-replicas-to-write 0
+# 3) backend
+docker compose up -d backend
+```
+
+백엔드가 `depends_on: redis healthy`로 뜨기 때문에 CONFIG SET 전에 기동되면
+BidStreamConsumer init 단계에서 `NOREPLICAS` 로 죽는다. 순서를 지켜야 한다.
+
 ```bash
 # 백엔드 health check
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
 # 200 아니면 사용자에게 안내:
-# "SPRING_PROFILES_ACTIVE=simulation ./gradlew bootRun 으로 백엔드를 띄워주세요"
+# "SPRING_PROFILES_ACTIVE=simulation docker compose up 으로 백엔드를 띄워주세요"
 
 # Mock 로그인 엔드포인트 활성 확인
 curl -s -X POST -H "Content-Type: application/json" \
@@ -99,6 +115,26 @@ for entry in "${PERSONAS[@]}"; do
   echo "{\"name\":\"$name\",\"token\":\"$TOKEN\",\"userId\":$UID}" >> "$WORK_DIR/tokens.jsonl"
 done
 ```
+
+### Admin 토큰 발급 (SEED_TOKEN)
+
+`/api/v1/test/auctions/**` 조작 엔드포인트(`set-end-time`, `force-close`, `force-noshow`, `winning-status`)는 `ROLE_ADMIN`이 필요하다. Mock 로그인에 `admin:true`를 넣으면 발급된 JWT의 role이 ADMIN으로 박힌다.
+
+```bash
+cat > /tmp/seed_login.json <<'EOF'
+{"email":"seed@sim.test","nickname":"seed","phoneNumber":"01000000000","admin":true}
+EOF
+SEED_TOKEN=$(curl -s -X POST -H "Content-Type: application/json" \
+  --data @/tmp/seed_login.json http://localhost:8080/api/v1/test/auth/login \
+  | python -c "import json,sys;print(json.load(sys.stdin)['data']['accessToken'])")
+echo "SEED_TOKEN=$SEED_TOKEN" > "$WORK_DIR/seed.env"
+```
+
+이 SEED_TOKEN은 Phase 2 (`set-end-time`), Phase 4 (`timeline.sh`: force-close / force-noshow / winning-status), Phase 6 (최종 상태 조회)에서 전부 재사용된다.
+
+주의: 일반 페르소나 로그인 때는 `admin` 필드를 빼거나 `false`로 두어라. admin=true를 넣으면 ADMIN 권한까지 붙기 때문에, 시뮬에서 검증하려는 "일반 사용자 시점의 권한 가드"를 건너뛴다.
+
+---
 
 판매자 경매를 일부 등록한 사람에게는 **계좌 정보**도 설정해야 함 (택배 플로우에서 구매자에게 노출되는 데이터 — 없으면 sellerBankAccount가 null). Phase 1 끝 부분에 추가:
 

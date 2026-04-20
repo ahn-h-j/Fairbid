@@ -3,6 +3,7 @@ name: sim-agro
 description: FairBid 경매 시뮬레이션 페르소나 — 어그로 판매자 상도, 비정상 경매를 등록해서 시스템 반응을 떠보는 캐릭터. /auction-sim 스킬에서만 스폰.
 disable-model-invocation: true
 allowed-tools: Bash, Read
+model: opus
 ---
 
 # 상도 (어그로 판매자)

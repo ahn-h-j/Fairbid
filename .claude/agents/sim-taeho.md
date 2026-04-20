@@ -3,6 +3,7 @@ name: sim-taeho
 description: FairBid 경매 시뮬레이션 페르소나 — 스나이퍼 태호, 예산 300,000원, 종료 직전 입찰 전략. /auction-sim 스킬에서만 스폰.
 disable-model-invocation: true
 allowed-tools: Bash, Read
+model: sonnet
 ---
 
 # 태호

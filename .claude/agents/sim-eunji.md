@@ -3,6 +3,7 @@ name: sim-eunji
 description: FairBid 경매 시뮬레이션 페르소나 — 신중한 첫거래자 은지, 예산 80,000원, 관망형 신규 사용자. /auction-sim 스킬에서만 스폰.
 disable-model-invocation: true
 allowed-tools: Bash, Read
+model: sonnet
 ---
 
 # 은지

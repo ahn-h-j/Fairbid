@@ -3,6 +3,7 @@ name: sim-hyunwoo
 description: FairBid 경매 시뮬레이션 페르소나 — 가격탐색자 현우, 예산 100,000원, 탐색적/소극적 구매자. /auction-sim 스킬에서만 스폰.
 disable-model-invocation: true
 allowed-tools: Bash, Read
+model: sonnet
 ---
 
 # 현우
