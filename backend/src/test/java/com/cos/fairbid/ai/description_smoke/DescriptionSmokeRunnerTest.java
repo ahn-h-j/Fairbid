@@ -62,6 +62,14 @@ public class DescriptionSmokeRunnerTest {
     void runSmokeGate() throws IOException {
         List<GoldenCase> allCases = GoldenCaseLoader.loadFromClasspath(GOLDEN_CLASSPATH);
         List<GoldenCase> selected = SmokeCaseSelector.select(allCases);
+        // SMOKE_CASE_IDS 환경변수로 서브셋 실행 (쉼표 구분). 빈 값이면 전체.
+        String limitRaw = System.getenv("SMOKE_CASE_IDS");
+        if (limitRaw != null && !limitRaw.isBlank()) {
+            java.util.Set<String> keep = java.util.Arrays.stream(limitRaw.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .collect(java.util.stream.Collectors.toSet());
+            selected = selected.stream().filter(c -> keep.contains(c.id())).toList();
+        }
 
         ModelAdapterFactory factory = new ModelAdapterFactory(objectMapper);
         AiClientPort claude = factory.build(GENERATOR_CLAUDE).adapter();
@@ -84,8 +92,30 @@ public class DescriptionSmokeRunnerTest {
                 System.out.println("[smoke] case=" + c.id());
                 AiAssistCommand command = toCommand(c);
 
-                Generation claudeGen = generate(claude, command, GENERATOR_CLAUDE);
-                Generation geminiGen = generate(gemini, command, GENERATOR_GEMINI);
+                // 1) Claude phase1: 이미지+메모 분석 → ProductAnalysis (공유 분석)
+                // 2) Claude phase2: analysis + command 그대로 → 가격+설명 (설명만 사용)
+                // 3) Gemini phase2: 동일 analysis 재사용, 이미지 뺀 command → 가격+설명 (설명만 사용)
+                //    Gemini 는 phase1 을 돌리지 않으므로 이미지 관용도 이슈 회피 (옵션 B 모의)
+                ProductAnalysis sharedAnalysis;
+                try {
+                    sharedAnalysis = claude.analyzeProduct(command);
+                } catch (RuntimeException e) {
+                    Generation failClaude = new Generation(
+                            GENERATOR_CLAUDE, null, null, null, null,
+                            e.getClass().getSimpleName(), e.getMessage());
+                    CaseRecord rec = new CaseRecord(
+                            c.id(), failClaude, null, null, null, "phase1_failed");
+                    records.add(rec);
+                    writer.write(objectMapper.writeValueAsString(rec));
+                    writer.newLine();
+                    continue;
+                }
+
+                AiAssistCommand descriptionCommand = new AiAssistCommand(
+                        command.category(), command.memo(), List.of());
+
+                Generation claudeGen = phase2Only(claude, command, sharedAnalysis, GENERATOR_CLAUDE);
+                Generation geminiGen = phase2Only(gemini, descriptionCommand, sharedAnalysis, GENERATOR_GEMINI);
 
                 if (claudeGen == null || geminiGen == null) {
                     CaseRecord rec = new CaseRecord(
@@ -143,17 +173,20 @@ public class DescriptionSmokeRunnerTest {
         return Path.of("docs", "benchmark-results", "runs", "description-smoke-" + stamp);
     }
 
-    private Generation generate(AiClientPort adapter, AiAssistCommand command, String label) {
+    private Generation phase2Only(
+            AiClientPort adapter,
+            AiAssistCommand command,
+            ProductAnalysis sharedAnalysis,
+            String label) {
         try {
-            ProductAnalysis analysis = adapter.analyzeProduct(command);
             AiAssistResult result = adapter.generatePricing(
-                    command, analysis, List.<PriceItem>of(), List.of());
+                    command, sharedAnalysis, List.<PriceItem>of(), List.of());
             return new Generation(
                     label,
                     result.generatedDescription(),
                     result.confidence(),
-                    analysis.productName(),
-                    analysis.grade(),
+                    sharedAnalysis.productName(),
+                    sharedAnalysis.grade(),
                     null, null);
         } catch (RuntimeException e) {
             return new Generation(

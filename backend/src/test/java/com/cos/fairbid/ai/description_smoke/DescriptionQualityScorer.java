@@ -43,7 +43,8 @@ public final class DescriptionQualityScorer {
             "절대 후회", "확실히 만족"
     );
 
-    private static final Pattern H1_PATTERN = Pattern.compile("^#\\s+(.+)$", Pattern.MULTILINE);
+    // 설명 프롬프트가 `##` (H2)로 시작하는 케이스도 있어 H1뿐 아니라 임의 레벨 헤딩을 집계한다.
+    private static final Pattern H1_PATTERN = Pattern.compile("^#+\\s+(.+)$", Pattern.MULTILINE);
 
     private final DescriptionQualityRule qualityRule = new DescriptionQualityRule();
     private final HookRule hookRule = new HookRule();

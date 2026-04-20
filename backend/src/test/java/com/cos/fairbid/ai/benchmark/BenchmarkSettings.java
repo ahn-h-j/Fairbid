@@ -67,7 +67,14 @@ public record BenchmarkSettings(
         } else {
             String stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                     .format(LocalDateTime.now());
-            outputDir = Path.of("docs", "benchmark-results", "runs", stamp);
+            // gradle 기본 cwd 가 backend/ 이므로 프로젝트 루트로 올라가서 docs/ 를 해석한다.
+            // 이렇게 하지 않으면 결과가 backend/docs/... 아래로 떨어져 raw 아카이브 정책과 충돌한다.
+            Path cwd = Path.of("").toAbsolutePath();
+            Path projectRoot = cwd.getFileName() != null
+                    && "backend".equals(cwd.getFileName().toString())
+                    ? cwd.getParent()
+                    : cwd;
+            outputDir = projectRoot.resolve(Path.of("docs", "benchmark-results", "runs", stamp));
         }
 
         String casesPath = System.getenv("BENCHMARK_CASES_PATH");
