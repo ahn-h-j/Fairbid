@@ -3,11 +3,14 @@ package com.cos.fairbid.common.test;
 import com.cos.fairbid.auth.application.port.in.OAuthLoginUseCase;
 import com.cos.fairbid.auth.application.port.in.OAuthLoginUseCase.LoginResult;
 import com.cos.fairbid.auth.application.port.out.OAuthUserInfo;
+import com.cos.fairbid.auth.application.port.out.RefreshTokenPort;
+import com.cos.fairbid.auth.application.port.out.TokenProviderPort;
 import com.cos.fairbid.common.config.serverrole.EnabledOnRole;
 import com.cos.fairbid.common.response.ApiResponse;
 import com.cos.fairbid.user.application.port.out.SaveUserPort;
 import com.cos.fairbid.user.domain.OAuthProvider;
 import com.cos.fairbid.user.domain.User;
+import com.cos.fairbid.user.domain.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
@@ -43,6 +46,8 @@ public class TestAuthController {
 
     private final OAuthLoginUseCase oAuthLoginUseCase;
     private final SaveUserPort saveUserPort;
+    private final TokenProviderPort tokenProviderPort;
+    private final RefreshTokenPort refreshTokenPort;
 
     /**
      * Mock OAuth 로그인을 수행한다.
@@ -85,6 +90,26 @@ public class TestAuthController {
             user = result.user();
             log.info("[SIM] 온보딩 자동 완료 + 토큰 재발급: userId={}, nickname={}",
                     user.getId(), request.nickname());
+        }
+
+        // 4-1. admin=true 요청이면 ADMIN 역할로 승격 후 토큰을 직접 재발급한다.
+        //      loginWithUserInfo 재호출을 쓰지 않는 이유:
+        //      AuthService.loginWithUserInfo() 는 determineRole(email) 을 재계산해서
+        //      ADMIN_EMAILS에 없는 이메일은 USER 로 강제 동기화한다. 즉 방금 박은 ADMIN이
+        //      다음 줄에서 USER 로 되돌아간다. 따라서 DB 상태를 보존하기 위해
+        //      토큰 발급/Refresh 저장을 포트로 직접 호출한다.
+        if (Boolean.TRUE.equals(request.admin()) && !user.isAdmin()) {
+            user.updateRole(UserRole.ADMIN);
+            user = saveUserPort.save(user);
+            String adminAccessToken = tokenProviderPort.generateAccessToken(user);
+            String adminRefreshToken = tokenProviderPort.generateRefreshToken(user);
+            refreshTokenPort.save(
+                    user.getId(),
+                    adminRefreshToken,
+                    tokenProviderPort.getRefreshExpirationSeconds()
+            );
+            result = new LoginResult(user, adminAccessToken, adminRefreshToken, result.isNewUser());
+            log.info("[SIM] ADMIN 승격 + 토큰 재발급: userId={}", user.getId());
         }
 
         log.info("[SIM] Mock 로그인: userId={}, email={}, isNewUser={}",
@@ -130,7 +155,8 @@ public class TestAuthController {
     public record MockLoginRequest(
             String email,
             String nickname,
-            String phoneNumber
+            String phoneNumber,
+            Boolean admin
     ) { }
 
     /**
