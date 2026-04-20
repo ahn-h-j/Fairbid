@@ -1,19 +1,31 @@
-# AI Assist (AI 경매 어시스턴트) — 스펙 v2
+# AI Assist Specification
 
-> 상품 이미지와 간략한 정보를 입력하면 AI가 시작가 추천 + 상품 설명을 생성하는 기능.
-> 이 문서는 v2 확정 스펙과 설계 이력을 포함한다.
+> 상품 이미지와 간략한 정보를 입력하면 AI가 시작가 추천 + 상품 설명을 생성하는 기능의 전체 스펙. 기능 사양 + 평가 체계 + 모델 선정 근거를 한 문서에 통합한다.
 
 ---
 
 ## 0. TL;DR
 
+### 기능
 - **입력**: 이미지 + memo + (선택) 카테고리
 - **출력**: 추천가 low/mid/high + 상품 설명 + `confidence` (high/low) + `confidenceReason`
 - **내부 흐름**: 입력 가드레일 → 1차 Claude(상품 식별+productKey) → **Redis 시세 캐시** → 네이버 검색 → 2차 Claude → 출력 가드레일
 - **성능**: 통과율 12/14 (85.7%), 비용 MISS 18원/호출 / HIT 약 4원/호출
 - **피드백 루프**: SOFT 위반은 DB 축적 → 매주 월 09:00 KST Discord 리포트 → `/evolve` 수동 분석
 
+### 평가 체계
+- Golden Dataset 30건 + 3중 지표(Strict / Score100 / IoU) + pass@k/pass^k 기반 벤치마크 러너
+- 러너: `backend/src/test/java/com/cos/fairbid/ai/benchmark/` 하위 JUnit
+- 실측 결과 아카이브: `docs/benchmark-results/{date}.md`
+
+### 모델 선정
+- **프로덕션 모델**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+- 근거: Strict 62.7% (1위), 이미지 거부율 0.3%, underpricing 편향(경매 시작가로 안전)
+- 상세 실측: `docs/benchmark-results/2026-04-17.md`
+
 ---
+
+# Part 1. 기능 스펙
 
 ## 1. 기능 개요
 
@@ -301,7 +313,7 @@
 
 ---
 
-## 6.5. 시세 캐시 (Phase 2)
+## 7. 시세 캐시 (Phase 2)
 
 자주 조회되는 상품은 Redis 에 적재해 **2차 Claude 호출 + 네이버 검색을 모두 우회**한다.
 
@@ -363,13 +375,6 @@ ai:price:{category}:{productKey}:{grade}
 - `RedisPriceCacheAdapter` (adapter/out/cache/) — `StringRedisTemplate` + Jackson 직렬화
 - `AiAssistService` 에서 1차 Claude 직후 `find()` → HIT 시 즉시 반환, 가드레일 PASS 후 `save()`
 
-### 검증
-
-`AiAssistServiceCacheTest` 단위 테스트로 3가지 시나리오 검증:
-1. 캐시 HIT → 네이버 검색 + 2차 Claude 호출 둘 다 스킵
-2. 캐시 MISS → 풀 흐름 실행 후 save() 1회 호출
-3. productKey 빈 문자열 → save() 호출 안 함
-
 ### 한계 및 고려사항
 
 - **첫 호출은 여전히 느림** — 첫 사용자가 비용 부담. hit률 상승은 운영 초기 곡선
@@ -379,7 +384,7 @@ ai:price:{category}:{productKey}:{grade}
 
 ---
 
-## 7. 헥사고날 패키지 구조
+## 8. 헥사고날 패키지 구조
 
 ```
 ai/
@@ -463,7 +468,7 @@ ai/
 
 ---
 
-## 8. 기술 스택
+## 9. 기술 스택
 
 | 구성 | 선택 |
 |---|---|
@@ -475,11 +480,13 @@ ai/
 | 스케줄러 | Spring `@Scheduled` (ThreadPoolTaskScheduler) |
 | 리포트 채널 | Discord Webhook |
 
-**미래 옵션 (모델 독립적 구조)**: `AiClientPort` 구현체만 갈아끼우면 Claude ↔ Gemini ↔ GPT-4o ↔ 로컬(Ollama/Gemma) swap 가능.
+**미래 옵션 (프로바이더 통째 swap)**: `AiClientPort` 구현체만 갈아끼우면 Claude ↔ Gemini ↔ GPT-4o ↔ 로컬(Ollama/Gemma) 전체 교체 가능.
+
+> **한계**: 현재 `AiClientPort.generatePricing()` 은 `AiAssistResult`(가격 + 설명 + confidence)를 **번들로 반환**한다. 즉 한 호출에서 한 프로바이더가 둘 다 만든다. "가격은 Claude, 설명은 Gemini" 같은 **역할별 분할**은 빈 교체만으로는 불가능하고, `DescriptionGeneratorPort` 를 신규로 분리하고 `generatePricing` 반환을 가격 전용으로 축소하는 Port 재설계가 필요하다. OTPM 완화·비용 절감용으로 유효한 선택지지만 드롭인은 아니다.
 
 ---
 
-## 9. 성능 지표 (v1 → v2)
+## 10. 성능 지표 (v1 → v2)
 
 | 지표 | v1 (web_search) | v2 (2단계 + 가드레일) | 개선 |
 |---|---|---|---|
@@ -487,7 +494,7 @@ ai/
 | input_tokens 평균 | 45,757 | **2,472** | **−95%** |
 | latency 평균 | 15,321ms | **10,163ms** | **−34%** |
 | 호출당 비용 | 약 218원 | **18원** | **−92%** |
-| 분당 처리량 (Tier 1, 50K/min) | 1.1건 | **14건+** | **13배** |
+| 분당 처리량 (Tier 1, 30K/min) | 1.1건 | **14건+** | **13배** |
 
 ### 실패 2건 (v2 최종)
 
@@ -521,29 +528,453 @@ ai/
 
 **통과율**: v1 11/14 (78.6%) vs v2 12/14 (85.7%)
 
-**관찰:**
-- **가격 정확도는 거의 동일** (12/14 케이스가 비슷한 범위에서 PASS)
-- **v1 약점**:
-  - brompton 예외 발생 — web_search multi-turn 응답 파싱 실패로 보임 (v1의 비결정성 문제)
-  - numatic FAIL — 해외 니치 상품에서 v1 도 한계
-- **v2 약점**:
-  - nike 경계값 실패 — Claude 응답 변동성 (v1 은 100K, v2 는 75K)
-  - fender 가 v1 보다 더 멀어짐 (v1 1,250K vs v2 950K) — 단종 모델은 web_search 실시간 검색이 약간 유리
-
-**결론**: **웹서치를 떼서 품질이 떨어진 건 아니다.** 엎치락뒤치락 비슷하고, 오히려 v2 가 1건 더 많이 통과. 결정적 차이는 품질이 아니라 **운영 가능성**:
-
-| 축 | v1 | v2 | 차이 |
-|---|---|---|---|
-| 통과율 | 11/14 | 12/14 | +1 |
-| 호출당 비용 | 218원 | 18원 | **−92%** |
-| 분당 처리량 (Tier 1) | 1.1건 | 14건+ | **13배** |
-| 예외 발생 | 1/14 (brompton) | 0/14 | v2 더 안정 |
-
-v1 은 품질이 나빠서 못 쓰는 게 아니라 **호출당 45K 토큰 + rate limit + 비결정성** 때문에 운영 불가. v2 는 동등한 품질을 훨씬 적은 비용으로 안정적으로 달성.
+**결론**: **웹서치를 떼서 품질이 떨어진 건 아니다.** v1 은 품질이 나빠서 못 쓰는 게 아니라 **호출당 45K 토큰 + rate limit + 비결정성** 때문에 운영 불가. v2 는 동등한 품질을 훨씬 적은 비용으로 안정적으로 달성.
 
 ---
 
-## 10. 설계 결정 이력
+# Part 2. 평가 체계
+
+## 11. Golden Dataset
+
+### 11-1. 위치 / 파일
+
+`backend/src/test/resources/ai/golden/cases.jsonl` — JSONL 포맷, 한 줄 = 한 케이스.
+
+### 11-2. 스키마 (v2-lite)
+
+```json
+{
+  "id": "iphone-15-pro-b",
+  "category": "ELECTRONICS",
+  "memo": "아이폰 15 프로 256기가 블루티타늄\n작년 말쯤 구매했고 사용감 있어요\n박스 케이블 다 있습니다",
+  "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/IPhone_Pro.jpg/...",
+  "expected": {
+    "low": 780000,
+    "high": 1000000,
+    "tolerance_pct": 10,
+    "source": "당근 2026-04 실측 10건"
+  },
+  "tags": []
+}
+```
+
+**Jackson 파싱 설정**: `PropertyNamingStrategies.SNAKE_CASE` 적용. 레코드 필드는 camelCase(`imageUrl`, `tolerancePct`)지만 JSONL은 snake_case로 저장 가능.
+
+### 11-3. 필드 처리 규칙
+
+| 필드 | 처리 |
+|---|---|
+| `expected.mid` | 저장 안 함, `(low+high)/2` 로 계산 (`Expected.mid()`) |
+| `tolerance_pct` | **Score100 도입 후 미사용** (구 Soft PASS 유산, 파싱은 호환 유지) |
+| `tags` 누락 | 빈 리스트로 정규화 (`GoldenCase` 컴팩트 생성자) |
+| `image_url` | HTTPS 공개 URL 권장. 상대 경로는 API 서버에서 거절됨 (§13-5) |
+
+### 11-4. 카테고리 분포 (5×6=30)
+
+```
+ELECTRONICS  5건  — iPhone, MacBook, PS5, AirPods, Galaxy Buds3 Pro
+FASHION      5건  — 에어포스, 눕시, 룰루레몬, G-Shock, 샤넬 클래식
+HOME         5건  — 임스, 빌리 책장, 뉴마틱, 다이슨 V15, 발뮤다
+SPORTS       5건  — 브롬튼, 농구공, 자이언트, 테일러메이드, 베이퍼플라이
+HOBBY        5건  — 게임보이, 펜더, 폴라로이드, 포켓몬 박스, 레고 타이타닉
+OTHER        5건  — 라메르, SK-II, 스탠리, 딥디크, 킨토
+```
+
+### 11-5. tags 분류
+
+```
+boundary_price       — 경계값 케이스 (nike)
+vintage_premium      — 빈티지/한정판 감가 적음 (eames, brompton, fender, polaroid, game-boy, chanel)
+discontinued         — 단종 모델 (fender, game-boy)
+overseas_niche       — 국내 유통 제한 (numatic)
+low_search_volume    — 매물 5건 미만 (numatic, eames, fender)
+quantity_ambiguous   — 단품/세트 혼재 (pokemon, vaporfly)
+brand_ambiguous      — 같은 브랜드 다른 등급 (fender vs squier)
+high_value           — 100만원 이상 고가 (eames, chanel)
+low_price            — 5만원 이하 (basketball, stanley, kinto, billy)
+```
+
+리포트의 `By Tag` 섹션에서 tag 기반 slice 분석 제공.
+
+### 11-6. 데이터 수집 프로세스 (1건당 5~7분)
+
+1. 당근마켓 → 판매완료 필터
+2. 가격 10개 수집 (썸네일/제목으로 본체만 확인)
+3. 상하위 1개씩 제외 → 중간 8개로 low/high 결정
+4. 이상치 제거 (가품/부품/다른 모델)
+5. `source` 에 "N건 (X건 제외)" 기록 (추적 가능)
+
+### 11-7. memo 작성 원칙 — 유저 톤
+
+카탈로그 톤이 아니라 실제 판매자가 쓸 법한 짧고 대충된 톤. 등급 표현(B급/양호) 제외 (AI가 memo에서 자체 판정하도록).
+
+---
+
+## 12. 평가 지표
+
+### 12-1. Strict PASS (이분)
+
+```
+condition: expected.low ≤ mid ≤ expected.high
+score: 1.0 또는 0.0
+```
+
+구현: `VerdictScorer.strictPass(gc, mid)`.
+
+### 12-2. Score100 (0~100 연속 점수)
+
+**알고리즘**:
+```
+if (mid <= 0) return 0;
+if (mid ∈ [low, high]) return 100;
+distance = mid < low ? (low - mid) : (mid - high);
+tolerance = (width > 0) ? 2.5 * width : 0.25 * max(1, |low|);  // width == 0 폴백
+ratio = distance / tolerance;
+return (ratio >= 1.0) ? 0 : 100 * (1 - ratio);
+```
+
+**예시** (nike: `low=80000, high=140000`, `width=60000, tolerance=150000`):
+
+| mid | distance | Score |
+|---|---:|---:|
+| 100000 (한가운데) | 0 | 100 |
+| 80000 / 140000 (경계) | 0 | 100 |
+| 75000 | 5000 | 96.67 |
+| 50000 | 30000 | 80.0 |
+| 200000 | 60000 | 60.0 |
+| 290000 (tolerance edge) | 150000 | 0 |
+
+### 12-3. IoU (범위 겹침)
+
+```
+intersection = max(0, min(rec.high, exp.high) - max(rec.low, exp.low))
+union        = max(rec.high, exp.high) - min(rec.low, exp.low)
+iou          = intersection / union  (union=0이면 1.0)
+```
+
+`{low, mid, high}` 추천 범위 전체 평가. 단일 mid로는 보이지 않는 범위 합리성 체크.
+
+**평균 집계 정책 — Strict PASS run만 포함**: Strict FAIL 케이스는 mid 가 범위 밖이라 대부분 IoU=0. 이를 포함해 평균을 내면 "추천 범위 품질"이 아닌 "Strict PASS rate 종속 지표"가 되어 의미 희석. 따라서 **IoU 평균은 Strict PASS 인 run 만** 집계한다.
+
+### 12-4. pass@k / pass^k (반복 실행)
+
+각 케이스 n회 반복, 통과 횟수 c 기준:
+
+```
+pass@1 = c / n
+pass@k = 1 - C(n-c, k) / C(n, k),  n-c<k면 1.0
+pass^k = (c/n)^k
+```
+
+k=3 고정 (LLM eval 관례).
+
+**해석**:
+| pass@1 | pass^3 | 진단 |
+|---|---|---|
+| 1.0 | 1.0 | 완벽 |
+| 0.7 | 0.34 | 변동성 문제 (temperature/seed 조정) |
+| 0.2 | 0.008 | 능력 부족 (프롬프트/모델 변경) |
+
+### 12-5. Wilson 95% 신뢰구간
+
+```
+z = 1.96
+denom  = 1 + z²/n
+center = (p + z²/(2n)) / denom
+margin = z × √(p(1-p)/n + z²/(4n²)) / denom
+CI = [center - margin, center + margin]  (n=0이면 [0,1])
+```
+
+---
+
+## 13. 벤치마크 러너 아키텍처
+
+### 13-1. 패키지 구조
+
+```
+backend/src/test/java/com/cos/fairbid/ai/benchmark/
+├── BenchmarkSettings.java              # env var 파싱
+├── AiBenchmarkRunnerTest.java          # JUnit 엔트리 (@EnabledIfEnvVar)
+├── golden/
+│   ├── GoldenCase.java, Expected.java, GoldenCaseLoader.java
+├── score/
+│   ├── VerdictScorer.java              # Strict / Score100 / IoU
+│   ├── PassAtK.java                    # pass@k / pass^k / binomial
+│   └── WilsonCI.java                   # Wilson 신뢰구간
+├── runner/
+│   ├── BenchmarkOrchestrator.java      # 모델 병렬 + 케이스 병렬 루프
+│   ├── ModelExecutor.java              # 함수형 인터페이스
+│   ├── DryRunModelExecutor.java        # mock executor
+│   ├── RealModelExecutor.java          # AiAssistService 래퍼
+│   ├── ModelAdapterFactory.java        # 모델명 → AiClientPort 구성
+│   ├── NoOpPriceCachePort.java         # 캐시 우회
+│   ├── PipelineRateLimiter.java        # provider별 RPM 슬롯 스케줄러
+│   ├── RawResult.java                  # 1회 실행 기록
+│   ├── RawResultWriter.java            # JSONL append (synchronized)
+│   ├── ExistingResultsIndex.java       # 재개성 — 완료된 (caseId, runIdx) 스캔
+│   └── ProgressLogger.java             # stdout [done/total] 로그
+└── report/
+    ├── ModelReport.java, ReportAggregator.java, MarkdownRenderer.java, Reporter.java
+```
+
+### 13-2. 병렬성 정책
+
+- **모델 간 병렬** — `ExecutorService` 로 모든 모델 동시 실행
+- **케이스 내 병렬** — 모델당 `CASE_PARALLELISM=3` 스레드 풀에서 3 케이스 동시. 같은 케이스 내 run은 순차
+- **총 동시 호출 상한** — 3 모델 × 3 케이스 = **최대 9 파이프라인 동시**
+- **러너 자체 재시도 없음** — 프로덕션 가드레일의 1회 HARD 재시도는 그대로. 429/네트워크 오류는 `RawResult.exceptionType`에 기록되고 다음 run으로 넘어감
+
+### 13-3. Rate Limiter — Provider 공유 슬롯
+
+`PipelineRateLimiter`: provider 하나당 단일 인스턴스를 해당 provider의 모든 모델 executor가 공유. 파이프라인 시작 직전 `acquire()` 로 다음 슬롯 예약.
+
+```
+intervalMs = 60000 / maxPerMinute
+acquire() {
+    slot = max(now, nextAvailable)
+    nextAvailable = slot + intervalMs
+    sleep(slot - now) if positive
+}
+```
+
+**왜 "매 호출 sleep"이 아니라 "슬롯 예약"인가** — API 호출이 자연스럽게 느리면(Claude 15s, Gemini 22s) 이미 분당 RPM 밑이라 sleep 불필요. 슬롯 기반은 자연 지연을 낭비하지 않음.
+
+**Tier 1 제약 비교**:
+
+| Provider | Tier 1 제약 | 병목 |
+|---|---|---|
+| Claude Sonnet 4.5 | 50 RPM, 30K ITPM(cache read 무과금), **8K OTPM** | OTPM 타이트 |
+| OpenAI gpt-4.1-mini | 500 RPM, 200K TPM | 여유 |
+| Gemini 2.5 Flash (paid) | 1000 RPM, 4M TPM | 여유 |
+
+Claude Tier 1 의 OTPM 8K 가 실질 병목. 파이프라인당 output ~1K 토큰 × 분당 3 슬롯 × 2 phase = ~6K OTPM 수준으로 맞추려면 `BENCHMARK_RPM_CLAUDE=5` 권장.
+
+### 13-4. 재개성 — JSONL append + ExistingResultsIndex
+
+- `RawResultWriter.append()` 는 synchronized 로 단일 파일 append
+- 러너 시작 시 `ExistingResultsIndex.scan(jsonlFile)` 이 기존 파일을 읽어 `{caseId}#{runIdx}` 키 집합 반환
+- 이미 기록된 (case, run) 는 건너뜀 + `SKIP` 로그
+- 중단 후 `BENCHMARK_OUTPUT_DIR` 를 같은 경로로 주면 남은 run만 실행
+
+**한계**: 예외(EXCEPTION)도 "완료"로 간주되어 재실행에서 건너뜀. rate-limit 428 등으로 실패한 run을 재시도하려면 해당 줄을 수동 삭제 후 재실행.
+
+### 13-5. 이미지 처리 — `BENCHMARK_SKIP_IMAGES`
+
+Golden dataset 초기 버전은 `image_url: "./images/..."` 상대 경로였으나 Anthropic/OpenAI/Gemini 모두 **HTTPS URL만 허용** ("Only HTTPS URLs are supported").
+
+두 가지 대응:
+1. **이미지 포함** (default): `image_url`은 위키피디아 공개 URL로 매핑 (과거 이 매핑은 `backend/scripts/replace_image_urls.py` 스크립트로 수행, 현재는 골든셋에 직접 HTTPS URL 박제됨)
+2. **이미지 스킵** (`BENCHMARK_SKIP_IMAGES=true`): `RealModelExecutor.toCommand` 에서 `imageUrls` 를 빈 리스트로 전달. memo 단독 추론
+
+### 13-6. Spring 없는 수동 와이어링
+
+**왜 `@SpringBootTest` 를 쓰지 않는가**
+- 각 어댑터(Claude/OpenAI/Gemini)가 `@ConditionalOnProperty("ai.provider", havingValue="...")` 로 가드되어 단일 Spring 컨텍스트에선 **한 provider만 활성화**됨
+- 벤치마크는 3 provider 를 동시에 쓰고 싶음
+
+**대응** — `AiBenchmarkRunnerTest` 가 모든 빈을 수동 구성:
+- `ModelAdapterFactory` 가 provider별 `AiClientPort` 를 env var API 키로 new 해서 반환
+- `InputGuardrailChain` / `OutputGuardrailChain` 은 기존 Rule 구현체들을 `new` 로 묶어서 주입
+- `PriceCachePort` 는 `NoOpPriceCachePort` 직접 주입 (Redis 불필요)
+- `PriceSearchPort` 는 실제 `NaverShoppingAdapter` 를 네이버 크레덴셜로 구성
+- 각 모델마다 `new AiAssistService(...)` 로 독립 인스턴스 조립 → `RealModelExecutor` 로 래핑
+
+**프로덕션 변경 범위** — `ClaudePromptBuilder.loadSystemPrompt()` 의 가시성을 package-private → public 으로 승격 (1줄). 로직 변화 없음.
+
+### 13-7. 출력 구조
+
+```
+build/benchmark/{timestamp}/
+├── claude/{ raw-results.jsonl, report.md }
+├── openai/{ raw-results.jsonl, report.md }
+├── gemini/{ raw-results.jsonl, report.md }
+└── comparison.md
+```
+
+> **주의**: `build/` 는 `.gitignore` 로 제외된다. 실측 raw 는 일회성이며, 정리된 결과 아카이브는 `docs/benchmark-results/{date}.md` 에 수동 기록.
+
+---
+
+## 14. 러너 사용법
+
+### 14-1. 드라이런 (API 키 불필요)
+
+```bash
+BENCHMARK_MODELS=claude,openai \
+BENCHMARK_DRY_RUN=true \
+BENCHMARK_RUNS_PER_CASE=3 \
+BENCHMARK_OUTPUT_DIR=build/bench-dryrun \
+./gradlew test --tests 'com.cos.fairbid.ai.benchmark.AiBenchmarkRunnerTest'
+```
+
+### 14-2. 스모크 (1 케이스 × 1 run × 3 모델)
+
+실 API로 3 모델 다 도는지 검증. 소요 ~1분, 비용 ~100원.
+
+```bash
+set -a; source .env; set +a
+BENCHMARK_MODELS=claude,openai,gemini \
+BENCHMARK_RUNS_PER_CASE=1 \
+BENCHMARK_CASES_LIMIT=1 \
+BENCHMARK_CACHE_DISABLED=true \
+BENCHMARK_OUTPUT_DIR=build/bench-smoke \
+./gradlew test --tests 'com.cos.fairbid.ai.benchmark.AiBenchmarkRunnerTest'
+```
+
+### 14-3. 본 벤치마크 (30 × 10 runs × 3 모델 = 900 pipelines)
+
+```bash
+set -a; source .env; set +a
+BENCHMARK_MODELS=claude,openai,gemini \
+BENCHMARK_RUNS_PER_CASE=10 \
+BENCHMARK_CACHE_DISABLED=true \
+BENCHMARK_RPM_CLAUDE=5 \
+BENCHMARK_OUTPUT_DIR=build/bench-10runs \
+./gradlew test --tests 'com.cos.fairbid.ai.benchmark.AiBenchmarkRunnerTest'
+```
+
+예상 소요 ~60분. 예상 비용 ~1만 2천 원.
+
+### 14-4. 재개
+
+실행 중단 후 같은 `BENCHMARK_OUTPUT_DIR` 를 지정하면 남은 run만 실행.
+
+### 14-5. 리포트 포맷
+
+**모델별 `report.md`**: Overall (Strict / Score / IoU / pass@k/pass^k / CI) → By Category → By Tag → Bottom 3 Cases → Exceptions
+
+**`comparison.md`**: 모델 비교 표 (Strict / Score / IoU / pass@k / Exceptions) + 모델별 Wilson CI
+
+---
+
+# Part 3. 모델 선정 ADR (2026-04-17)
+
+## 15. 측정 결과 요약
+
+> **전체 raw 데이터 + 케이스별/카테고리별/태그별 상세**: `docs/benchmark-results/2026-04-17.md`
+
+### 15-1. 모델 비교 요약 (900 pipelines)
+
+| Model | Strict Pass | Score | IoU | Exceptions | Avg Latency |
+|---|---:|---:|---:|---:|---:|
+| **Claude Sonnet 4.5** | **62.7%** | **94.1** | 0.294 | 1 | 13,468ms |
+| GPT-5.1 | 37.0% | 82.6 | 0.202 | 10 | 6,623ms |
+| Gemini 2.5 Pro | 59.0% | 91.4 | 0.328 | 33 | 19,538ms |
+
+### 15-2. Wilson 95% 신뢰구간
+
+| Model | Strict Pass Rate | 95% Wilson CI |
+|---|---:|---|
+| Claude Sonnet 4.5 | 62.7% | **57.1% -- 67.9%** |
+| GPT-5.1 | 37.0% | **31.7% -- 42.6%** |
+| Gemini 2.5 Pro | 59.0% | **53.4% -- 64.4%** |
+
+- Claude vs GPT-5.1: CI 안 겹침, 유의미
+- Claude vs Gemini: CI 약간 겹침, 약하게 유의미
+- Gemini vs GPT-5.1: CI 안 겹침, 유의미
+
+### 15-3. 핵심 인사이트
+
+1. **이미지 품질이 벤치마크 결과를 지배**: v1 → v2에서 가장 큰 변수는 이미지 교체. exception 해소만으로 전 모델 +18~27pp 상승
+2. **Claude는 안정적 1위**: exception 거의 없고(1/300), score 94.1로 가격 정확도 최고
+3. **Gemini는 강력한 2위**: v1(31.7%) → v2(59.0%)로 가장 큰 폭 성장
+4. **OpenAI는 overpricing 경향**: GPT-5.1으로 업그레이드해도 과대 추정 성향 잔존
+5. **여전히 해결 못한 난제**: fender-strat(단종 빈티지 기타), chanel-classic(명품 시세), pokemon-151(TCG 판본 혼동)은 3개 모델 모두 < 20% pass
+
+---
+
+## 16. 의사결정 매트릭스
+
+FairBid AI Assist 의 프로덕션 모델로 **Claude Sonnet 4.5** 를 선정한다.
+
+### 16-1. 선정 요약
+
+| 기준 | 1등 | 비고 |
+|---|---|---|
+| 정확도 (Strict Pass) | Claude 62.7% | Gemini 59.0% — CI 겹침, 근접 |
+| 이미지 관용도 | Claude (0.3% 거부율) | Gemini 11% 거부 — 프로덕션 리스크 |
+| 가격 편향 방향 | Claude underpricing | 경매 시작가 추천에 **안전한 방향** |
+| 지연 | GPT 6.6s (1등) | Claude 13.5s 중간, Gemini 19.5s 부담 |
+
+단일 지표로는 Claude vs Gemini 박빙이지만, **이미지 관용도 + 편향 방향** 이 사용자 체감과 사업 리스크 측면에서 Claude 를 결정.
+
+### 16-2. Claude 를 선택한 이유
+
+#### (1) 이미지 관용도
+
+| 모델 | Exceptions / 300 | 비율 |
+|---|---:|---:|
+| **Claude** | **1** | **0.3%** |
+| GPT-5.1 | 10 | 3.3% |
+| Gemini | 33 | 11.0% |
+
+Gemini 는 이미지가 조금만 애매하면 거부한다. 골든 데이터셋은 사전 검수된 이미지인데도 한 케이스당 9/10 거부 사례 존재.
+
+**프로덕션 시사점**: 실제 유저는 핸드폰으로 대충 찍은 사진을 올린다. 각도/조명/배경 전부 불리. Gemini 의 거부율은 골든 셋(11%) 보다 훨씬 높아질 것.
+
+#### (2) 가격 편향 방향
+
+| 모델 | 편향 패턴 |
+|---|---|
+| **Claude** | **underpricing** (살짝 낮게) |
+| GPT-5.1 | overpricing (크게 높게, 14건 중 11건) |
+| Gemini | 편향 적음, 방향 일관성 없음 |
+
+**사업적 의미**:
+- 중고 경매 플랫폼의 **시작가 추천**에서 두 오류 비대칭
+  - **시작가 너무 높으면** → 입찰이 안 들어옴 → 경매 실패 (치명적)
+  - **시작가 너무 낮으면** → 경매 중 자연스럽게 올라감 (복구 가능)
+- Claude 의 underpricing 편향 = "안전한 방향의 실수"
+
+#### (3) 지연 (Latency)
+
+| 모델 | 평균 | P95 |
+|---|---:|---:|
+| GPT-5.1 | **6.6초** | 10초 |
+| **Claude** | **13.5초** | 17초 |
+| Gemini | 19.5초 | 28초 |
+
+- Gemini 가 가장 느림. 실시간 UX 에서 P95 28초는 사실상 사용 불가 수준
+- Claude P95 17초는 "느리지만 수용 가능" 영역
+- GPT 가 제일 빠르지만 정확도가 너무 떨어져 선택지에서 탈락
+
+### 16-3. 의사결정 매트릭스 (종합)
+
+| 기준 | 가중치 | Claude | Gemini | GPT-5.1 |
+|---|---:|---:|---:|---:|
+| 정확도 (Strict Pass) | ★★★ | 62.7 | 59.0 | 37.0 |
+| 이미지 관용도 | ★★★ | 99.7 | 89.0 | 96.7 |
+| 안전한 편향 방향 | ★★ | ✅ | ➖ | ❌ |
+| 지연 | ★ | 13.5s | 19.5s | 6.6s |
+| **종합** | — | **1위** | 2위 | 3위 |
+
+- ★★★ 비즈니스 핵심 (틀리거나 거부하면 서비스 실패)
+- ★★ 사업 안전성 (틀렸을 때의 피해 방향)
+- ★ UX 보조 (느려도 기다리면 됨)
+
+---
+
+## 17. 리스크 + 재검토 트리거
+
+### 17-1. 인지된 리스크
+
+- **Claude Tier 1 의 output TPM 8K** 제약 — 현재 `BENCHMARK_RPM_CLAUDE=5` 로 보호. 프로덕션에서는 (1) Tier 2+/비즈니스 Tier 격상, 또는 (2) **역할 분할**(가격=Claude / 설명=Gemini)로 Claude 출력 토큰을 가격 JSON 수준으로 축소하는 방식 중 선택. 후자는 `AiClientPort` 재설계가 필요하지만 비용도 함께 감소 (설명은 Gemini 가격이 Sonnet 대비 1/10). 상세는 §19 옵션 B 참고
+- **Underpricing 누적 영향** — 플랫폼 전반 평균 낙찰가가 시장보다 낮아지는지 모니터링 필요
+- **Claude 지연 P95 17초** — 로딩 UX 개선으로 체감 지연 완화 필요 (스켈레톤 / progressive disclosure)
+
+### 17-2. 재검토 트리거
+
+다음 중 하나 이상 충족 시 모델 재평가:
+1. Anthropic 신모델 출시 (Claude 4.6 이상) 시 리그레션 벤치마크 즉시 실행
+2. 월간 "AI 추천 기각률" 10% 초과 (유저가 수동 수정하는 비율)
+3. 신규 카테고리 대거 추가로 기존 golden dataset 커버리지 50% 미만
+4. 경쟁 모델의 3rd-party 벤치마크에서 의미 있는 격차 발견
+
+---
+
+# Part 4. 이력 + 로드맵
+
+## 18. 설계 결정 이력
 
 ### v1 → v2 전환 동기
 
@@ -606,26 +1037,48 @@ v1 은 품질이 나빠서 못 쓰는 게 아니라 **호출당 45K 토큰 + rat
 
 ### 피드백 루프 자동화 이유
 
-SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하고 개별 조치는 안 함. 대신 **주간 집계로 반복 패턴 발견 → 프롬프트/규칙 보강** 사이클.
+SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하고 개별 조치는 안 함. 대신 **주간 집계로 반복 패턴 발견 → 프롬프트/규칙 보강** 사이클. 수동 `/evolve` 호출이 기본이지만 매주 Discord 리포트로 **알림은 자동**.
 
-수동 `/evolve` 호출이 기본이지만, 매주 Discord 리포트로 **알림은 자동**. 사용자가 리포트 보고 필요한 주에만 분석.
+### 평가 시스템 재설계 (Golden Dataset + 3중 지표)
+
+14건 회귀 셋의 한계:
+1. 통계적 신뢰도 부족 — Wilson 95% CI 폭이 너무 넓어 모델 간 차이 증명 불가
+2. P/F 기준 불투명 — expected 범위 근거 없음
+3. 경계값 이분법 — 5천원 차이로 결정
+4. 단일 지표(mid)만 검증
+
+**재설계**: Golden Dataset 30건 + 3중 지표(Strict / Score100 / IoU) + pass@k/pass^k + Wilson 95% CI.
+
+### Score100 도입 (Soft PASS 대체)
+
+- Soft 3단계로는 "얼마나 빗나갔는지" 구분 불가
+- Score100 은 거리 비례 연속, 선형 감쇠
+- 학술적으로 Winkler Score(Prediction Interval 평가)를 100점 만점으로 정규화한 변형
+- 부작용: 기존 14건 측정과 직접 수치 비교 불가
 
 ---
 
-## 11. 다음 단계
+## 19. 다음 단계
 
 ### 단기
-- ~~**프론트엔드 UI**: `confidence=low` 일 때 ⚠ 배지 + `confidenceReason` 노출~~ — **완료 (2026-04-12)** (`AuctionCreatePage` + `mutations.js`)
-- ~~**리뷰 Warning 6건**~~ — **완료 (2026-04-12)**: `@Transactional` 경계, `@CreationTimestamp`, `@Index`, `@Param`, ShedLock, Discord 트랜잭션 분리
+- ~~**프론트엔드 UI**: `confidence=low` 일 때 ⚠ 배지 + `confidenceReason` 노출~~ — **완료 (2026-04-12)**
+- ~~**리뷰 Warning 6건**~~ — **완료 (2026-04-12)**
+- ~~**Phase 2 시세 캐시**~~ — **완료 (2026-04-12)**. §7 참고
 - **nike 변동성**: 실행마다 75K/85K/95K 흔들림. 경계값 케이스 불안정. temperature 조정 또는 시드 고정 검토
 - **PromptInjectionRule false positive**: `\bsystem:`, `\bassistant:`, `act as` 패턴이 영어 memo 에서 오탐 가능. 줄 시작(`^`) 또는 델리미터 근접 조건으로 제한 검토
+- **약점 카테고리 프롬프트 개선**: 벤치에서 < 50% 나온 fender/chanel/pokemon — 카테고리 전용 프롬프트 시도
 
 ### 중기
-- ~~**Phase 2 시세 캐시**~~ — **완료 (2026-04-12)**. §6.5 참고
 - **카테고리별 검색 파이프라인 튜닝**: `confidence=low` 패턴이 특정 카테고리에서 반복되면 해당 카테고리 전용 검색 전략 추가
 - **캐시 hit률 실측**: 운영 데이터로 Zipf 분포 가정이 맞는지 검증. hit률 낮으면 productKey 정규화 품질 개선 필요
+- **Golden Dataset 재검증 사이클**: 3~6개월 주기로 시세 변동 반영
+- **Component Evaluation 데이터셋**: 등급 판정 검증용 (5~10상품 × 3등급)
 
-### 장기 — 벤더 락인 해소 (이미 설계상 가능)
+### 장기 — 멀티 프로바이더 전략
+
+#### 옵션 A. 프로바이더 통째 swap (드롭인, §9 참고)
+
+`AiClientPort` 구현체만 교체. 가격 + 설명을 한 프로바이더가 다 생성.
 
 | 모델 | 입력 ($/M) | 출력 ($/M) | 호출당 비용 | 비고 |
 |---|---|---|---|---|
@@ -635,11 +1088,31 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 | Gemini 2.5 Pro | 1.25 | 10.00 | ~8원 | Sonnet 대비 2~3배 저렴 |
 | GPT-4o | 2.50 | 10.00 | ~14원 | 이점 작음 |
 
-**결론**: 현재 FairBid 트래픽 수준에서는 Claude Sonnet 4.5 유지가 합리적. 트래픽이 늘면 Gemini 2.5 Flash/Pro 로 swap 검토 (`AiClientPort` 구현체만 교체하면 됨). 로컬 모델(Gemma 3, Qwen2.5-VL)은 GPU 인프라 부담 때문에 장기 옵션.
+#### 옵션 B. 역할별 분할 (Port 재설계 필요)
+
+가격은 Claude, 설명은 Gemini 로 나눠서 각 프로바이더의 강점만 취하는 방식. **OTPM 8K 제약 완화·비용 절감에 가장 효과적**이지만 드롭인 아님.
+
+- **아키텍처 변경**: `generatePricing` 반환을 가격+confidence 전용으로 축소 + `DescriptionGeneratorPort` 신규 분리
+- **기대 효과**: Claude 출력 토큰이 가격 JSON(~150토큰)만 남아 OTPM 부담 대폭 감소. 설명은 Gemini 가격이 1/10 수준이라 호출당 비용도 하락
+- **리스크**: 설명 가드레일(`DescriptionQualityRule`/`PersonaRule`/`HookRule`/`ReformatRule`/`DescriptionLengthRule`)이 Claude 톤 기준으로 튜닝돼 있어 Gemini 출력에서 위반율 재측정·재튜닝 필요. 가격-설명 톤 정합성(grade/confidence 입력 전달) 유의
+- **latency**: Claude phase2 와 Gemini 설명 호출을 병렬화하면 체감 증가 없음
+
+#### 결론
+
+현재 FairBid 트래픽에서는 옵션 A·B 모두 불필요하고 Claude Sonnet 4.5 단독 유지가 합리적. 다만 **Claude Tier 1 OTPM 8K 에 제약이 강해지면 옵션 B 가 Tier 격상보다 우선 검토 대상**이다 (아키텍처 개선 + 비용 하락 동반). 로컬 모델(Gemma 3, Qwen2.5-VL)은 GPU 인프라 부담 때문에 장기 옵션.
+
+### 러너 자체 개선
+- 이미지 base64 어댑터 지원 추가 (로컬 파일 케이스 허용)
+- 예외 run 자동 재시도 지원 (`ExistingResultsIndex` exception 제외 옵션)
+- 데이터셋 확장 (운영 데이터 기반 30 → 50건)
+- CI 회귀 자동화 (AI 관련 PR에 한해 서브셋 자동 실행)
+- 비용/latency 메트릭을 raw-results.jsonl 에 포함 (토큰 사용량 어댑터에서 추출)
 
 ---
 
-## 12. 환경 변수
+## 20. 환경 변수
+
+### 20-1. 런타임 (프로덕션)
 
 | 변수 | 설명 | 필수 |
 |---|---|---|
@@ -648,3 +1121,20 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 | `NAVER_CLIENT_SECRET` | 네이버 검색 시크릿 | O |
 | `DISCORD_AI_ASSIST_SOFT_WEBHOOK_URL` | 주간 가드레일 리포트 채널 웹훅 | X (미설정 시 전송 no-op) |
 | `DISCORD_AI_ASSIST_SOFT_CRON` | 리포트 cron 오버라이드 (기본 `0 0 9 * * MON`) | X |
+
+### 20-2. 벤치마크 러너
+
+| 변수 | 용도 | 기본값 |
+|---|---|---|
+| `BENCHMARK_MODELS` | 쉼표 구분 모델 (claude, openai, gemini 등) | **필수** |
+| `BENCHMARK_RUNS_PER_CASE` | 케이스당 반복 수 | 5 |
+| `BENCHMARK_CACHE_DISABLED` | Redis 시세 캐시 우회 (NoOp 강제) | false |
+| `BENCHMARK_DRY_RUN` | mock executor 로 파이프라인만 검증 | false |
+| `BENCHMARK_OUTPUT_DIR` | 결과 디렉토리 (같은 경로 재지정 시 JSONL append로 재개) | `build/benchmark/{yyyyMMdd-HHmmss}` |
+| `BENCHMARK_CASES_PATH` | Golden JSONL 클래스패스 | `ai/golden/cases.jsonl` |
+| `BENCHMARK_CASES_LIMIT` | 앞 N건만 실행 (스모크용) | 전체 |
+| `BENCHMARK_SKIP_IMAGES` | `true`면 memo 단독 추론 | false |
+| `BENCHMARK_RPM_CLAUDE` | Claude provider 최대 RPM. 0 = 무제한 | 0 |
+| `BENCHMARK_RPM_OPENAI` | OpenAI RPM | 0 |
+| `BENCHMARK_RPM_GEMINI` | Gemini RPM | 0 |
+| `OPENAI_API_KEY` / `GEMINI_API_KEY` | 벤치마크에 해당 모델 포함 시 필수 | — |
