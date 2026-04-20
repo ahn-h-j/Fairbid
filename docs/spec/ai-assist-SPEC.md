@@ -784,14 +784,18 @@ Golden dataset 초기 버전은 `image_url: "./images/..."` 상대 경로였으�
 ### 13-7. 출력 구조
 
 ```
-build/benchmark/{timestamp}/
-├── claude/{ raw-results.jsonl, report.md }
-├── openai/{ raw-results.jsonl, report.md }
-├── gemini/{ raw-results.jsonl, report.md }
-└── comparison.md
+docs/benchmark-results/
+├── runs/{timestamp}/       ← 러너 기본 출력 (gitignored, 스모크·실험용)
+│   ├── claude/{ raw-results.jsonl, report.md }
+│   ├── openai/{ raw-results.jsonl, report.md }
+│   ├── gemini/{ raw-results.jsonl, report.md }
+│   └── comparison.md
+├── raw/{label}/            ← 본벤치·재검토 raw (git 추적). BENCHMARK_OUTPUT_DIR 로 지정
+├── scripts/                ← 집계 스크립트 (bench_analysis.py 등)
+└── {date}.md               ← 측정 요약 아카이브
 ```
 
-> **주의**: `build/` 는 `.gitignore` 로 제외된다. 실측 raw 는 일회성이며, 정리된 결과 아카이브는 `docs/benchmark-results/{date}.md` 에 수동 기록.
+> **규칙**: 기본 `runs/` 는 gitignored. 영속화할 측정(본벤치·재검토 트리거)은 실행 시 `BENCHMARK_OUTPUT_DIR=docs/benchmark-results/raw/{label}` 로 지정해 `raw/` 에 직접 떨어뜨리고 커밋한다. 요약 분석은 `{date}.md` 에 수기.
 
 ---
 
@@ -1097,6 +1101,128 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 - **리스크**: 설명 가드레일(`DescriptionQualityRule`/`PersonaRule`/`HookRule`/`ReformatRule`/`DescriptionLengthRule`)이 Claude 톤 기준으로 튜닝돼 있어 Gemini 출력에서 위반율 재측정·재튜닝 필요. 가격-설명 톤 정합성(grade/confidence 입력 전달) 유의
 - **latency**: Claude phase2 와 Gemini 설명 호출을 병렬화하면 체감 증가 없음
 
+##### 스모크 게이트 (Port 재설계 전 필수)
+
+본 작업(Port 재설계 3~5일) 전에 **가벼운 테스트 코드 범위**로 Gemini 설명 품질을 검증한다. 프로덕션 코드 무수정.
+
+**개발 필요 항목 (~1일)**:
+
+1. **설명-only 생성 유틸** (테스트 코드) — 기존 `ClaudeApiAdapter` / `GeminiApiAdapter` 활용, 입력 `ProductAnalysis + SuggestedPrices` → 출력 마크다운 설명 문자열만. Gemini 측 모델은 **Gemini 2.5 Pro** (벤치 59% 실측. Flash 는 미측정)
+2. **`DescriptionQualityScorer` 유틸** — 자동 지표 4종 계산
+3. **`LlmJudge` 유틸** — **Claude Opus** 호출 + 응답 JSON 파싱
+4. **`DescriptionSmokeRunnerTest`** — 10건 케이스 × Claude 1회 + Gemini 2.5 Pro 1회 생성 → 자동 지표 + LLM-judge 실행 → 결과 저장
+
+**자동 지표 4종**:
+
+| 지표 | 계산 | 도구 |
+|---|---|---|
+| 가드레일 위반율 | `DescriptionQualityRule` / `PersonaRule` / `HookRule` / `ReformatRule` 실행 후 위반 수 | 기존 규칙 재사용 |
+| H1 길이 | 첫 줄 `^# .+` 매칭 시 글자수 | regex |
+| 클리셰 빈도 | `DescriptionQualityRule` 내 14종 클리셰 등장 수 | regex |
+| memo 재복사율 | 설명 라인 중 memo 라인과 완전일치 비율 (라인 집합 Jaccard) | set intersection |
+
+> 길이(180~450) 지표는 제외. HARD 가드레일로 이미 100% 필터.
+
+**LLM-judge 5기준** (스펙 §4-2 마케터 체크리스트):
+
+| ID | 기준 |
+|---|---|
+| `hook` | 첫 줄이 호기심/설득을 유발하는가 |
+| `no_spec_dump` | 사양 나열 없이 가치 중심인가 |
+| `hidden_value` | 구매자가 모를 수 있는 장점을 짚었는가 |
+| `persona_clarity` | 누가 이 상품을 사야 하는지 명확한가 |
+| `no_reformat` | memo 재배열 이상의 창작이 있는가 |
+
+**채점 모드**:
+- **절대 점수 (1~5 + reason)** — 베이스라인 기록용
+- **쌍비교 (A / B / TIE)** — 같은 케이스의 Claude vs Gemini 나란히, 기준별 승자
+
+**채점자**: **Claude Opus**. 설명 생성자(Claude Sonnet / Gemini Pro) 와 다른 모델로 self-preference 편향 완화. pilot 5건으로 한국어 채점 품질 선검증 후 본 측정 진행. GPT-5.1 은 본 벤치 strict pass 37% 로 한국어 성능 낮아 제외.
+
+**채점 프롬프트 스켈레톤**:
+
+```
+[시스템]
+너는 중고 거래 플랫폼의 마케팅 카피 에디터다.
+제공된 상품 설명을 5개 기준으로 평가하라.
+각 점수에 근거 문장 1개 필수.
+길이는 평가 대상이 아니다.
+
+기준:
+1. hook — 첫 줄이 호기심/설득을 유발하는가
+2. no_spec_dump — 사양 나열 없이 가치 중심인가
+3. hidden_value — 구매자가 모를 수 있는 장점을 짚었는가
+4. persona_clarity — 누가 이 상품을 사야 하는지 명확한가
+5. no_reformat — memo 재배열 이상의 창작이 있는가
+
+[절대 점수 모드 — JSON]
+{ "hook": { "score": N, "reason": "..." }, ... }
+
+[쌍비교 모드 — JSON]
+{ "hook": "A" | "B" | "TIE", ... }
+
+[유저]
+상품: {category} / {productName} / 등급 {grade}
+설명 (또는 A: ..., B: ...):
+---
+{description}
+---
+```
+
+**편향 완화**:
+
+| 편향 | 완화 |
+|---|---|
+| Position bias (A 위치 고평가) | 쌍비교 시 A/B 순서 50:50 랜덤. 집계 시 원본(claude/gemini)로 복구 |
+| Length bias (긴 답변 고점) | 프롬프트에 "길이는 평가 대상 아님" 명시 |
+| Self-preference | 생성자(Claude Sonnet / Gemini Pro)와 다른 모델 라인(Claude Opus) judge 사용. Sonnet 출력을 Opus 가 더 선호할 가능성은 pilot 5건에서 점검 |
+
+**산출물 JSON**:
+
+```json
+{
+  "case_id": "iphone-15-pro-b",
+  "run_id": 1,
+  "generator": "claude",
+  "description": "...",
+  "automated": {
+    "guardrail_violations": ["PERSONA"],
+    "h1_length": 18,
+    "cliche_count": 1,
+    "reformat_jaccard": 0.15
+  },
+  "llm_judge_absolute": {
+    "hook": { "score": 4, "reason": "..." },
+    "no_spec_dump": { "score": 3, "reason": "..." },
+    "hidden_value": { "score": 4, "reason": "..." },
+    "persona_clarity": { "score": 2, "reason": "..." },
+    "no_reformat": { "score": 5, "reason": "..." },
+    "total": 18
+  },
+  "llm_judge_pairwise": {
+    "against": "gemini",
+    "randomized_order": "A=claude, B=gemini",
+    "hook": "A",
+    "no_spec_dump": "TIE",
+    "hidden_value": "B",
+    "persona_clarity": "A",
+    "no_reformat": "TIE"
+  }
+}
+```
+
+**판정 기준 (게이트 결과 → 본 작업 결정)**:
+- 쌍비교 Gemini 승률(A=Gemini 환산 후) **≥ 40%** → Port 재설계 진행
+- 자동 지표에서 Gemini 가드레일 위반율이 Claude 대비 **+10pp 이상** 악화 → 롤백
+- 특정 항목 승률 **< 25%** → 해당 항목 Gemini 프롬프트 보강 후 재측정
+
+**스모크용 케이스 10건 선정 원칙** (Golden Dataset 30건 중):
+- 카테고리 6종 × 1~2건
+- Claude 설명이 벤치에서 다양한 점수 분포를 보인 케이스 우선
+- Gemini 가 이미지 거부했던 케이스는 제외 (이미 phase1 에서 걸러지므로 설명 품질 평가 무의미)
+
+**결과 저장**: 기본 `docs/benchmark-results/runs/{timestamp}/` (gitignored). 측정 확정 시 `BENCHMARK_OUTPUT_DIR=docs/benchmark-results/raw/description-smoke-{date}` 로 지정해 `raw/` 에 바로 떨어뜨리고 커밋. 요약은 `docs/benchmark-results/description-smoke-{date}.md` 에 수기.
+
 #### 결론
 
 현재 FairBid 트래픽에서는 옵션 A·B 모두 불필요하고 Claude Sonnet 4.5 단독 유지가 합리적. 다만 **Claude Tier 1 OTPM 8K 에 제약이 강해지면 옵션 B 가 Tier 격상보다 우선 검토 대상**이다 (아키텍처 개선 + 비용 하락 동반). 로컬 모델(Gemma 3, Qwen2.5-VL)은 GPU 인프라 부담 때문에 장기 옵션.
@@ -1130,7 +1256,7 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 | `BENCHMARK_RUNS_PER_CASE` | 케이스당 반복 수 | 5 |
 | `BENCHMARK_CACHE_DISABLED` | Redis 시세 캐시 우회 (NoOp 강제) | false |
 | `BENCHMARK_DRY_RUN` | mock executor 로 파이프라인만 검증 | false |
-| `BENCHMARK_OUTPUT_DIR` | 결과 디렉토리 (같은 경로 재지정 시 JSONL append로 재개) | `build/benchmark/{yyyyMMdd-HHmmss}` |
+| `BENCHMARK_OUTPUT_DIR` | 결과 디렉토리 (같은 경로 재지정 시 JSONL append로 재개). 영속화할 측정은 `docs/benchmark-results/raw/{label}` 로 지정 | `docs/benchmark-results/runs/{yyyyMMdd-HHmmss}` (gitignored) |
 | `BENCHMARK_CASES_PATH` | Golden JSONL 클래스패스 | `ai/golden/cases.jsonl` |
 | `BENCHMARK_CASES_LIMIT` | 앞 N건만 실행 (스모크용) | 전체 |
 | `BENCHMARK_SKIP_IMAGES` | `true`면 memo 단독 추론 | false |
