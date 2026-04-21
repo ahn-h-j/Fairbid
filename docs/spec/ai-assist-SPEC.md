@@ -1252,6 +1252,22 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 - Port 재설계 본 작업 진입 시 Gemini 프롬프트에 "구매자가 스펙만으로 모를 숨은 가치 강조" 지시 명시적으로 포함 → 재측정 없이 본 작업 내에서 보강
 - 본 작업 PR 에 스모크 재실행 서브셋 (2~3건) 포함해 회귀 감시
 
+##### Port 재설계 구현 현황 (2026-04-21, 이슈 #91)
+
+- `AiClientPort.generatePricing` 리턴을 `PricingResult` (가격 + confidence) 로 축소 완료
+- `DescriptionGeneratorPort` 신규 인터페이스 + `GeminiDescriptionAdapter` 구현 완료
+  - `ai.description.gemini.*` 설정 키 신설, 모델 기본값 `gemini-2.5-pro` 고정
+  - 프롬프트 `prompts/auction-assist-description-gemini.txt` 에 `hidden_value` 체크리스트 3번 명시적 강조
+  - `ai.provider=claude` (가격) + Description 어댑터 (설명) 조합 상시 활성
+- `AiAssistService` phase2a (Claude 가격) + phase2b (Gemini 설명) 순차 호출 + 조립
+- 재시도 전략: HARD 위반 시 가격/설명 **둘 다 재호출** (세분화는 후속)
+
+**미완 (후속 PR)**:
+- phase2a/phase2b **병렬화** (CompletableFuture). 현재 순차라 최악 latency 는 Claude + Gemini 합. 스모크 측정 결과 Claude phase2 ≈ 13s / Gemini 2.5 Pro ≈ 20s → 병렬화 시 약 20s 유지 예상
+- 가드레일 재튜닝 (`DESCRIPTION_NO_PERSONA` 등 위반율 70% → 개선)
+- 스모크 러너 재설계: 기존 "Claude vs Gemini 설명 비교" 구조가 Port 분리 이후 의미 소실. "프롬프트 보강 전 vs 후" 구조로 재구성 후 회귀 감시
+- 프롬프트 최적화: Claude phase2 프롬프트에서 설명 생성 지시/응답 스키마 제거 (OTPM/비용 절감 완성)
+
 #### 결론
 
 현재 FairBid 트래픽에서는 옵션 A·B 모두 불필요하고 Claude Sonnet 4.5 단독 유지가 합리적. 다만 **Claude Tier 1 OTPM 8K 에 제약이 강해지면 옵션 B 가 Tier 격상보다 우선 검토 대상**이다 (아키텍처 개선 + 비용 하락 동반). 로컬 모델(Gemma 3, Qwen2.5-VL)은 GPU 인프라 부담 때문에 장기 옵션.
@@ -1271,7 +1287,9 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 
 | 변수 | 설명 | 필수 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Claude API 키 | O |
+| `ANTHROPIC_API_KEY` | Claude API 키 (phase1 + phase2a 가격) | O |
+| `GEMINI_API_KEY` | Gemini API 키 (phase2b 설명 — SPEC §19 옵션 B). `ai.description.gemini.api-key` 가 공유 | O |
+| `AI_DESCRIPTION_GEMINI_MODEL` | 설명 생성용 Gemini 모델 | `gemini-2.5-pro` |
 | `NAVER_CLIENT_ID` | 네이버 쇼핑/카페 검색 (OAuth2 와 공유) | O |
 | `NAVER_CLIENT_SECRET` | 네이버 검색 시크릿 | O |
 | `DISCORD_AI_ASSIST_SOFT_WEBHOOK_URL` | 주간 가드레일 리포트 채널 웹훅 | X (미설정 시 전송 no-op) |
