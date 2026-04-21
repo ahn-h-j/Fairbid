@@ -6,8 +6,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.cos.fairbid.ai.adapter.out.guardrail.rules.DescriptionQualityRule;
 import com.cos.fairbid.ai.adapter.out.guardrail.rules.HookRule;
@@ -20,12 +18,11 @@ import com.cos.fairbid.ai.domain.SuggestedPrices;
 import com.cos.fairbid.ai.domain.guardrail.GuardrailViolation;
 
 /**
- * 스모크 게이트 자동 지표 4종 계산기.
+ * 스모크 게이트 자동 지표 계산기.
  *
  * <p>SPEC §19 옵션 B 스모크 게이트 정의:</p>
  * <ul>
  *   <li>가드레일 위반: {@link DescriptionQualityRule} / {@link HookRule} / {@link PersonaRule} / {@link ReformatRule} 실행 후 누적 위반 ruleId 리스트</li>
- *   <li>H1 길이: 첫 {@code # ...} 매칭 글자수 (헤딩 없으면 0)</li>
  *   <li>클리셰 빈도: {@link DescriptionQualityRule#BANNED_PHRASES} 14종이 설명에 몇 번 등장하는가</li>
  *   <li>memo 재복사율: 설명 라인 집합과 memo 라인 집합의 Jaccard similarity (라인 단위)</li>
  * </ul>
@@ -43,9 +40,6 @@ public final class DescriptionQualityScorer {
             "절대 후회", "확실히 만족"
     );
 
-    // 설명 프롬프트가 `##` (H2)로 시작하는 케이스도 있어 H1뿐 아니라 임의 레벨 헤딩을 집계한다.
-    private static final Pattern H1_PATTERN = Pattern.compile("^#+\\s+(.+)$", Pattern.MULTILINE);
-
     private final DescriptionQualityRule qualityRule = new DescriptionQualityRule();
     private final HookRule hookRule = new HookRule();
     private final PersonaRule personaRule = new PersonaRule();
@@ -57,11 +51,10 @@ public final class DescriptionQualityScorer {
         }
 
         List<String> violations = runRules(description, command);
-        int h1Length = firstH1Length(description);
         int clicheCount = countClicheOccurrences(description);
         double jaccard = lineJaccard(description, command == null ? null : command.memo());
 
-        return new AutomatedMetrics(violations, h1Length, clicheCount, jaccard);
+        return new AutomatedMetrics(violations, clicheCount, jaccard);
     }
 
     private List<String> runRules(String description, AiAssistCommand command) {
@@ -80,14 +73,6 @@ public final class DescriptionQualityScorer {
         all.addAll(personaRule.check(fakeResult, safeCommand, emptyItems));
         all.addAll(reformatRule.check(fakeResult, safeCommand, emptyItems));
         return all.stream().map(GuardrailViolation::ruleId).toList();
-    }
-
-    private int firstH1Length(String description) {
-        Matcher m = H1_PATTERN.matcher(description);
-        if (m.find()) {
-            return m.group(1).trim().length();
-        }
-        return 0;
     }
 
     private int countClicheOccurrences(String description) {
@@ -134,7 +119,6 @@ public final class DescriptionQualityScorer {
 
     public record AutomatedMetrics(
             List<String> guardrailViolations,
-            int h1Length,
             int clicheCount,
             double reformatJaccard
     ) {

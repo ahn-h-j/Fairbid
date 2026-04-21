@@ -48,8 +48,6 @@ final class SmokeReportRenderer {
         int total = records.size();
         int claudeViolations = 0;
         int geminiViolations = 0;
-        double claudeH1Avg = 0;
-        double geminiH1Avg = 0;
         double claudeClicheAvg = 0;
         double geminiClicheAvg = 0;
         double claudeJaccardAvg = 0;
@@ -65,7 +63,6 @@ final class SmokeReportRenderer {
                 if (!cm.guardrailViolations().isEmpty()) {
                     claudeViolations++;
                 }
-                claudeH1Avg += cm.h1Length();
                 claudeClicheAvg += cm.clicheCount();
                 claudeJaccardAvg += cm.reformatJaccard();
             }
@@ -74,7 +71,6 @@ final class SmokeReportRenderer {
                 if (!gm.guardrailViolations().isEmpty()) {
                     geminiViolations++;
                 }
-                geminiH1Avg += gm.h1Length();
                 geminiClicheAvg += gm.clicheCount();
                 geminiJaccardAvg += gm.reformatJaccard();
             }
@@ -83,9 +79,6 @@ final class SmokeReportRenderer {
         sb.append("| 가드레일 위반율 | ")
                 .append(formatRate(claudeViolations, claudeWithMetrics)).append(" | ")
                 .append(formatRate(geminiViolations, geminiWithMetrics)).append(" |\n");
-        sb.append("| H1 평균 길이 | ")
-                .append(formatAvg(claudeH1Avg, claudeWithMetrics)).append("자 | ")
-                .append(formatAvg(geminiH1Avg, geminiWithMetrics)).append("자 |\n");
         sb.append("| 클리셰 평균 | ")
                 .append(formatAvg(claudeClicheAvg, claudeWithMetrics)).append(" | ")
                 .append(formatAvg(geminiClicheAvg, geminiWithMetrics)).append(" |\n");
@@ -228,7 +221,6 @@ final class SmokeReportRenderer {
         sb.append("- ").append(label).append(": confidence=").append(gen.confidence()).append("\n");
         if (m != null) {
             sb.append("  - 자동: 위반=").append(m.guardrailViolations())
-                    .append(", H1=").append(m.h1Length()).append("자")
                     .append(", 클리셰=").append(m.clicheCount())
                     .append(", Jaccard=").append(String.format(Locale.ROOT, "%.2f", m.reformatJaccard()))
                     .append("\n");

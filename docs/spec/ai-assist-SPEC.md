@@ -1108,20 +1108,20 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 **개발 필요 항목 (~1일)**:
 
 1. **설명-only 생성 유틸** (테스트 코드) — 기존 `ClaudeApiAdapter` / `GeminiApiAdapter` 활용, 입력 `ProductAnalysis + SuggestedPrices` → 출력 마크다운 설명 문자열만. Gemini 측 모델은 **Gemini 2.5 Pro** (벤치 59% 실측. Flash 는 미측정)
-2. **`DescriptionQualityScorer` 유틸** — 자동 지표 4종 계산
+2. **`DescriptionQualityScorer` 유틸** — 자동 지표 계산 (가드레일 위반 / 클리셰 / memo 재복사율)
 3. **`LlmJudge` 유틸** — **Claude Opus** 호출 + 응답 JSON 파싱
 4. **`DescriptionSmokeRunnerTest`** — 10건 케이스 × Claude 1회 + Gemini 2.5 Pro 1회 생성 → 자동 지표 + LLM-judge 실행 → 결과 저장
 
-**자동 지표 4종**:
+**자동 지표**:
 
 | 지표 | 계산 | 도구 |
 |---|---|---|
 | 가드레일 위반율 | `DescriptionQualityRule` / `PersonaRule` / `HookRule` / `ReformatRule` 실행 후 위반 수 | 기존 규칙 재사용 |
-| H1 길이 | 첫 줄 `^# .+` 매칭 시 글자수 | regex |
 | 클리셰 빈도 | `DescriptionQualityRule` 내 14종 클리셰 등장 수 | regex |
 | memo 재복사율 | 설명 라인 중 memo 라인과 완전일치 비율 (라인 집합 Jaccard) | set intersection |
 
 > 길이(180~450) 지표는 제외. HARD 가드레일로 이미 100% 필터.
+> H1 길이 단독 지표는 제외. 후크 강도는 LLM-judge `hook` 기준에서, 위반 여부는 `HookRule` 카운트로 커버됨.
 
 **LLM-judge 5기준** (스펙 §4-2 마케터 체크리스트):
 
