@@ -2,10 +2,14 @@ package com.cos.fairbid.ai.adapter.out.gemini;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.cos.fairbid.ai.adapter.out.guardrail.rules.DescriptionQualityRule;
 import com.cos.fairbid.ai.adapter.out.guardrail.rules.HookRule;
@@ -14,6 +18,11 @@ import com.cos.fairbid.ai.adapter.out.guardrail.rules.ReformatRule;
 import com.cos.fairbid.ai.application.dto.AiAssistCommand;
 import com.cos.fairbid.ai.application.dto.PriceItem;
 import com.cos.fairbid.ai.application.dto.ProductAnalysis;
+import com.cos.fairbid.ai.application.port.out.AiClientPort;
+import com.cos.fairbid.ai.benchmark.golden.GoldenCase;
+import com.cos.fairbid.ai.benchmark.golden.GoldenCaseLoader;
+import com.cos.fairbid.ai.benchmark.runner.ModelAdapterFactory;
+import com.cos.fairbid.ai.description_smoke.SmokeCaseSelector;
 import com.cos.fairbid.ai.domain.AiAssistResult;
 import com.cos.fairbid.ai.domain.SuggestedPrices;
 import com.cos.fairbid.auction.domain.Category;
@@ -21,16 +30,20 @@ import com.cos.fairbid.auction.domain.Category;
 /**
  * {@link GeminiDescriptionAdapter} 실측 테스트.
  *
- * <p>{@code DESCRIPTION_LIVE_TEST=true} + {@code GEMINI_API_KEY} 환경변수가 있을 때만 동작.
- * SPEC §19 옵션 B 이슈 #91 의 완료 조건 검증용 (응답 시간 / 가드레일 위반율 / 설명 길이).</p>
+ * <p>{@code DESCRIPTION_LIVE_TEST=true} + {@code GEMINI_API_KEY} + {@code ANTHROPIC_API_KEY}
+ * 환경변수가 있을 때만 동작. SPEC §19 옵션 B 이슈 #91 완료 조건 검증용.</p>
  *
- * <p>샘플 3건 (iphone / basketball / taylormade) 을 순차 호출하고 콘솔에 요약을 출력한다.</p>
+ * <p>기존 스모크 10건 케이스({@link SmokeCaseSelector})를 그대로 사용해
+ * Claude phase1 분석 → Gemini phase2b 설명 생성 흐름을 재현한다. Claude phase2a(가격)는 비용/시간
+ * 절감을 위해 스킵하고 SuggestedPrices 는 goldenCase.expected 에서 파생한다.</p>
+ *
+ * <p>집계: 케이스별 latency, 설명 길이, 가드레일 위반 수. 스모크 이전(70% 위반율) 대비 회귀 감시.</p>
  */
 @EnabledIfEnvironmentVariable(named = "DESCRIPTION_LIVE_TEST", matches = "true")
 class GeminiDescriptionAdapterLiveTest {
 
     @Test
-    void generateDescription_liveSamples() {
+    void generateDescription_liveTenCases() {
         GeminiDescriptionProperties props = new GeminiDescriptionProperties();
         props.setApiKey(System.getenv("GEMINI_API_KEY"));
         String modelOverride = System.getenv("AI_DESCRIPTION_GEMINI_MODEL");
@@ -38,79 +51,109 @@ class GeminiDescriptionAdapterLiveTest {
             props.setModel(modelOverride);
         }
         assertThat(props.getApiKey()).as("GEMINI_API_KEY 필요").isNotBlank();
+        assertThat(System.getenv("ANTHROPIC_API_KEY")).as("ANTHROPIC_API_KEY 필요").isNotBlank();
 
         GeminiDescriptionPromptBuilder builder = new GeminiDescriptionPromptBuilder(props);
         builder.loadSystemPrompt();
         GeminiDescriptionAdapter adapter = new GeminiDescriptionAdapter(props, builder);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        ModelAdapterFactory factory = new ModelAdapterFactory(objectMapper);
+        AiClientPort claude = factory.build("claude").adapter();
 
         DescriptionQualityRule qualityRule = new DescriptionQualityRule();
         HookRule hookRule = new HookRule();
         PersonaRule personaRule = new PersonaRule();
         ReformatRule reformatRule = new ReformatRule();
 
-        List<Sample> samples = List.of(
-                new Sample(
-                        "iphone-15-pro",
-                        new AiAssistCommand(
-                                Category.ELECTRONICS,
-                                "상품 정보: 아이폰 15 Pro 256GB 블루 티타늄\n구매 시기: 2024년 3월\n상태: 거의 새것 (사용 흔적 미미)\n추가 정보: 정품 박스, 라이트닝 어댑터 없음, 케이스·강화유리 부착 사용",
-                                List.of()),
-                        new ProductAnalysis("아이폰 15 Pro 256GB 블루 티타늄", "A",
-                                "거의 새것, 사용 흔적 미미", "아이폰 15 Pro 256GB", "iphone_15_pro_256gb"),
-                        new SuggestedPrices(900_000L, 1_000_000L, 1_100_000L)),
-                new Sample(
-                        "basketball",
-                        new AiAssistCommand(
-                                Category.SPORTS,
-                                "상품 정보: 몰텐 BG5000 공인구 7호\n구매 시기: 2023년 6월\n상태: 양호 (체육관 실내 사용, 그립감 그대로)\n추가 정보: 공기 빵빵, 에어펌프 포함",
-                                List.of()),
-                        new ProductAnalysis("몰텐 BG5000 공인구 7호", "B",
-                                "양호, 체육관 실내 사용", "몰텐 BG5000", "molten_bg5000_7"),
-                        new SuggestedPrices(32_000L, 38_000L, 46_000L)),
-                new Sample(
-                        "taylormade-stealth2",
-                        new AiAssistCommand(
-                                Category.SPORTS,
-                                "상품 정보: TaylorMade Stealth2 드라이버 10.5도 SR\n구매 시기: 2023년 4월\n상태: 양호 (약 15라운드 사용, 헤드 페이스 미세 자국)\n추가 정보: 정품 헤드커버, 그립 교체 1회",
-                                List.of()),
-                        new ProductAnalysis("TaylorMade Stealth2 드라이버 10.5도 SR", "B",
-                                "양호, 약 15라운드 사용", "taylormade_stealth2_10_5_sr",
-                                "taylormade_stealth2_10_5_sr"),
-                        new SuggestedPrices(270_000L, 290_000L, 320_000L))
-        );
+        List<GoldenCase> allCases = GoldenCaseLoader.loadFromClasspath("ai/golden/cases.jsonl");
+        List<GoldenCase> selected = SmokeCaseSelector.select(allCases);
 
-        StringBuilder summary = new StringBuilder("\n=== GeminiDescriptionAdapter Live ===\n");
-        summary.append("model=").append(props.getModel()).append('\n');
+        List<Row> rows = new ArrayList<>(selected.size());
 
-        for (Sample s : samples) {
+        for (GoldenCase c : selected) {
+            Category category = c.category() == null ? null : Category.valueOf(c.category());
+            List<String> imageUrls = c.imageUrl() == null || c.imageUrl().isBlank()
+                    ? List.of()
+                    : List.of(c.imageUrl());
+            AiAssistCommand phase1Command = new AiAssistCommand(category, c.memo(), imageUrls);
+
+            ProductAnalysis analysis;
+            try {
+                analysis = claude.analyzeProduct(phase1Command);
+            } catch (RuntimeException e) {
+                rows.add(Row.failure(c.id(), "phase1_" + e.getClass().getSimpleName(), 0, 0, 0));
+                continue;
+            }
+
+            // 이미지 빼고 Gemini 호출 (phase1 에서 이미 이미지 소비, 옵션 B 구조상 이미지 재분석 불필요)
+            AiAssistCommand descCommand = new AiAssistCommand(category, c.memo(), List.of());
+            SuggestedPrices prices = new SuggestedPrices(
+                    c.expected().low(), c.expected().mid(), c.expected().high());
+
             long t0 = System.currentTimeMillis();
-            String description = adapter.generateDescription(s.command, s.analysis, s.prices, null);
+            String description;
+            try {
+                description = adapter.generateDescription(descCommand, analysis, prices, null);
+            } catch (RuntimeException e) {
+                rows.add(Row.failure(c.id(), "desc_" + e.getClass().getSimpleName(),
+                        System.currentTimeMillis() - t0, 0, 0));
+                continue;
+            }
             long elapsed = System.currentTimeMillis() - t0;
 
-            assertThat(description).as(s.id + " 설명 반환").isNotBlank();
-
-            AiAssistResult fakeResult = new AiAssistResult(s.prices, description, "high", null);
+            AiAssistResult fakeResult = new AiAssistResult(prices, description, "high", null);
             List<PriceItem> emptyItems = List.of();
-            int violations = qualityRule.check(fakeResult, s.command, emptyItems).size()
-                    + hookRule.check(fakeResult, s.command, emptyItems).size()
-                    + personaRule.check(fakeResult, s.command, emptyItems).size()
-                    + reformatRule.check(fakeResult, s.command, emptyItems).size();
+            int violations = qualityRule.check(fakeResult, descCommand, emptyItems).size()
+                    + hookRule.check(fakeResult, descCommand, emptyItems).size()
+                    + personaRule.check(fakeResult, descCommand, emptyItems).size()
+                    + reformatRule.check(fakeResult, descCommand, emptyItems).size();
 
-            summary.append('\n')
-                    .append("[").append(s.id).append("] elapsed_ms=").append(elapsed)
-                    .append(" len=").append(description.length())
-                    .append(" violations=").append(violations).append('\n')
-                    .append(description).append('\n');
+            rows.add(Row.success(c.id(), elapsed, description.length(), violations));
         }
 
+        StringBuilder summary = new StringBuilder("\n=== GeminiDescriptionAdapter Live (10 cases) ===\n");
+        summary.append("model=").append(props.getModel()).append('\n');
+        int successes = 0;
+        long totalElapsed = 0;
+        int totalLen = 0;
+        int casesWithViolation = 0;
+        for (Row r : rows) {
+            summary.append(String.format(Locale.ROOT,
+                    "[%-30s] %s latency=%dms len=%d violations=%d%n",
+                    r.id, r.error == null ? "OK  " : "FAIL", r.elapsedMs, r.length, r.violations));
+            if (r.error != null) {
+                summary.append("  error=").append(r.error).append('\n');
+                continue;
+            }
+            successes++;
+            totalElapsed += r.elapsedMs;
+            totalLen += r.length;
+            if (r.violations > 0) {
+                casesWithViolation++;
+            }
+        }
+        summary.append('\n');
+        summary.append(String.format(Locale.ROOT,
+                "success=%d/%d avg_latency=%dms avg_len=%d violations_cases=%d (%.1f%%)%n",
+                successes, rows.size(),
+                successes == 0 ? 0 : totalElapsed / successes,
+                successes == 0 ? 0 : totalLen / successes,
+                casesWithViolation,
+                successes == 0 ? 0.0 : 100.0 * casesWithViolation / successes));
+
         System.out.println(summary);
+
+        assertThat(successes).as("최소 성공률 70%").isGreaterThanOrEqualTo((int) Math.ceil(rows.size() * 0.7));
     }
 
-    private record Sample(
-            String id,
-            AiAssistCommand command,
-            ProductAnalysis analysis,
-            SuggestedPrices prices
-    ) {
+    private record Row(String id, long elapsedMs, int length, int violations, String error) {
+        static Row success(String id, long elapsed, int length, int violations) {
+            return new Row(id, elapsed, length, violations, null);
+        }
+
+        static Row failure(String id, String error, long elapsed, int length, int violations) {
+            return new Row(id, elapsed, length, violations, error);
+        }
     }
 }
