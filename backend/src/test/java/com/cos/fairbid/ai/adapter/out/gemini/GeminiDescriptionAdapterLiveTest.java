@@ -2,6 +2,9 @@ package com.cos.fairbid.ai.adapter.out.gemini;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,7 +46,7 @@ import com.cos.fairbid.auction.domain.Category;
 class GeminiDescriptionAdapterLiveTest {
 
     @Test
-    void generateDescription_liveTenCases() {
+    void generateDescription_liveTenCases() throws Exception {
         GeminiDescriptionProperties props = new GeminiDescriptionProperties();
         props.setApiKey(System.getenv("GEMINI_API_KEY"));
         String modelOverride = System.getenv("AI_DESCRIPTION_GEMINI_MODEL");
@@ -69,7 +72,17 @@ class GeminiDescriptionAdapterLiveTest {
         List<GoldenCase> allCases = GoldenCaseLoader.loadFromClasspath("ai/golden/cases.jsonl");
         List<GoldenCase> selected = SmokeCaseSelector.select(allCases);
 
+        // 서브셋 실행용 env 필터 (비교 측정 편의)
+        String onlyRaw = System.getenv("LIVE_ONLY_IDS");
+        if (onlyRaw != null && !onlyRaw.isBlank()) {
+            java.util.Set<String> keep = java.util.Arrays.stream(onlyRaw.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .collect(java.util.stream.Collectors.toSet());
+            selected = selected.stream().filter(c -> keep.contains(c.id())).toList();
+        }
+
         List<Row> rows = new ArrayList<>(selected.size());
+        StringBuilder outputsFull = new StringBuilder();
 
         for (GoldenCase c : selected) {
             Category category = c.category() == null ? null : Category.valueOf(c.category());
@@ -110,7 +123,23 @@ class GeminiDescriptionAdapterLiveTest {
                     + reformatRule.check(fakeResult, descCommand, emptyItems).size();
 
             rows.add(Row.success(c.id(), elapsed, description.length(), violations));
+
+            outputsFull.append("\n=== ").append(c.id()).append(" ===\n");
+            outputsFull.append("memo: ").append(c.memo().replace("\n", " / ")).append('\n');
+            outputsFull.append("analysis: ").append(analysis.productName()).append(" / ")
+                    .append(analysis.grade()).append("급 / ").append(analysis.gradeReason()).append('\n');
+            outputsFull.append("prices: low=").append(prices.low())
+                    .append(" mid=").append(prices.mid())
+                    .append(" high=").append(prices.high()).append('\n');
+            outputsFull.append("latency_ms=").append(elapsed)
+                    .append(" len=").append(description.length())
+                    .append(" violations=").append(violations).append('\n');
+            outputsFull.append("---\n").append(description).append("\n---\n");
         }
+
+        Path outPath = Path.of("build", "gemini-description-live.txt");
+        Files.createDirectories(outPath.getParent());
+        Files.writeString(outPath, outputsFull.toString(), StandardCharsets.UTF_8);
 
         StringBuilder summary = new StringBuilder("\n=== GeminiDescriptionAdapter Live (10 cases) ===\n");
         summary.append("model=").append(props.getModel()).append('\n');
