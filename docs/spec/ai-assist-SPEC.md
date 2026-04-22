@@ -1262,11 +1262,29 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 - `AiAssistService` phase2a (Claude 가격) + phase2b (Gemini 설명) 순차 호출 + 조립
 - 재시도 전략: HARD 위반 시 가격/설명 **둘 다 재호출** (세분화는 후속)
 
-**미완 (후속 PR)**:
-- phase2a/phase2b **병렬화** (CompletableFuture). 현재 순차라 최악 latency 는 Claude + Gemini 합. 스모크 측정 결과 Claude phase2 ≈ 13s / Gemini 2.5 Pro ≈ 20s → 병렬화 시 약 20s 유지 예상
-- 가드레일 재튜닝 (`DESCRIPTION_NO_PERSONA` 등 위반율 70% → 개선)
-- 스모크 러너 재설계: 기존 "Claude vs Gemini 설명 비교" 구조가 Port 분리 이후 의미 소실. "프롬프트 보강 전 vs 후" 구조로 재구성 후 회귀 감시
-- 프롬프트 최적화: Claude phase2 프롬프트에서 설명 생성 지시/응답 스키마 제거 (OTPM/비용 절감 완성)
+##### 실측 결과 (2026-04-22, `GeminiDescriptionAdapterLiveTest`)
+
+- 환경: Claude Sonnet 4.5 phase1 + Gemini 2.5 Pro 설명. 10건 골드 (`SmokeCaseSelector` 재사용)
+- raw: `docs/benchmark-results/raw/description-live-2026-04-22/`
+
+| 지표 | Before (2026-04-20 스모크 Gemini) | After (본 PR) |
+|---|---:|---:|
+| API 성공률 | 8/10 (이미지 거부 2건) | **10/10** |
+| 케이스당 가드레일 위반율 | 70% | **90%** |
+| 평균 설명 길이 | ~240자 | 239자 |
+| 평균 latency | 19.5s | 16.7s |
+
+성공률 +20pp 개선 (Claude phase1 공유 구조로 Gemini 이미지 거부 해소). 위반율은 +20pp **악화**.
+
+**원인 분석**: 새 프롬프트의 `"모델명 나열 금지"` 가 Gemini 에게 **제품명 완전 제외**로 오해석됨. iphone 케이스에서 후크가 `## 최신 프로 기능, 부담 없이 시작하세요` (14자) 로 나와 `HookRule` (H1 < 25자 SOFT) 걸림. 후크 규칙을 `"제품명(구체 모델) + 매력 포인트 조합, 25자 이상"` 으로 명확화 + 예시 2건 추가 후 재측정 (iphone 1건) 시 후크 `## 최신 기능은 그대로, 아이폰 15 Pro 256GB 블루 티타늄` (35자) 로 개선. 10건 재측정은 후속.
+
+**hidden_value 개선 샘플 확인**: iphone 케이스에서 Gemini 가 `"아이폰 15부터 바뀐 C타입 정품 케이블 → 맥북/아이패드 충전기 통일"` 과 같이 스펙시트에 없는 구체적 가치를 포착. 이전 Claude 설명에는 없던 항목.
+
+**미완 (후속 PR/이슈)**:
+- phase2a/phase2b **병렬화** (CompletableFuture). 순차 시 Claude 13s + Gemini 16s 합 ≈ 23s, 병렬화 시 20s 수준 유지 예상
+- 가드레일 rule 별 breakdown 집계 + 후크 규칙 수정 반영 10건 재측정 (위반율 회귀 가드)
+- 스모크 러너 재설계: 기존 "Claude vs Gemini 설명 비교" 구조가 Port 분리 이후 의미 소실. "프롬프트 A vs B" 비교 구조로 재구성
+- Claude phase2 프롬프트 최적화: 설명 지시/응답 스키마 제거로 OTPM·비용 절감 완성
 
 #### 결론
 
