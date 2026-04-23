@@ -1281,7 +1281,7 @@ SOFT 규칙 (설명 품질 등) 은 매 요청마다 위반 여부만 기록하�
 **hidden_value 개선 샘플 확인**: iphone 케이스에서 Gemini 가 `"아이폰 15부터 바뀐 C타입 정품 케이블 → 맥북/아이패드 충전기 통일"` 과 같이 스펙시트에 없는 구체적 가치를 포착. 이전 Claude 설명에는 없던 항목.
 
 **미완 (후속 PR/이슈)**:
-- phase2a/phase2b **병렬화** (CompletableFuture). 순차 시 Claude 13s + Gemini 16s 합 ≈ 23s, 병렬화 시 20s 수준 유지 예상
+- ~~phase2a/phase2b **병렬화**~~ → 본 PR 에서 {@link CompletableFuture#supplyAsync} 로 동시 호출 전환 완료. phase2b 는 `suggestedPrices=null` 로 시작 (본문 가격 숫자 노출 금지 규칙이라 설명 품질 영향 없음)
 - 가드레일 rule 별 breakdown 집계 + 후크 규칙 수정 반영 10건 재측정 (위반율 회귀 가드)
 - 스모크 러너 재설계: 기존 "Claude vs Gemini 설명 비교" 구조가 Port 분리 이후 의미 소실. "프롬프트 A vs B" 비교 구조로 재구성
 - Claude phase2 프롬프트 최적화: 설명 지시/응답 스키마 제거로 OTPM·비용 절감 완성

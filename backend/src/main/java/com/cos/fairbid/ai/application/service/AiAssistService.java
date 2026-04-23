@@ -3,6 +3,8 @@ package com.cos.fairbid.ai.application.service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.springframework.stereotype.Service;
 
@@ -35,12 +37,14 @@ import com.cos.fairbid.ai.domain.guardrail.OutputValidation;
  *   <li>Redis 시세 캐시 조회 (category + productKey + grade) — HIT 시 가격+설명 함께 반환</li>
  *   <li>네이버 검색</li>
  *   <li>phase2a Claude: 검색 결과 + 등급 → 추천가 3구간 + confidence (설명은 미생성)</li>
- *   <li>phase2b Gemini: 분석 결과 + 가격 + memo → Markdown 설명 (hidden_value 강조)</li>
+ *   <li>phase2b Gemini: 분석 결과 + memo → Markdown 설명 (hidden_value 강조)</li>
  *   <li>출력 가드레일: HARD 위반 → 재시도 (가격/설명 모두 재호출), SOFT 위반 → DB 기록</li>
  *   <li>캐시 적재 (high confidence 케이스만, 7일 TTL)</li>
  * </ol>
  *
- * <p>latency: 현재는 phase2a → phase2b 순차 호출. 병렬화는 후속 최적화.</p>
+ * <p>latency: phase2a 와 phase2b 를 {@link CompletableFuture#supplyAsync} 로 동시 시작 → 느린 쪽
+ * (Gemini ~16s) 만 대기. phase2b 는 가격 숫자를 본문에 노출하지 않는 프롬프트 규칙이라
+ * {@code suggestedPrices=null} 로 호출해도 설명 품질에 영향 없음.</p>
  */
 @Slf4j
 @Service
@@ -95,14 +99,20 @@ public class AiAssistService implements GenerateAuctionAssistUseCase {
         List<GuardrailViolation> lastViolations = List.of();
 
         for (int attempt = 1; attempt <= MAX_GUARDRAIL_ATTEMPTS; attempt++) {
-            List<GuardrailViolation> retryViolations = attempt == 1 ? null : lastViolations;
+            final List<GuardrailViolation> retryViolations = attempt == 1 ? null : lastViolations;
             if (attempt > 1) {
                 log.info("출력 가드레일 재시도 - attempt={}, violations={}", attempt, lastViolations.size());
             }
 
-            PricingResult pricing = aiClientPort.generatePricing(command, analysis, priceItems, retryViolations);
-            String description = descriptionGeneratorPort.generateDescription(
-                    command, analysis, pricing.suggestedPrices(), retryViolations);
+            // phase2a / phase2b 병렬 호출. 느린 쪽만 대기.
+            CompletableFuture<PricingResult> pricingFuture = CompletableFuture.supplyAsync(
+                    () -> aiClientPort.generatePricing(command, analysis, priceItems, retryViolations));
+            CompletableFuture<String> descriptionFuture = CompletableFuture.supplyAsync(
+                    () -> descriptionGeneratorPort.generateDescription(
+                            command, analysis, null, retryViolations));
+
+            PricingResult pricing = awaitPricing(pricingFuture);
+            String description = awaitDescription(descriptionFuture);
 
             AiAssistResult result = new AiAssistResult(
                     pricing.suggestedPrices(),
@@ -190,6 +200,42 @@ public class AiAssistService implements GenerateAuctionAssistUseCase {
             guardrailFailurePort.save(violations, category, keyword, aiMidPrice, searchMedian, attemptCount);
         } catch (Exception e) {
             log.warn("가드레일 실패 기록 저장 실패 - error={}", e.getMessage());
+        }
+    }
+
+    /**
+     * 병렬 phase2a 결과를 기다린다. 내부 RuntimeException 은 그대로 전파.
+     */
+    private PricingResult awaitPricing(CompletableFuture<PricingResult> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("phase2a 대기 중 인터럽트", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalStateException("phase2a 실행 오류", cause);
+        }
+    }
+
+    /**
+     * 병렬 phase2b 결과를 기다린다. 내부 RuntimeException 은 그대로 전파.
+     */
+    private String awaitDescription(CompletableFuture<String> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("phase2b 대기 중 인터럽트", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalStateException("phase2b 실행 오류", cause);
         }
     }
 
